@@ -51,10 +51,13 @@ export async function listClassesFromDataGroup(
   groupCid: string,
 ): Promise<ListedClassInfo[]> {
   const groupSchema = await getJsonByCid<DataGroupSchema>(groupCid);
+  const relationshipsProperties = groupSchema.relationships?.properties;
+  const nestedRelationshipsNode = groupSchema.properties?.relationships;
+  const nestedRelationshipsProperties = nestedRelationshipsNode?.properties;
   const properties =
-    groupSchema.relationships?.properties ??
+    relationshipsProperties ??
     // Handle real JSON Schema nesting where relationships live under properties.relationships.properties
-    (groupSchema as any)?.properties?.relationships?.properties ??
+    nestedRelationshipsProperties ??
     {};
   const candidate = new Set<string>();
 

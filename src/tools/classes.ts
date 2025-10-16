@@ -2,7 +2,11 @@ import { createTextResult } from "../lib/utils.ts";
 import { logger } from "../logger.ts";
 import { getJsonByCid } from "../lib/ipfs.ts";
 import { fetchManifest, normalizeKey } from "../lib/manifest.ts";
-import type { ClassSchema, Manifest } from "../types/lexicon.ts";
+import type {
+  ClassSchema,
+  JsonSchemaNode,
+  Manifest,
+} from "../types/lexicon.ts";
 
 function resolveClass(
   manifest: Manifest,
@@ -46,29 +50,19 @@ export async function listPropertiesByClassNameHandler(className: string) {
       return createTextResult({ error: "Failed to fetch class schema" });
     }
 
-    const s: any = schema as any;
     const keyToDescription = new Map<string, string | null>();
 
-    const addProps = (node: any) => {
-      if (
-        node &&
-        typeof node === "object" &&
-        node.properties &&
-        typeof node.properties === "object"
-      ) {
-        for (const key of Object.keys(node.properties)) {
-          const prop = node.properties[key];
-          const desc =
-            prop && typeof prop === "object"
-              ? ((prop as any).description ?? null)
-              : null;
+    const addProps = (node: JsonSchemaNode | null | undefined) => {
+      if (node?.properties) {
+        for (const [key, prop] of Object.entries(node.properties)) {
+          const description = prop?.description ?? null;
           // Prefer first found description; if not set yet or existing is null and new has value, set it
           if (!keyToDescription.has(key)) {
-            keyToDescription.set(key, desc ?? null);
+            keyToDescription.set(key, description);
           } else {
             const existing = keyToDescription.get(key);
-            if ((existing == null || existing === "") && desc) {
-              keyToDescription.set(key, desc);
+            if ((existing == null || existing === "") && description) {
+              keyToDescription.set(key, description);
             }
           }
         }
@@ -76,11 +70,13 @@ export async function listPropertiesByClassNameHandler(className: string) {
     };
 
     // Direct properties
-    addProps(s);
+    addProps(schema);
     // Union across common JSON Schema combinators
     for (const comb of ["oneOf", "allOf", "anyOf"] as const) {
-      const arr = Array.isArray(s?.[comb]) ? (s[comb] as any[]) : [];
-      for (const sub of arr) addProps(sub);
+      const candidates = schema?.[comb];
+      if (Array.isArray(candidates)) {
+        for (const sub of candidates) addProps(sub);
+      }
     }
 
     const properties = Array.from(keyToDescription.entries())
@@ -100,8 +96,11 @@ export async function listPropertiesByClassNameHandler(className: string) {
   }
 }
 
-function findPropertySchema(node: any, targetName: string): any | null {
-  if (!node || typeof node !== "object") return null;
+function findPropertySchema(
+  node: JsonSchemaNode | null | undefined,
+  targetName: string,
+): JsonSchemaNode | null {
+  if (!node) return null;
 
   const props = node.properties;
   if (props && typeof props === "object") {
@@ -113,10 +112,12 @@ function findPropertySchema(node: any, targetName: string): any | null {
   }
 
   for (const comb of ["oneOf", "allOf", "anyOf"] as const) {
-    const arr = Array.isArray(node?.[comb]) ? (node[comb] as any[]) : [];
-    for (const sub of arr) {
-      const found = findPropertySchema(sub, targetName);
-      if (found) return found;
+    const candidates = node?.[comb];
+    if (Array.isArray(candidates)) {
+      for (const sub of candidates) {
+        const found = findPropertySchema(sub, targetName);
+        if (found) return found;
+      }
     }
   }
 
@@ -137,9 +138,9 @@ export async function getPropertySchemaByClassNameHandler(
       return createTextResult({ error: message });
     }
 
-    let schema: any = null;
+    let schema: ClassSchema;
     try {
-      schema = await getJsonByCid<any>(resolved.cid);
+      schema = await getJsonByCid<ClassSchema>(resolved.cid);
     } catch (error) {
       logger.error("Failed to fetch class schema", {
         className,

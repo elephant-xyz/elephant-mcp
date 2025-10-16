@@ -1,3 +1,4 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   extractClassPairs,
   shouldIgnoreClass,
@@ -14,6 +15,7 @@ vi.mock("../lib/ipfs.ts", () => ({
 }));
 
 const { getJsonByCid } = await import("../lib/ipfs.ts");
+const mockGetJsonByCid = vi.mocked(getJsonByCid);
 
 describe("helpers", () => {
   it("normalizeKey lowercases and trims", () => {
@@ -77,7 +79,7 @@ describe("listClassesFromDataGroup", () => {
   });
 
   it("extracts classes from relationships and fetches descriptions", async () => {
-    (getJsonByCid as any).mockImplementation(async (cid: string) => {
+    mockGetJsonByCid.mockImplementation(async (cid: string) => {
       if (cid === "cid-group") {
         return {
           relationships: {
@@ -119,7 +121,7 @@ describe("listClassesFromDataGroup", () => {
   });
 
   it("supports nested JSON Schema path for relationships (properties.relationships.properties)", async () => {
-    (getJsonByCid as any).mockImplementation(async (cid: string) => {
+    mockGetJsonByCid.mockImplementation(async (cid: string) => {
       if (cid === "cid-seed-group") {
         return {
           properties: {
@@ -163,7 +165,7 @@ describe("fetchManifest", () => {
 
   it("fetches and parses manifest", async () => {
     globalThis.fetch = vi.fn(
-      async () =>
+      async (..._args: Parameters<typeof fetch>) =>
         new Response(
           JSON.stringify({
             Seed: { ipfsCid: "cid1", type: "dataGroup" },
@@ -171,7 +173,7 @@ describe("fetchManifest", () => {
           }),
           { status: 200 },
         ),
-    ) as any;
+    ) as unknown as typeof fetch;
 
     const manifest = await fetchManifest();
     expect(manifest.Seed.ipfsCid).toBe("cid1");
