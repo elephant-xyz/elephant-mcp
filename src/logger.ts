@@ -1,16 +1,19 @@
 import pino from "pino";
+import packageJson from "../package.json";
 import { getConfig } from "./config.ts";
 import { getServerInstance } from "./lib/serverRef.ts";
 
 const config = getConfig();
+const serviceName = typeof packageJson.name === "string" ? packageJson.name : "@elephant-xyz/mcp";
+const serviceVersion = typeof packageJson.version === "string" ? packageJson.version : "0.0.0";
 
 export const logger = pino(
   {
     level: config.LOG_LEVEL,
     // Base fields for all log entries
     base: {
-      service: config.SERVER_NAME,
-      version: config.SERVER_VERSION,
+      service: serviceName,
+      version: serviceVersion,
       environment: config.NODE_ENV,
     },
     // OpenTelemetry trace correlation

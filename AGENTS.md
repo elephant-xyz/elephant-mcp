@@ -16,4 +16,4 @@ Vitest powers unit tests. Name specs `*.test.ts` and keep them beside the code u
 Adopt Conventional Commits (`feat:`, `chore:`, `docs:`) as seen in the history to keep change logs readable. Each PR should summarize the user-facing impact, reference related issues, and list follow-up tasks if scope is deferred. Include testing evidence (`npm run test`, `npm run lint`) and call out new environment variables or configuration knobs so reviewers can verify runtime changes.
 
 ## Configuration & Operational Notes
-Runtime configuration is sourced from environment variables parsed in `src/config.ts` (`PORT`, `SERVER_NAME`, `LOG_LEVEL`, etc.). Document defaults when introducing new flags and avoid hard-coding secrets. Pino logging is structured; keep contextual metadata small and redact user-provided content where necessary.
+Runtime configuration is minimal; `src/config.ts` currently only normalizes logging defaults. Document new environment variables when you add them, and avoid hard-coding secrets. Pino logging is structured; keep contextual metadata small and redact user-provided content where necessary.

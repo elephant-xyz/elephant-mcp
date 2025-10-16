@@ -2,8 +2,6 @@ import { z } from "zod";
 
 const configSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
-  SERVER_NAME: z.string().default("elephant-mcp"),
-  SERVER_VERSION: z.string().default("1.0.0"),
   LOG_LEVEL: z.enum(["error", "warn", "info", "debug"]).default("info"),
 });
 

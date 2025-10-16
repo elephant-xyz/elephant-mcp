@@ -1,9 +1,10 @@
 {
-  "name": "elephant-mcp",
+  "name": "@elephant-xyz/mcp",
   "version": "1.0.0",
   "description": "Model Context Protocol server that exposes Elephant data graph tooling",
   "type": "module",
   "main": "dist/index.js",
+  "bin": "./dist/index.js",
   "scripts": {
     "build": "vite build",
     "dev": "node --watch src/index.ts",
@@ -17,19 +18,14 @@
     "release": "semantic-release",
     "prepublishOnly": "npm run build"
   },
-  "keywords": [
-    "mcp",
-    "typescript",
-    "mcp",
-    "elephant",
-    "data-graph",
-    "typescript",
-    "server"
-  ],
+  "keywords": ["mcp", "elephant", "data-graph", "typescript", "server"],
   "author": "Elephant",
   "license": "MIT",
   "engines": {
     "node": ">=22.18.0"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "devDependencies": {
     "@commitlint/cli": "^19.0.0",

@@ -1,18 +1,21 @@
+#!/usr/bin/env node
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import packageJson from "../package.json";
 import { logger } from "./logger.ts";
-import { getConfig } from "./config.ts";
 import { listClassesByDataGroupHandler } from "./tools/dataGroups.ts";
 import { listPropertiesByClassNameHandler, getPropertySchemaByClassNameHandler } from "./tools/classes.ts";
 import { setServerInstance } from "./lib/serverRef.ts";
 
+const SERVER_NAME = typeof packageJson.name === "string" ? packageJson.name : "@elephant-xyz/mcp";
+const SERVER_VERSION = typeof packageJson.version === "string" ? packageJson.version : "0.0.0";
+
 const getServer = () => {
-  const config = getConfig();
   const server = new McpServer(
     {
-      name: config.SERVER_NAME,
-      version: config.SERVER_VERSION,
+      name: SERVER_NAME,
+      version: SERVER_VERSION,
     },
     {
       capabilities: {
@@ -85,11 +88,9 @@ const getServer = () => {
 let serverRef: McpServer | undefined;
 
 async function main() {
-  const config = getConfig();
-
   logger.info("Starting MCP server with stdio transport", {
-    serverName: config.SERVER_NAME,
-    version: config.SERVER_VERSION,
+    serverName: SERVER_NAME,
+    version: SERVER_VERSION,
   });
 
   const server = getServer();
@@ -104,8 +105,8 @@ async function main() {
     logger: "startup",
     data: {
       message: "MCP server started with stdio transport",
-      serverName: config.SERVER_NAME,
-      version: config.SERVER_VERSION,
+      serverName: SERVER_NAME,
+      version: SERVER_VERSION,
     },
   });
 
