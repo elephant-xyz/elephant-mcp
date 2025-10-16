@@ -1,7 +1,6 @@
 import { z } from "zod";
 
 const configSchema = z.object({
-  PORT: z.coerce.number().default(3000),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   SERVER_NAME: z.string().default("mcp-typescript-template"),
   SERVER_VERSION: z.string().default("1.0.0"),
