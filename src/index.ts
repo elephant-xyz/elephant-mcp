@@ -4,7 +4,7 @@ import { z } from "zod";
 import { logger } from "./logger.ts";
 import { getConfig } from "./config.ts";
 import { listClassesByDataGroupHandler } from "./tools/dataGroups.ts";
-import { listPropertiesByClassNameHandler } from "./tools/classes.ts";
+import { listPropertiesByClassNameHandler, getPropertySchemaByClassNameHandler } from "./tools/classes.ts";
 import { setServerInstance } from "./lib/serverRef.ts";
 
 const getServer = () => {
@@ -55,6 +55,27 @@ const getServer = () => {
     },
     async (args: { className: string }) => {
       return listPropertiesByClassNameHandler(args.className);
+    },
+  );
+
+  server.registerTool(
+    "getPropertySchema",
+    {
+      title: "Get property schema by class and property",
+      description: "Returns the full JSON Schema object for a class property",
+      inputSchema: {
+        className: z
+          .string()
+          .min(1, "className is required")
+          .describe("Class name, case-insensitive"),
+        propertyName: z
+          .string()
+          .min(1, "propertyName is required")
+          .describe("Property name, case-insensitive"),
+      },
+    },
+    async (args: { className: string; propertyName: string }) => {
+      return getPropertySchemaByClassNameHandler(args.className, args.propertyName);
     },
   );
 
