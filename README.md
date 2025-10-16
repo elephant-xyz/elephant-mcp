@@ -61,33 +61,36 @@ claude mcp add elephant -- npx -y @elephant-xyz/mcp@latest
 
 Restart Claude Code after adding the server so the tools appear in the `@tools` palette. Replace the URL and API key placeholders with your deployment details if you expose the server remotely.
 
-### OpenAI Codex (experimental MCP support)
-Add this snippet to your Codex configuration:
+### OpenAI Codex
+- **CLI setup**
+  ```bash
+  codex mcp add elephant -- npx -y @elephant-xyz/mcp@latest
+  ```
+  You can explore additional options with `codex mcp --help`. Inside the Codex TUI, run `/mcp` to view currently connected servers.
+
+- **config.toml setup**
+  Edit `~/.codex/config.toml` (or open *MCP settings → Open config.toml* from the IDE extension) and add:
+  ```toml
+  [mcp.elephant]
+  command = "npx"
+  args = ["-y", "@elephant-xyz/mcp@latest"]
+  # env = ["API_KEY=..."] # optional
+  ```
+  Save the file and restart Codex to load the new server.
+
+### Gemini CLI
+Create (or edit) `.gemini/settings.json` in your project and add:
 ```jsonc
 {
   "mcpServers": {
     "elephant": {
-      "type": "stdio",
       "command": "npx",
       "args": ["-y", "@elephant-xyz/mcp@latest"]
     }
   }
 }
 ```
-Restart `codex chat` and run `@mcp list` to confirm the Elephant server is connected.
-
-### Gemini CLI
-Add an entry to `~/.config/gemini/mcp.yaml`:
-```yaml
-servers:
-  elephant:
-    transport: stdio
-    command: npx
-    args:
-      - -y
-      - @elephant-xyz/mcp@latest
-```
-Run `gemini tools sync` to register the server.
+Restart Gemini CLI or run `gemini tools sync` to pick up the new server.
 
 ## Configuration
 The stdio transport means no port or server identity flags are required. Optional environment variables handled by `src/config.ts`:
