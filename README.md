@@ -2,6 +2,19 @@
 
 Elephant MCP connects Claude-compatible clients to the Elephant data graph, exposing discoverable tools for listing data groups, classes, and individual property schemas. The server is published on npm as `@elephant-xyz/mcp`.
 
+## 🚀 Prompt Recommendations
+
+**For best results with Elephant MCP, always specify the Data Group you're working on in your prompts and add `use elephant mcp` at the end.**
+
+**Example prompts:**
+```
+"I'm working on the 'user_events' data group. Can you help me explore the available classes? use elephant mcp"
+
+"What properties are available in the 'product_inventory' class? I'm working with the 'commerce' data group. use elephant mcp"
+```
+
+This helps the AI understand which data context to use and ensures it leverages the Elephant MCP tools effectively.
+
 [![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=%40elephant-xyz%2Fmcp&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBlbGVwaGFudC14eXovbWNwQGxhdGVzdCJdfQ==)
 [<img alt="Install in VS Code (npx)" src="https://img.shields.io/badge/Install%20in%20VS%20Code-0098FF?style=for-the-badge&logo=visualstudiocode&logoColor=white">](https://insiders.vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%7B%22name%22%3A%22%40elephant-xyz%2Fmcp%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40elephant-xyz%2Fmcp%40latest%22%5D%7D)
 

@@ -5,7 +5,24 @@
       "@semantic-release/commit-analyzer",
       {
         "preset": "conventionalcommits",
-        "preMajor": true
+        "preMajor": true,
+        "releaseRules": [
+          {"type": "feat", "release": "minor"},
+          {"type": "fix", "release": "patch"},
+          {"type": "perf", "release": "patch"},
+          {"breaking": true, "release": "minor"},
+          {"revert": true, "release": "patch"},
+          {"type": "docs", "release": "patch"},
+          {"type": "style", "release": "patch"},
+          {"type": "refactor", "release": "patch"},
+          {"type": "test", "release": "patch"},
+          {"type": "build", "release": "patch"},
+          {"type": "ci", "release": "patch"},
+          {"type": "chore", "scope": "deps", "release": "patch"}
+        ],
+        "parserOpts": {
+          "noteKeywords": ["BREAKING CHANGE", "BREAKING CHANGES"]
+        }
       }
     ],
     "@semantic-release/release-notes-generator",
