@@ -118,6 +118,38 @@ describe("listClassesFromDataGroup", () => {
         expect(byKey.file.description).toBe("File desc");
         expect(byKey.school.name).toBe("school");
     });
+
+    it("supports nested JSON Schema path for relationships (properties.relationships.properties)", async () => {
+        (getJsonByCid as any).mockImplementation(async (cid: string) => {
+            if (cid === "cid-seed-group") {
+                return {
+                    properties: {
+                        relationships: {
+                            properties: {
+                                address_has_parcel: {},
+                            },
+                        },
+                    },
+                };
+            }
+            if (cid === "cid-address") return { title: "Address" };
+            if (cid === "cid-parcel") return { title: "Parcel" };
+            return {};
+        });
+
+        const manifestWithAddressParcel: Manifest = {
+            address: { ipfsCid: "cid-address", type: "class" },
+            parcel: { ipfsCid: "cid-parcel", type: "class" },
+        };
+
+        const classes = await listClassesFromDataGroup(
+            manifestWithAddressParcel,
+            "cid-seed-group",
+        );
+        expect(classes.map((c) => c.key).sort()).toEqual(
+            ["address", "parcel"].sort(),
+        );
+    });
 });
 
 describe("fetchManifest", () => {
