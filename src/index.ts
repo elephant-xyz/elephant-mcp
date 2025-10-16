@@ -4,9 +4,9 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { createTextResult } from "./lib/utils.ts";
 import { logger } from "./logger.ts";
 import { getConfig } from "./config.ts";
+import { listClassesByDataGroupHandler } from "./tools/dataGroups.ts";
 
 const getServer = () => {
   const config = getConfig();
@@ -16,17 +16,20 @@ const getServer = () => {
   });
 
   server.registerTool(
-    "echo",
+    "listClassesByDataGroup",
     {
-      title: "Echo",
-      description: "Echo back the provided message",
+      title: "List classes by data group",
+      description:
+        "List classes for an Elephant data group with names and descriptions",
       inputSchema: {
-        message: z.string().describe("The message to echo back"),
+        groupName: z
+          .string()
+          .min(1, "groupName is required")
+          .describe("The data group name, case-insensitive"),
       },
     },
-    async (args) => {
-      const data = { echo: args.message };
-      return createTextResult(data);
+    async (args: { groupName: string }) => {
+      return listClassesByDataGroupHandler(args.groupName);
     },
   );
 
@@ -48,7 +51,7 @@ const mcpHandler = async (req: express.Request, res: express.Response) => {
 
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => randomUUID(),
-        onsessioninitialized: (sessionId) => {
+        onsessioninitialized: (sessionId: string) => {
           transports[sessionId] = transport;
           logger.info("MCP session initialized", { sessionId });
         },

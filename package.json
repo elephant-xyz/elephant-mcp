@@ -49,6 +49,9 @@
     "@types/express": "^5.0.3",
     "express": "^5.1.0",
     "pino": "^9.0.0",
-    "pino-pretty": "^13.1.1"
+    "pino-pretty": "^13.1.1",
+    "helia": "^5.0.0",
+    "@helia/json": "^4.0.0",
+    "multiformats": "^13.0.0"
   }
 }
