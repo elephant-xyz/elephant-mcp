@@ -5,6 +5,9 @@
   "type": "module",
   "main": "dist/index.js",
   "bin": "./dist/index.js",
+  "repository": {
+    "url": "https://github.com/elephant-xyz/elephant-mcp"
+  },
   "scripts": {
     "build": "vite build",
     "dev": "node --watch src/index.ts",
@@ -18,7 +21,13 @@
     "release": "semantic-release",
     "prepublishOnly": "npm run build"
   },
-  "keywords": ["mcp", "elephant", "data-graph", "typescript", "server"],
+  "keywords": [
+    "mcp",
+    "elephant",
+    "data-graph",
+    "typescript",
+    "server"
+  ],
   "author": "Elephant",
   "license": "MIT",
   "engines": {
