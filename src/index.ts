@@ -1,141 +1,164 @@
-import express from "express";
-import { randomUUID } from "node:crypto";
+#!/usr/bin/env node
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { createTextResult } from "./lib/utils.ts";
+import packageJson from "../package.json";
 import { logger } from "./logger.ts";
-import { getConfig } from "./config.ts";
+import { listClassesByDataGroupHandler } from "./tools/dataGroups.ts";
+import { listPropertiesByClassNameHandler, getPropertySchemaByClassNameHandler } from "./tools/classes.ts";
+import { setServerInstance } from "./lib/serverRef.ts";
+
+const SERVER_NAME = typeof packageJson.name === "string" ? packageJson.name : "@elephant-xyz/mcp";
+const SERVER_VERSION = typeof packageJson.version === "string" ? packageJson.version : "0.0.0";
 
 const getServer = () => {
-  const config = getConfig();
-  const server = new McpServer({
-    name: config.SERVER_NAME,
-    version: config.SERVER_VERSION,
-  });
-
-  server.registerTool(
-    "echo",
+  const server = new McpServer(
     {
-      title: "Echo",
-      description: "Echo back the provided message",
-      inputSchema: {
-        message: z.string().describe("The message to echo back"),
+      name: SERVER_NAME,
+      version: SERVER_VERSION,
+    },
+    {
+      capabilities: {
+        // Enable MCP logging capability so clients can receive server logs
+        logging: {},
       },
     },
-    async (args) => {
-      const data = { echo: args.message };
-      return createTextResult(data);
+  );
+
+  server.registerTool(
+    "listClassesByDataGroup",
+    {
+      title: "List classes by data group",
+      description:
+        "List classes for an Elephant data group with names and descriptions",
+      inputSchema: {
+        groupName: z
+          .string()
+          .min(1, "groupName is required")
+          .describe("The data group name, case-insensitive"),
+      },
+    },
+    async (args: { groupName: string }) => {
+      return listClassesByDataGroupHandler(args.groupName);
+    },
+  );
+
+  server.registerTool(
+    "listPropertiesByClassName",
+    {
+      title: "List properties by class name",
+      description:
+        "Lists JSON Schema property names for an Elephant class (excludes source_http_request)",
+      inputSchema: {
+        className: z
+          .string()
+          .min(1, "className is required")
+          .describe("The class name, case-insensitive"),
+      },
+    },
+    async (args: { className: string }) => {
+      return listPropertiesByClassNameHandler(args.className);
+    },
+  );
+
+  server.registerTool(
+    "getPropertySchema",
+    {
+      title: "Get property schema by class and property",
+      description: "Returns the full JSON Schema object for a class property",
+      inputSchema: {
+        className: z
+          .string()
+          .min(1, "className is required")
+          .describe("Class name, case-insensitive"),
+        propertyName: z
+          .string()
+          .min(1, "propertyName is required")
+          .describe("Property name, case-insensitive"),
+      },
+    },
+    async (args: { className: string; propertyName: string }) => {
+      return getPropertySchemaByClassNameHandler(args.className, args.propertyName);
     },
   );
 
   return server;
 };
 
-const app = express();
-app.use(express.json());
-
-const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {};
-
-const mcpHandler = async (req: express.Request, res: express.Response) => {
-  const sessionId = req.headers["mcp-session-id"] as string | undefined;
-
-  try {
-    // Handle initialization requests (usually POST without session ID)
-    if (req.method === "POST" && !sessionId && isInitializeRequest(req.body)) {
-      logger.info("Initializing new MCP session");
-
-      const transport = new StreamableHTTPServerTransport({
-        sessionIdGenerator: () => randomUUID(),
-        onsessioninitialized: (sessionId) => {
-          transports[sessionId] = transport;
-          logger.info("MCP session initialized", { sessionId });
-        },
-      });
-
-      const server = getServer();
-      await server.connect(transport);
-      await transport.handleRequest(req, res, req.body);
-      return;
-    }
-
-    // Handle existing session requests
-    if (sessionId && transports[sessionId]) {
-      const transport = transports[sessionId];
-      await transport.handleRequest(req, res, req.body);
-      return;
-    }
-
-    // Handle case where no session ID is provided for non-init requests
-    if (req.method === "POST" && !sessionId) {
-      logger.warn(
-        "POST request without session ID for non-initialization request",
-      );
-      res
-        .status(400)
-        .json({ error: "Session ID required for non-initialization requests" });
-      return;
-    }
-
-    // Handle unknown session
-    if (sessionId && !transports[sessionId]) {
-      logger.warn("Request for unknown session", { sessionId });
-      res.status(404).json({ error: "Session not found" });
-      return;
-    }
-
-    // For GET requests without session, return server info
-    if (req.method === "GET") {
-      const config = getConfig();
-      res.json({
-        name: config.SERVER_NAME,
-        version: config.SERVER_VERSION,
-        description: "TypeScript template for building MCP servers",
-        capabilities: ["tools"],
-      });
-    }
-  } catch (error) {
-    logger.error("Error handling MCP request", {
-      error: error instanceof Error ? error.message : error,
-    });
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
-// Handle MCP requests on /mcp endpoint
-app.post("/mcp", mcpHandler);
-app.get("/mcp", mcpHandler);
+let serverRef: McpServer | undefined;
 
 async function main() {
-  const config = getConfig();
+  logger.info("Starting MCP server with stdio transport", {
+    serverName: SERVER_NAME,
+    version: SERVER_VERSION,
+  });
 
-  // Graceful shutdown handling
+  const server = getServer();
+  serverRef = server;
+  setServerInstance(server);
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+
+  // Emit MCP logging message once connected, so clients can see startup
+  await server.sendLoggingMessage({
+    level: "info",
+    logger: "startup",
+    data: {
+      message: "MCP server started with stdio transport",
+      serverName: SERVER_NAME,
+      version: SERVER_VERSION,
+    },
+  });
+
+  // Graceful shutdown handling (emit MCP log before exit)
   process.on("SIGTERM", () => {
     logger.info("SIGTERM received, shutting down gracefully");
-    process.exit(0);
+    if (server.isConnected()) {
+      void server
+        .sendLoggingMessage({
+          level: "notice",
+          logger: "shutdown",
+          data: { signal: "SIGTERM" },
+        })
+        .finally(() => process.exit(0));
+    } else {
+      process.exit(0);
+    }
   });
 
   process.on("SIGINT", () => {
     logger.info("SIGINT received, shutting down gracefully");
-    process.exit(0);
-  });
-
-  app.listen(config.PORT, () => {
-    logger.info(
-      `MCP TypeScript Template Server running on port ${config.PORT}`,
-      {
-        environment: config.NODE_ENV,
-        serverName: config.SERVER_NAME,
-        version: config.SERVER_VERSION,
-      },
-    );
+    if (server.isConnected()) {
+      void server
+        .sendLoggingMessage({
+          level: "notice",
+          logger: "shutdown",
+          data: { signal: "SIGINT" },
+        })
+        .finally(() => process.exit(0));
+    } else {
+      process.exit(0);
+    }
   });
 }
 
 main().catch((error) => {
   logger.error("Server startup error", {
-    error: error instanceof Error ? error.message : error,
+    error: error instanceof Error ? error.message : String(error),
   });
-  process.exit(1);
+  // Best-effort MCP logging of startup error if connected
+  if (serverRef?.isConnected()) {
+    void serverRef.sendLoggingMessage({
+      level: "error",
+      logger: "startup",
+      data: {
+        message: "Server startup error",
+        error: error instanceof Error ? error.message : String(error),
+      },
+    }).finally(() => {
+      process.exit(1);
+    });
+  } else {
+    process.exit(1);
+  }
 });

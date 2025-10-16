@@ -32,9 +32,9 @@ This is a TypeScript template for building Model Context Protocol (MCP) servers.
 ### Core Components
 
 - **`src/index.ts`** - Main MCP server entry point that:
-  - Sets up the HTTP server transport on port 3000 (configurable via PORT env var)
+  - Sets up the stdio server transport for inter-process communication
   - Defines all available MCP tools with their JSON schemas
-  - Routes tool calls to registered tool handlers
+  - Connects to the transport via stdin/stdout
   - Handles error responses in MCP format
 - **`src/config.ts`** - Environment configuration with validation using Zod
 - **`src/logger.ts`** - Structured logging with Pino (OpenTelemetry compatible)
@@ -43,7 +43,7 @@ This is a TypeScript template for building Model Context Protocol (MCP) servers.
 ### Template MCP Tools Available
 
 The template includes one example tool to demonstrate MCP tool implementation:
-- `echo` - Simple echo tool that returns the provided message
+- `listClassesByDataGroup` - List classes for an Elephant data group with names and descriptions
 
 ### Build System
 
@@ -72,13 +72,13 @@ The template includes one example tool to demonstrate MCP tool implementation:
 ## Key Implementation Details
 
 - All tool responses are wrapped in MCP `content` format with `type: 'text'` and JSON stringified data
-- Server runs as HTTP transport (not stdio) for remote MCP connections
-- Uses Express for reliable HTTP handling with excellent TypeScript support
-- Session management handles MCP initialization and transport lifecycle
+- Server runs as stdio transport for local inter-process communication
+- No HTTP server or port configuration required
+- Server communicates via stdin/stdout with parent process
 - Error handling returns MCP-formatted error messages rather than throwing
 - **Structured Logging**: Uses Pino for production-ready logging with OpenTelemetry trace correlation
 - **Configuration Management**: Environment variables validated with Zod schemas
-- **Graceful Shutdown**: Proper SIGTERM/SIGINT handling for container environments
+- **Graceful Shutdown**: Proper SIGTERM/SIGINT handling for process termination
 
 ## Template Usage
 
@@ -95,7 +95,6 @@ This is a template project for creating new MCP servers. To customize:
 
 The following environment variables are supported (see `src/config.ts`):
 
-- `PORT` - Server port (default: 3000)
 - `NODE_ENV` - Environment (development/production/test)
 - `SERVER_NAME` - MCP server name (default: mcp-typescript-template)
 - `SERVER_VERSION` - Server version (default: 1.0.0)

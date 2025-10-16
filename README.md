@@ -1,228 +1,118 @@
-# MCP TypeScript Template
+# Elephant MCP Server
 
-A TypeScript template for building remote Model Context Protocol (MCP) servers with modern tooling and best practices while leveraging the [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk).
+Elephant MCP connects Claude-compatible clients to the Elephant data graph, exposing discoverable tools for listing data groups, classes, and individual property schemas. The server is published on npm as `@elephant-xyz/mcp`.
 
-## Features
+[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=%40elephant-xyz%2Fmcp&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBlbGVwaGFudC14eXovbWNwQGxhdGVzdCJdfQ==)
+[<img alt="Install in VS Code (npx)" src="https://img.shields.io/badge/Install%20in%20VS%20Code-0098FF?style=for-the-badge&logo=visualstudiocode&logoColor=white">](https://insiders.vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%7B%22name%22%3A%22%40elephant-xyz%2Fmcp%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40elephant-xyz%2Fmcp%40latest%22%5D%7D)
 
-This template provides:
-
-- **TypeScript** - Full TypeScript support with strict configuration
-- **Vite** - Fast build system with ES modules output
-- **Express** - Fast, unopinionated web framework for HTTP server
-- **ESLint + Prettier** - Code quality and formatting
-- **Docker** - Containerization support
-- **Example Tool** - Simple echo tool to demonstrate MCP tool implementation
-
-## Getting Started
-
-The easiest way to get started is using `degit`:
-
-1. **Create a new project from this template**
-
-   ```bash
-   npx degit nickytonline/mcp-typescript-template my-mcp-server
-   cd my-mcp-server
-   ```
-
-2. **Install dependencies**
-
-   ```bash
-   npm install
-   ```
-
-3. **Build the project**
-
-   ```bash
-   npm run build
-   ```
-
-4. **Start the server**
-   ```bash
-   npm start
-   ```
-
-The server will be available at `http://localhost:3000` for MCP connections.
-
-### Alternative: Using GitHub Template
-
-You can also click the "Use this template" button on GitHub to create a new repository, then clone it:
+## One-Command Start
 
 ```bash
-git clone <your-repo-url>
-cd my-mcp-server
-npm install
+npx -y @elephant-xyz/mcp@latest
 ```
 
-## Development
+The CLI launches a stdio MCP server, logs to stderr, and immediately emits MCP logging events so clients can confirm connectivity.
 
-### Watch mode for development (with hot reloading)
+## Why Elephant?
 
-```bash
-npm run dev
-```
-
-### Build the project
-
-```bash
-npm run build
-```
-
-### Linting
-
-- Lint the project
-
-```bash
-npm run lint
-```
-
-- Fix all auto-fixable lint errors
-
-```bash
-npm run lint:fix
-```
-
-### Formatting
-
-- Format files in the project
-
-```bash
-npm run format
-```
-
-- Check formatting
-
-```bash
-npm run format:check
-```
-
-## Testing Your MCP Server
-
-You can test your MCP server using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector):
-
-```bash
-npx @modelcontextprotocol/inspector
-```
-
-This will launch a web interface that allows you to:
-- Connect to your MCP server
-- Test your tools interactively
-- View request/response messages
-- Debug your MCP implementation
-
-Make sure your server is running (using `npm start` or `npm run dev`) before connecting with the inspector.
+- Ready-to-use `npx` launcher compatible with Claude, Cursor, VS Code, Gemini CLI, and other MCP clients.
+- Tools to enumerate Elephant data groups, related classes, and full JSON Schema fragments.
+- Structured MCP logging to stream diagnostics into every connected client.
 
 ## Available Tools
 
-The template includes one example tool:
+- `listClassesByDataGroup` – Lists classes attached to an Elephant data group, including friendly names and descriptions.
+- `listPropertiesByClassName` – Returns schema property keys for a class (excluding transport-only fields).
+- `getPropertySchema` – Fetches the full JSON Schema for a specific property and class combination.
 
-### echo
+## Supported MCP Clients
 
-Echoes back the provided message - a simple example to demonstrate MCP tool implementation.
+### Cursor
 
-**Parameters:**
+[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=%40elephant-xyz%2Fmcp&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBlbGVwaGFudC14eXovbWNwQGxhdGVzdCJdfQ==)
 
-- `message` (string) - The message to echo back
+1. Ensure Node.js 22.18+ is installed.
+2. Cursor will open a configuration screen pre-filled with:
+   ```jsonc
+   {
+     "command": "npx",
+     "args": ["-y", "@elephant-xyz/mcp@latest"],
+   }
+   ```
+3. Save and toggle the Elephant connection inside Cursor’s MCP panel.
+4. If you are hacking on a local checkout, switch the command to `npm start` and set `cwd` to your repository path.
 
-## Customizing Your MCP Server
+### Visual Studio Code
 
-1. **Update package.json** - Change name, description, and keywords
-2. **Modify src/index.ts** - Replace the echo tool with your custom tools
-3. **Add your logic** - Create additional TypeScript files for your business logic
-4. **Update README** - Document your specific MCP server functionality
+[<img alt="Install in VS Code (npx)" src="https://img.shields.io/badge/Install%20in%20VS%20Code-0098FF?style=for-the-badge&logo=visualstudiocode&logoColor=white">](https://insiders.vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%7B%22name%22%3A%22%40elephant-xyz%2Fmcp%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40elephant-xyz%2Fmcp%40latest%22%5D%7D)
 
-## Docker
+1. Install the **Model Context Protocol** extension.
+2. Accept the pre-populated install flow above or add manually under _Settings → MCP → Servers_ with `npx -y @elephant-xyz/mcp@latest`.
+3. Reload VS Code and enable the Elephant server in the MCP panel.
 
-Build and run using Docker:
+### Claude Code
 
-- Build the Docker image
-
-```bash
-docker build -t my-mcp-server .
-```
-
-- Run the container
-
-```bash
-docker run -p 3000:3000 my-mcp-server
-```
-
-### Docker Compose
-
-```yaml
-# docker-compose.yml
-version: "3.8"
-services:
-  mcp-server:
-    build: .
-    ports:
-      - "3000:3000"
-    environment:
-      - PORT=3000
-```
+**Remote server connection (if you deploy Elephant over HTTP)**
 
 ```bash
-docker-compose up --build
+claude mcp add --transport http elephant \
+  https://YOUR-DEPLOYED-ENDPOINT/mcp \
 ```
 
-## Project Structure
+**Local stdio connection**
 
-```
-mcp-typescript-template/
-├── src/
-│   └── index.ts          # Main MCP server entry point
-├── dist/                 # Built output (generated)
-├── .eslintrc.js         # ESLint configuration
-├── .prettierrc          # Prettier configuration
-├── tsconfig.json        # TypeScript configuration
-├── vite.config.ts       # Vite build configuration
-├── Dockerfile           # Docker configuration
-└── package.json         # Dependencies and scripts
+```bash
+claude mcp add elephant -- npx -y @elephant-xyz/mcp@latest
 ```
 
-## Architecture
+Restart Claude Code after adding the server so the tools appear in the `@tools` palette. Replace the URL and API key placeholders with your deployment details if you expose the server remotely.
 
-This template follows a simple architecture:
+### OpenAI Codex
 
-- **HTTP Transport** - Uses Express with StreamableHTTPServerTransport for remote MCP connections
-- **Tool Registration** - Tools are registered with JSON schemas for input validation
-- **Error Handling** - Proper MCP-formatted error responses
-- **Session Management** - Handles MCP session initialization and management
+- **CLI setup**
 
-## Example: Adding a New Tool
+  ```bash
+  codex mcp add elephant -- npx -y @elephant-xyz/mcp@latest
+  ```
 
-```typescript
-import { createTextResult } from "./lib/utils.js";
+  You can explore additional options with `codex mcp --help`. Inside the Codex TUI, run `/mcp` to view currently connected servers.
 
-server.registerTool(
-  "my_tool",
-  {
-    title: "My Custom Tool",
-    description: "Description of what this tool does",
-    inputSchema: {
-      param1: z.string().describe("Description of param1"),
-      param2: z.number().optional().describe("Optional parameter"),
+- **config.toml setup**
+  Edit `~/.codex/config.toml` (or open _MCP settings → Open config.toml_ from the IDE extension) and add:
+  ```toml
+  [mcp.elephant]
+  command = "npx"
+  args = ["-y", "@elephant-xyz/mcp@latest"]
+  ```
+  Save the file and restart Codex to load the new server.
+
+### Gemini CLI
+
+Create (or edit) `.gemini/settings.json` in your project and add:
+
+```jsonc
+{
+  "mcpServers": {
+    "elephant": {
+      "command": "npx",
+      "args": ["-y", "@elephant-xyz/mcp@latest"],
     },
   },
-  async (args) => {
-    // Your tool logic here
-    const result = await myCustomLogic(args.param1, args.param2);
-
-    return createTextResult(result);
-  },
-);
+}
 ```
 
-## Why Express?
+Restart Gemini CLI or run `gemini tools sync` to pick up the new server.
 
-This template uses Express for the HTTP server, which provides:
+## Configuration
 
-- **MCP SDK Compatibility** - Full compatibility with the MCP TypeScript SDK's StreamableHTTPServerTransport
-- **Mature & Stable** - Battle-tested HTTP server with extensive ecosystem
-- **TypeScript Support** - Excellent TypeScript support with comprehensive type definitions
-- **Middleware Ecosystem** - Rich ecosystem of middleware for common tasks
-- **Documentation** - Comprehensive documentation and community support
-- **Reliability** - Proven reliability for production applications
+The stdio transport means no port or server identity flags are required. Optional environment variables handled by `src/config.ts`:
 
-## Repository Guidelines
+- `LOG_LEVEL` – Pino log level (`error`, `warn`, `info`, `debug`; defaults to `info`).
 
-Contributors should review `AGENTS.md` for project structure, coding standards, and pull request expectations before opening changes.
+## Need to Contribute?
+
+Development setup, testing, and release workflows live in [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+## Support
+
+Open an issue with your Node.js version, client details, and any relevant log output if you run into trouble. We're happy to help you get connected.

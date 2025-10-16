@@ -1,9 +1,10 @@
 {
-  "name": "mcp-typescript-template",
-  "version": "1.0.0",
-  "description": "TypeScript template for building MCP servers",
+  "name": "@elephant-xyz/mcp",
+  "version": "0.1.0",
+  "description": "Model Context Protocol server that exposes Elephant data graph tooling",
   "type": "module",
   "main": "dist/index.js",
+  "bin": "./dist/index.js",
   "scripts": {
     "build": "vite build",
     "dev": "node --watch src/index.ts",
@@ -13,19 +14,18 @@
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
     "format": "prettier --write src/**/*.ts",
-    "format:check": "prettier --check src/**/*.ts"
+    "format:check": "prettier --check src/**/*.ts",
+    "release": "semantic-release",
+    "prepublishOnly": "npm run build"
   },
-  "keywords": [
-    "mcp",
-    "typescript",
-    "template",
-    "vite",
-    "server"
-  ],
-  "author": "",
+  "keywords": ["mcp", "elephant", "data-graph", "typescript", "server"],
+  "author": "Elephant",
   "license": "MIT",
   "engines": {
     "node": ">=22.18.0"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "devDependencies": {
     "@commitlint/cli": "^19.0.0",
@@ -46,9 +46,10 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.20.0",
-    "@types/express": "^5.0.3",
-    "express": "^5.1.0",
     "pino": "^9.0.0",
-    "pino-pretty": "^13.1.1"
+    "pino-pretty": "^13.1.1",
+    "helia": "^5.0.0",
+    "@helia/json": "^4.0.0",
+    "multiformats": "^13.0.0"
   }
 }
