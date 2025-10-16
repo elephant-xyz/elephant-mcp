@@ -2,124 +2,99 @@
 
 Elephant MCP connects Claude-compatible clients to the Elephant data graph, exposing discoverable tools for listing data groups, classes, and individual property schemas. The server is published on npm as `@elephant-xyz/mcp`.
 
-[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=%40elephant-xyz%2Fmcp&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBlbGVwaGFudC14eXovbWNwIl19)
-[<img alt="Install in VS Code (npx)" src="https://img.shields.io/badge/Install%20in%20VS%20Code-0098FF?style=for-the-badge&logo=visualstudiocode&logoColor=white">](https://insiders.vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%7B%22name%22%3A%22%40elephant-xyz%2Fmcp%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40elephant-xyz%2Fmcp%22%5D%7D)
+[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=%40elephant-xyz%2Fmcp&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBlbGVwaGFudC14eXovbWNwQGxhdGVzdCJdfQ==)
+[<img alt="Install in VS Code (npx)" src="https://img.shields.io/badge/Install%20in%20VS%20Code-0098FF?style=for-the-badge&logo=visualstudiocode&logoColor=white">](https://insiders.vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%7B%22name%22%3A%22%40elephant-xyz%2Fmcp%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40elephant-xyz%2Fmcp%40latest%22%5D%7D)
 
-## Why Elephant?
-- Single-command `npx -y @elephant-xyz/mcp` launch with stdio transport compatible with the Model Context Protocol.
-- Tools to enumerate Elephant data groups, joinable classes, and JSON Schema definitions.
-- Built-in MCP logging so clients can stream structured server diagnostics.
-- Production ready with TypeScript, Vite builds, and semantic-release powered publishing.
-
-## Requirements
-- Node.js **22.18.0** or newer (ensures native TypeScript support at runtime).
-- Access to the Elephant IPFS gateway used by the bundled tools.
-
-## Quick Start
-Run the published server instantly (no clone required):
+## One-Command Start
 ```bash
-npx -y @elephant-xyz/mcp
+npx -y @elephant-xyz/mcp@latest
 ```
 
-For local development:
-1. Install dependencies:
-   ```bash
-   npm install
-   ```
-2. Build the production bundle:
-   ```bash
-   npm run build
-   ```
-3. Launch the compiled server:
-   ```bash
-   npm start
-   ```
-4. Hot-reload while editing:
-   ```bash
-   npm run dev
-   ```
+The CLI launches a stdio MCP server, logs to stderr, and immediately emits MCP logging events so clients can confirm connectivity.
 
-The server prints lifecycle logs to stderr and immediately emits an MCP logging event so clients can confirm connectivity.
+## Why Elephant?
+- Ready-to-use `npx` launcher compatible with Claude, Cursor, VS Code, Gemini CLI, and other MCP clients.
+- Tools to enumerate Elephant data groups, related classes, and full JSON Schema fragments.
+- Structured MCP logging to stream diagnostics into every connected client.
 
 ## Available Tools
-- `listClassesByDataGroup` – Returns display names and descriptions for every class related to a data group.
-- `listPropertiesByClassName` – Lists the JSON Schema property keys available on a class (excluding transport-only fields).
-- `getPropertySchema` – Fetches the full JSON Schema for a specific property on a class.
+- `listClassesByDataGroup` – Lists classes attached to an Elephant data group, including friendly names and descriptions.
+- `listPropertiesByClassName` – Returns schema property keys for a class (excluding transport-only fields).
+- `getPropertySchema` – Fetches the full JSON Schema for a specific property and class combination.
 
-Each tool validates input with Zod, emits structured logs, and returns `createTextResult` output for broad client compatibility.
+## Supported MCP Clients
 
-## Configuration
-The server only uses stdio transport, so no port or identity environment variables are required. Optional settings handled in `src/config.ts`:
-- `LOG_LEVEL` – Pino log level (`error`, `warn`, `info`, `debug`; defaults to `info`).
+### Cursor
+[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=%40elephant-xyz%2Fmcp&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBlbGVwaGFudC14eXovbWNwQGxhdGVzdCJdfQ==)
 
-## Client Setup
-
-### Cursor Setup
-1. Ensure Node.js 22.18+ is available.
-2. Create (or update) `~/.cursor/mcp.json`:
+1. Ensure Node.js 22.18+ is installed.
+2. Cursor will open a configuration screen pre-filled with:
    ```jsonc
    {
-     "elephant": {
-       "command": "npx",
-       "args": ["-y", "@elephant-xyz/mcp"],
-       "enabled": true
-     }
+     "command": "npx",
+     "args": ["-y", "@elephant-xyz/mcp@latest"]
    }
    ```
-3. Restart Cursor and open the MCP panel. The Elephant server will appear under *Connections*. Toggle it on to stream the available tools into the chat sidebar.
-4. Tip: If you are developing locally, swap the command back to `npm start` and set `cwd` to your checkout.
+3. Save and toggle the Elephant connection inside Cursor’s MCP panel.
+4. If you are hacking on a local checkout, switch the command to `npm start` and set `cwd` to your repository path.
 
-### Visual Studio Code Setup
-1. Install the **Model Context Protocol** extension from the Marketplace.
-2. Open the extension settings (gear icon → *Extension Settings*).
-3. Under *Servers*, add a new entry named `elephant` that runs `npx -y @elephant-xyz/mcp`.
-4. Reload VS Code. The extension will list Elephant as an available provider and let you invoke the tools from the MCP panel.
+### Visual Studio Code
+[<img alt="Install in VS Code (npx)" src="https://img.shields.io/badge/Install%20in%20VS%20Code-0098FF?style=for-the-badge&logo=visualstudiocode&logoColor=white">](https://insiders.vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%7B%22name%22%3A%22%40elephant-xyz%2Fmcp%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40elephant-xyz%2Fmcp%40latest%22%5D%7D)
+
+1. Install the **Model Context Protocol** extension.
+2. Accept the pre-populated install flow above or add manually under *Settings → MCP → Servers* with `npx -y @elephant-xyz/mcp@latest`.
+3. Reload VS Code and enable the Elephant server in the MCP panel.
 
 ### Claude Code
-Claude Desktop (Code) surfaces MCP servers through **Settings → Integrations**.
-1. Click **Add MCP Server**.
-2. Choose **Custom command** and enter `npx -y @elephant-xyz/mcp`.
-3. (Optional) For local development, point to `npm start` with your checkout directory instead.
-4. Save and reconnect. Claude Code now exposes Elephant tools through the `@tools` palette.
 
-### OpenAI Codex
-If you are using a Codex build with MCP support enabled:
-1. Open your Codex configuration file (refer to the Codex docs for its location).
-2. Add a stdio server entry named `elephant` that runs `npx -y @elephant-xyz/mcp`, similar to:
-   ```jsonc
-   {
-     "mcpServers": {
-       "elephant": {
-         "type": "stdio",
-         "command": "npx",
-         "args": ["-y", "@elephant-xyz/mcp"]
-       }
-     }
-   }
-   ```
-3. Restart Codex so it loads the new configuration.
+**Remote server connection (if you deploy Elephant over HTTP)**
+```bash
+claude mcp add --transport http elephant \
+  https://YOUR-DEPLOYED-ENDPOINT/mcp \
+  --header "ELEPHANT_API_KEY: YOUR_API_KEY"
+```
+
+**Local stdio connection**
+```bash
+claude mcp add elephant -- npx -y @elephant-xyz/mcp@latest
+```
+
+Restart Claude Code after adding the server so the tools appear in the `@tools` palette. Replace the URL and API key placeholders with your deployment details if you expose the server remotely.
+
+### OpenAI Codex (experimental MCP support)
+Add this snippet to your Codex configuration:
+```jsonc
+{
+  "mcpServers": {
+    "elephant": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@elephant-xyz/mcp@latest"]
+    }
+  }
+}
+```
+Restart `codex chat` and run `@mcp list` to confirm the Elephant server is connected.
 
 ### Gemini CLI
-Gemini CLI builds that support MCP allow configuring servers via YAML.
-1. Locate your `mcp` configuration file (typically under the Gemini CLI config directory).
-2. Add:
-   ```yaml
-   servers:
-     elephant:
-       transport: stdio
-       command: npx
-       args:
-         - -y
-         - @elephant-xyz/mcp
-   ```
-3. Reload or restart the CLI to register the Elephant server.
+Add an entry to `~/.config/gemini/mcp.yaml`:
+```yaml
+servers:
+  elephant:
+    transport: stdio
+    command: npx
+    args:
+      - -y
+      - @elephant-xyz/mcp@latest
+```
+Run `gemini tools sync` to register the server.
 
-> Tip: For all clients above, use `npm run dev` while iterating so changes are reflected without restarts.
+## Configuration
+The stdio transport means no port or server identity flags are required. Optional environment variables handled by `src/config.ts`:
+- `LOG_LEVEL` – Pino log level (`error`, `warn`, `info`, `debug`; defaults to `info`).
 
-## Development Tasks
-- `npm run lint` / `npm run lint:fix` – Ensure code quality.
-- `npm run format` / `npm run format:check` – Keep Prettier formatting consistent.
-- `npm run test` – Run the Vitest suite (watch mode). Use `npm run test:ci` for the JSON report.
+## Need to Contribute?
+Development setup, testing, and release workflows live in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Support
-File issues or feature requests in this repository. When reporting problems, include your Node.js version, client tooling, and relevant log output from `dist/index.js`.
+Open an issue with your Node.js version, client details, and any relevant log output if you run into trouble. We're happy to help you get connected. 
