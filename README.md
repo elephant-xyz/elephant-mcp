@@ -7,10 +7,11 @@ Elephant MCP connects Claude-compatible clients to the Elephant data graph, expo
 **For best results with Elephant MCP, always specify the Data Group you're working on in your prompts and add `use elephant mcp` at the end.**
 
 **Example prompts:**
-```
-"I'm working on the 'user_events' data group. Can you help me explore the available classes? use elephant mcp"
 
-"What properties are available in the 'product_inventory' class? I'm working with the 'commerce' data group. use elephant mcp"
+```
+"I'm working on the 'County' data group. Can you help me explore the available classes? use elephant mcp"
+
+"What properties are available in the 'property' class? I'm working with the 'County' data group. use elephant mcp"
 ```
 
 This helps the AI understand which data context to use and ensures it leverages the Elephant MCP tools effectively.
