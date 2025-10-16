@@ -144,7 +144,7 @@ async function main() {
 
 main().catch((error) => {
   logger.error("Server startup error", {
-    error: error instanceof Error ? error.message : error,
+    error: error instanceof Error ? error.message : String(error),
   });
   // Best-effort MCP logging of startup error if connected
   if (serverRef?.isConnected()) {
@@ -155,7 +155,10 @@ main().catch((error) => {
         message: "Server startup error",
         error: error instanceof Error ? error.message : String(error),
       },
+    }).finally(() => {
+      process.exit(1);
     });
+  } else {
+    process.exit(1);
   }
-  process.exit(1);
 });
