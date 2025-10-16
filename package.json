@@ -1,7 +1,7 @@
 {
-  "name": "mcp-typescript-template",
+  "name": "elephant-mcp",
   "version": "1.0.0",
-  "description": "TypeScript template for building MCP servers",
+  "description": "Model Context Protocol server that exposes Elephant data graph tooling",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
@@ -13,16 +13,20 @@
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
     "format": "prettier --write src/**/*.ts",
-    "format:check": "prettier --check src/**/*.ts"
+    "format:check": "prettier --check src/**/*.ts",
+    "release": "semantic-release",
+    "prepublishOnly": "npm run build"
   },
   "keywords": [
     "mcp",
     "typescript",
-    "template",
-    "vite",
+    "mcp",
+    "elephant",
+    "data-graph",
+    "typescript",
     "server"
   ],
-  "author": "",
+  "author": "Elephant",
   "license": "MIT",
   "engines": {
     "node": ">=22.18.0"

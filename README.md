@@ -1,228 +1,130 @@
-# MCP TypeScript Template
+# Elephant MCP Server
 
-A TypeScript template for building remote Model Context Protocol (MCP) servers with modern tooling and best practices while leveraging the [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk).
+Elephant MCP connects Claude-compatible clients to the Elephant data graph, exposing discoverable tools for listing data groups, classes, and individual property schemas.
 
-## Features
+<p>
+  <a href="#cursor-setup"><img src="https://img.shields.io/badge/Add%20to-Cursor-5C6CFF?style=for-the-badge" alt="Add to Cursor"></a>
+  <a href="#visual-studio-code-setup"><img src="https://img.shields.io/badge/Add%20to-Visual%20Studio%20Code-007ACC?style=for-the-badge" alt="Add to Visual Studio Code"></a>
+</p>
 
-This template provides:
+## Why Elephant?
+- Single command launch with stdio transport compatible with the Model Context Protocol.
+- Tools to enumerate Elephant data groups, joinable classes, and JSON Schema definitions.
+- Built-in MCP logging so clients can stream structured server diagnostics.
+- Production ready with TypeScript, Vite builds, and semantic-release powered publishing.
 
-- **TypeScript** - Full TypeScript support with strict configuration
-- **Vite** - Fast build system with ES modules output
-- **Express** - Fast, unopinionated web framework for HTTP server
-- **ESLint + Prettier** - Code quality and formatting
-- **Docker** - Containerization support
-- **Example Tool** - Simple echo tool to demonstrate MCP tool implementation
+## Requirements
+- Node.js **22.18.0** or newer (ensures native TypeScript support at runtime).
+- Access to the Elephant IPFS gateway used by the bundled tools.
 
-## Getting Started
-
-The easiest way to get started is using `degit`:
-
-1. **Create a new project from this template**
-
-   ```bash
-   npx degit nickytonline/mcp-typescript-template my-mcp-server
-   cd my-mcp-server
-   ```
-
-2. **Install dependencies**
-
+## Quick Start
+1. Install dependencies:
    ```bash
    npm install
    ```
-
-3. **Build the project**
-
+2. Build the production bundle:
    ```bash
    npm run build
    ```
-
-4. **Start the server**
+3. Launch the server (stdio transport):
    ```bash
    npm start
    ```
+4. When developing locally you can hot-reload with:
+   ```bash
+   npm run dev
+   ```
 
-The server will be available at `http://localhost:3000` for MCP connections.
-
-### Alternative: Using GitHub Template
-
-You can also click the "Use this template" button on GitHub to create a new repository, then clone it:
-
-```bash
-git clone <your-repo-url>
-cd my-mcp-server
-npm install
-```
-
-## Development
-
-### Watch mode for development (with hot reloading)
-
-```bash
-npm run dev
-```
-
-### Build the project
-
-```bash
-npm run build
-```
-
-### Linting
-
-- Lint the project
-
-```bash
-npm run lint
-```
-
-- Fix all auto-fixable lint errors
-
-```bash
-npm run lint:fix
-```
-
-### Formatting
-
-- Format files in the project
-
-```bash
-npm run format
-```
-
-- Check formatting
-
-```bash
-npm run format:check
-```
-
-## Testing Your MCP Server
-
-You can test your MCP server using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector):
-
-```bash
-npx @modelcontextprotocol/inspector
-```
-
-This will launch a web interface that allows you to:
-- Connect to your MCP server
-- Test your tools interactively
-- View request/response messages
-- Debug your MCP implementation
-
-Make sure your server is running (using `npm start` or `npm run dev`) before connecting with the inspector.
+The server prints lifecycle logs to stdout and immediately emits an MCP logging event so clients can confirm connectivity.
 
 ## Available Tools
+- `listClassesByDataGroup` – Returns display names and descriptions for every class related to a data group.
+- `listPropertiesByClassName` – Lists the JSON Schema property keys available on a class (excluding transport-only fields).
+- `getPropertySchema` – Fetches the full JSON Schema for a specific property on a class.
 
-The template includes one example tool:
+Each tool validates input with Zod, emits structured logs, and returns `createTextResult` output for broad client compatibility.
 
-### echo
+## Configuration
+Environment variables are normalized in `src/config.ts`:
 
-Echoes back the provided message - a simple example to demonstrate MCP tool implementation.
+| Variable | Description | Default |
+| --- | --- | --- |
+| `PORT` | HTTP port used when running behind a transport proxy (stdio ignores this) | `3000` |
+| `SERVER_NAME` | Public name reported to clients | `elephant-mcp` |
+| `SERVER_VERSION` | Version string surfaced in MCP handshake | package.json `version` |
+| `LOG_LEVEL` | Pino log level | `info` |
 
-**Parameters:**
+Add new variables in `src/config.ts` so they inherit validation and documentation.
 
-- `message` (string) - The message to echo back
+## Client Setup
 
-## Customizing Your MCP Server
+### Cursor Setup
+1. Build or install the package so `npm start` is available on your machine.
+2. Create (or update) `~/.cursor/mcp.json`:
+   ```jsonc
+   {
+     "elephant": {
+       "command": "npm",
+       "args": ["start"],
+       "cwd": "/absolute/path/to/elephant-mcp",
+       "enabled": true
+     }
+   }
+   ```
+3. Restart Cursor and open the MCP panel. The Elephant server will appear under *Connections*. Toggle it on to stream the available tools into the chat sidebar.
 
-1. **Update package.json** - Change name, description, and keywords
-2. **Modify src/index.ts** - Replace the echo tool with your custom tools
-3. **Add your logic** - Create additional TypeScript files for your business logic
-4. **Update README** - Document your specific MCP server functionality
+### Visual Studio Code Setup
+1. Install the **Model Context Protocol** extension from the Marketplace.
+2. Open the extension settings (gear icon → *Extension Settings*).
+3. Under *Servers*, add a new entry named `elephant` that runs `npm start` from your repository directory.
+4. Reload VS Code. The extension will list Elephant as an available provider and let you invoke the tools from the MCP panel.
 
-## Docker
+### Claude Code
+Claude Desktop (Code) surfaces MCP servers through **Settings → Integrations**.
+1. Click **Add MCP Server**.
+2. Choose **Custom command** and enter `npm start`.
+3. Set the working directory to your Elephant MCP checkout.
+4. Save and reconnect. Claude Code now exposes Elephant tools through the `@tools` palette.
 
-Build and run using Docker:
+### OpenAI Codex
+If you are using a Codex build with MCP support enabled:
+1. Open your Codex configuration file (refer to the Codex docs for its location).
+2. Add a stdio server entry named `elephant` that runs `npm start` with the repository path as `cwd`, similar to:
+   ```jsonc
+   {
+     "mcpServers": {
+       "elephant": {
+         "type": "stdio",
+         "command": "npm",
+         "args": ["start"],
+         "cwd": "/absolute/path/to/elephant-mcp"
+       }
+     }
+   }
+   ```
+3. Restart Codex so it loads the new configuration.
 
-- Build the Docker image
+### Gemini CLI
+Gemini CLI builds that support MCP allow configuring servers via YAML.
+1. Locate your `mcp` configuration file (typically under the Gemini CLI config directory).
+2. Add:
+   ```yaml
+   servers:
+     elephant:
+       transport: stdio
+       command: npm
+       args:
+         - start
+       cwd: /absolute/path/to/elephant-mcp
+   ```
+3. Reload or restart the CLI to register the Elephant server.
 
-```bash
-docker build -t my-mcp-server .
-```
+> Tip: For all clients above, use `npm run dev` while iterating so changes are reflected without restarts.
 
-- Run the container
+## Development Tasks
+- `npm run lint` / `npm run lint:fix` – Ensure code quality.
+- `npm run format` / `npm run format:check` – Keep Prettier formatting consistent.
+- `npm run test` – Run the Vitest suite (watch mode). Use `npm run test:ci` for the JSON report.
 
-```bash
-docker run -p 3000:3000 my-mcp-server
-```
-
-### Docker Compose
-
-```yaml
-# docker-compose.yml
-version: "3.8"
-services:
-  mcp-server:
-    build: .
-    ports:
-      - "3000:3000"
-    environment:
-      - PORT=3000
-```
-
-```bash
-docker-compose up --build
-```
-
-## Project Structure
-
-```
-mcp-typescript-template/
-├── src/
-│   └── index.ts          # Main MCP server entry point
-├── dist/                 # Built output (generated)
-├── .eslintrc.js         # ESLint configuration
-├── .prettierrc          # Prettier configuration
-├── tsconfig.json        # TypeScript configuration
-├── vite.config.ts       # Vite build configuration
-├── Dockerfile           # Docker configuration
-└── package.json         # Dependencies and scripts
-```
-
-## Architecture
-
-This template follows a simple architecture:
-
-- **HTTP Transport** - Uses Express with StreamableHTTPServerTransport for remote MCP connections
-- **Tool Registration** - Tools are registered with JSON schemas for input validation
-- **Error Handling** - Proper MCP-formatted error responses
-- **Session Management** - Handles MCP session initialization and management
-
-## Example: Adding a New Tool
-
-```typescript
-import { createTextResult } from "./lib/utils.js";
-
-server.registerTool(
-  "my_tool",
-  {
-    title: "My Custom Tool",
-    description: "Description of what this tool does",
-    inputSchema: {
-      param1: z.string().describe("Description of param1"),
-      param2: z.number().optional().describe("Optional parameter"),
-    },
-  },
-  async (args) => {
-    // Your tool logic here
-    const result = await myCustomLogic(args.param1, args.param2);
-
-    return createTextResult(result);
-  },
-);
-```
-
-## Why Express?
-
-This template uses Express for the HTTP server, which provides:
-
-- **MCP SDK Compatibility** - Full compatibility with the MCP TypeScript SDK's StreamableHTTPServerTransport
-- **Mature & Stable** - Battle-tested HTTP server with extensive ecosystem
-- **TypeScript Support** - Excellent TypeScript support with comprehensive type definitions
-- **Middleware Ecosystem** - Rich ecosystem of middleware for common tasks
-- **Documentation** - Comprehensive documentation and community support
-- **Reliability** - Proven reliability for production applications
-
-## Repository Guidelines
-
-Contributors should review `AGENTS.md` for project structure, coding standards, and pull request expectations before opening changes.
+## Support
+File issues or feature requests in this repository. When reporting problems, include your Node.js version, client tooling, and relevant log output from `dist/index.js`.
