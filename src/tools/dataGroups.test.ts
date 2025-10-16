@@ -1,11 +1,10 @@
 import {
     extractClassPairs,
-    normalizeKey,
     shouldIgnoreClass,
     resolveDataGroup,
     listClassesFromDataGroup,
-    fetchManifest,
 } from "./dataGroups.ts";
+import { fetchManifest, normalizeKey } from "../lib/manifest.ts";
 
 import type { Manifest } from "../types/lexicon.ts";
 

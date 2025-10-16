@@ -4,6 +4,7 @@ import { z } from "zod";
 import { logger } from "./logger.ts";
 import { getConfig } from "./config.ts";
 import { listClassesByDataGroupHandler } from "./tools/dataGroups.ts";
+import { listPropertiesByClassNameHandler } from "./tools/classes.ts";
 import { setServerInstance } from "./lib/serverRef.ts";
 
 const getServer = () => {
@@ -36,6 +37,24 @@ const getServer = () => {
     },
     async (args: { groupName: string }) => {
       return listClassesByDataGroupHandler(args.groupName);
+    },
+  );
+
+  server.registerTool(
+    "listPropertiesByClassName",
+    {
+      title: "List properties by class name",
+      description:
+        "Lists JSON Schema property names for an Elephant class (excludes source_http_request)",
+      inputSchema: {
+        className: z
+          .string()
+          .min(1, "className is required")
+          .describe("The class name, case-insensitive"),
+      },
+    },
+    async (args: { className: string }) => {
+      return listPropertiesByClassNameHandler(args.className);
     },
   );
 

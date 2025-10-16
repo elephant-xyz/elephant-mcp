@@ -1,27 +1,13 @@
-import { z } from "zod";
 import { createTextResult } from "../lib/utils.ts";
 import { logger } from "../logger.ts";
 import { getJsonByCid } from "../lib/ipfs.ts";
+import { fetchManifest, normalizeKey } from "../lib/manifest.ts";
 import type {
     ClassSchema,
     DataGroupSchema,
     ListedClassInfo,
     Manifest,
 } from "../types/lexicon.ts";
-
-const MANIFEST_URL =
-    "https://lexicon.elephant.xyz/json-schemas/schema-manifest.json";
-
-export const manifestSchema = z.record(
-    z.object({
-        ipfsCid: z.string(),
-        type: z.enum(["class", "relationship", "dataGroup"]),
-    }),
-);
-
-export function normalizeKey(key: string): string {
-    return key.trim().toLowerCase();
-}
 
 export function extractClassPairs(relKey: string): [string, string] | null {
     if (relKey.includes("_has_")) return relKey.split("_has_") as [string, string];
@@ -31,16 +17,6 @@ export function extractClassPairs(relKey: string): [string, string] | null {
 
 export function shouldIgnoreClass(name: string): boolean {
     return normalizeKey(name) === "fact_sheet" || normalizeKey(name) === "factsheet";
-}
-
-export async function fetchManifest(): Promise<Manifest> {
-    const res = await fetch(MANIFEST_URL);
-    if (!res.ok) {
-        throw new Error(`Failed to fetch manifest: ${res.status} ${res.statusText}`);
-    }
-    const json = await res.json();
-    const parsed = manifestSchema.parse(json);
-    return parsed as Manifest;
 }
 
 export async function resolveDataGroup(
