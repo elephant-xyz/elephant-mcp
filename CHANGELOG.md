@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/elephant-xyz/elephant-mcp/compare/v1.0.1...v1.1.0) (2025-10-17)
+
+
+### Features
+
+* **classes:** add enum to property_type schema ([#7](https://github.com/elephant-xyz/elephant-mcp/issues/7)) ([cbfcfe5](https://github.com/elephant-xyz/elephant-mcp/commit/cbfcfe564a9150baac90de780a38e6d57f6f2df4))
+
 ## [1.0.1](https://github.com/elephant-xyz/elephant-mcp/compare/v1.0.0...v1.0.1) (2025-10-17)
 
 # 1.0.0 (2025-10-16)
