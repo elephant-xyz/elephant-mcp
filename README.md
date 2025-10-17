@@ -19,14 +19,6 @@ This helps the AI understand which data context to use and ensures it leverages 
 [![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=%40elephant-xyz%2Fmcp&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBlbGVwaGFudC14eXovbWNwQGxhdGVzdCJdfQ==)
 [<img alt="Install in VS Code (npx)" src="https://img.shields.io/badge/Install%20in%20VS%20Code-0098FF?style=for-the-badge&logo=visualstudiocode&logoColor=white">](https://insiders.vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%7B%22name%22%3A%22%40elephant-xyz%2Fmcp%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40elephant-xyz%2Fmcp%40latest%22%5D%7D)
 
-## One-Command Start
-
-```bash
-npx -y @elephant-xyz/mcp@latest
-```
-
-The CLI launches a stdio MCP server, logs to stderr, and immediately emits MCP logging events so clients can confirm connectivity.
-
 ## Why Elephant?
 
 - Ready-to-use `npx` launcher compatible with Claude, Cursor, VS Code, Gemini CLI, and other MCP clients.
@@ -65,15 +57,6 @@ The CLI launches a stdio MCP server, logs to stderr, and immediately emits MCP l
 3. Reload VS Code and enable the Elephant server in the MCP panel.
 
 ### Claude Code
-
-**Remote server connection (if you deploy Elephant over HTTP)**
-
-```bash
-claude mcp add --transport http elephant \
-  https://YOUR-DEPLOYED-ENDPOINT/mcp \
-```
-
-**Local stdio connection**
 
 ```bash
 claude mcp add elephant -- npx -y @elephant-xyz/mcp@latest
