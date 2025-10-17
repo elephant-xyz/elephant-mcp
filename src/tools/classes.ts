@@ -106,6 +106,15 @@ function findPropertySchema(
   if (props && typeof props === "object") {
     for (const key of Object.keys(props)) {
       if (normalizeKey(key) === normalizeKey(targetName)) {
+        if (key === "property_type") {
+          const schema = props[key];
+          schema["enum"] = [
+            "LandParcel",
+            "Building",
+            "Unit",
+            "ManufacturedHome",
+          ];
+        }
         return props[key];
       }
     }
