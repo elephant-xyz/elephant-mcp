@@ -30,5 +30,5 @@ export const functionEmbeddingsTable = sqliteTable("functionEmbeddings", {
   id: integer("id").primaryKey(),
   functionId: integer("functionId").notNull(),
   chunkIndex: integer("chunkIndex").notNull(),
-  embedding: float32Array("vector", { dimensions: 1536 }).notNull(),
+  embedding: float32Array("vector", { dimensions: 3072 }).notNull(),
 });
