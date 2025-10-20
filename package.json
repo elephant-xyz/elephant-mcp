@@ -54,11 +54,12 @@
     "vitest": "^3.2.4"
   },
   "dependencies": {
+    "@helia/json": "^4.0.0",
     "@modelcontextprotocol/sdk": "^1.20.0",
+    "helia": "^5.0.0",
+    "multiformats": "^13.0.0",
     "pino": "^9.0.0",
     "pino-pretty": "^13.1.1",
-    "helia": "^5.0.0",
-    "@helia/json": "^4.0.0",
-    "multiformats": "^13.0.0"
+    "simple-git": "^3.28.0"
   }
 }
