@@ -134,6 +134,12 @@ async function main() {
     version: SERVER_VERSION,
   });
 
+  // Ensure the database is initialized before accepting any tool calls
+  const dataDir = getDefaultDataDir();
+  const dbPath = path.join(dataDir, "db", "elephant-mcp.sqlite");
+  const { db } = await initializeDatabase(dbPath);
+  setDbInstance(db);
+
   const server = getServer();
   serverRef = server;
   setServerInstance(server);
@@ -151,14 +157,9 @@ async function main() {
     },
   });
 
-  // Kick off background initialization and indexing. Failures should not block MCP.
+  // Kick off background indexing. Failures should not block MCP.
   (async () => {
     try {
-      const dataDir = getDefaultDataDir();
-      const dbPath = path.join(dataDir, "db", "elephant-mcp.sqlite");
-      const { db } = await initializeDatabase(dbPath);
-      setDbInstance(db);
-
       const clonePath = path.join(dataDir, "verified-scripts");
       const result = await indexVerifiedScripts(db, {
         clonePath,
