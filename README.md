@@ -31,6 +31,20 @@ This helps the AI understand which data context to use and ensures it leverages 
 - `listPropertiesByClassName` – Returns schema property keys for a class (excluding transport-only fields).
 - `getPropertySchema` – Fetches the full JSON Schema for a specific property and class combination.
 
+### transformExamples
+
+Embeds an input string and returns nearest functions from the local embeddings DB.
+
+- Input
+  - `text` (string, required): Input text to embed and search
+  - `topK` (number, optional, default 5, max 50): Number of results
+- Output
+  - `{ count: number, matches: Array<{ id: number; name: string; filePath: string; distance: number }> }`
+- Errors
+  - `{ error: "Missing OPENAI_API_KEY" }` when OpenAI key is not set
+  - `{ error: "Database is not initialized" }` when DB is unavailable
+  - `{ error: "Failed to transform examples" }` for unexpected failures
+
 ## Supported MCP Clients
 
 ### Cursor

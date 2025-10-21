@@ -10,6 +10,8 @@ import { setServerInstance } from "./lib/serverRef.ts";
 import path from "path";
 import { getDefaultDataDir } from "./lib/paths.ts";
 import { initializeDatabase } from "./db/index.ts";
+import { setDbInstance } from "./db/connectionRef.ts";
+import { transformExamplesHandler } from "./tools/transformExamples";
 import { indexVerifiedScripts } from "./lib/verifiedIndexer.ts";
 
 const SERVER_NAME = typeof packageJson.name === "string" ? packageJson.name : "@elephant-xyz/mcp";
@@ -86,6 +88,31 @@ const getServer = () => {
     },
   );
 
+  server.registerTool(
+    "transformExamples",
+    {
+      title: "Transform input into similar examples",
+      description:
+        "Embeds input text and returns nearest functions from the local embeddings DB",
+      inputSchema: {
+        text: z
+          .string()
+          .min(1, "text is required")
+          .describe("Input text to embed and search"),
+        topK: z
+          .number()
+          .int()
+          .positive()
+          .max(50)
+          .optional()
+          .describe("Number of results (default 5)"),
+      },
+    },
+    async (args: { text: string; topK?: number }) => {
+      return transformExamplesHandler(args.text, args.topK);
+    },
+  );
+
   return server;
 };
 
@@ -120,6 +147,7 @@ async function main() {
       const dataDir = getDefaultDataDir();
       const dbPath = path.join(dataDir, "db", "elephant-mcp.sqlite");
       const { db } = await initializeDatabase(dbPath);
+      setDbInstance(db);
 
       const clonePath = path.join(dataDir, "verified-scripts");
       const result = await indexVerifiedScripts(db, { clonePath, fullRescan: false });
