@@ -85,7 +85,6 @@ export async function indexVerifiedScripts(
   const headCommit = (await git.revparse(["HEAD"])).trim();
 
   let targetFiles: string[];
-  let shouldUpdateCommitAfter = false;
 
   if (fullRescan || repo.isNewClone) {
     const all = await listFilesRecursively(repo.path);
