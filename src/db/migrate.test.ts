@@ -86,7 +86,7 @@ describe("initializeDatabase", () => {
       throw new Error("Function not inserted");
     }
 
-    const testVector = Array.from({ length: 3072 }, (_, i) => (i % 100) / 100);
+    const testVector = Array.from({ length: 1536 }, (_, i) => (i % 100) / 100);
 
     await client.execute({
       sql: `INSERT INTO functionEmbeddings (functionId, chunkIndex, vector) VALUES (?, ?, vector32(?))`,
@@ -99,7 +99,7 @@ describe("initializeDatabase", () => {
     expect(embeddings[0]?.functionId).toBe(functionId);
 
     const retrievedVector = embeddings[0]?.embedding;
-    expect(retrievedVector).toHaveLength(3072);
+    expect(retrievedVector).toHaveLength(1536);
     expect(retrievedVector?.[0]).toBeCloseTo(testVector[0]!, 2);
     expect(retrievedVector?.[1]).toBeCloseTo(testVector[1]!, 2);
     expect(retrievedVector?.[2]).toBeCloseTo(testVector[2]!, 2);

@@ -1,94 +1,100 @@
 {
-  "version": "6",
-  "dialect": "sqlite",
-  "id": "4302ad52-c66c-4fdb-866b-808d94d8debf",
-  "prevId": "00000000-0000-0000-0000-000000000000",
-  "tables": {
-    "functionEmbeddings": {
-      "name": "functionEmbeddings",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
+    "id": "0000_initial",
+    "prevId": "",
+    "version": "5",
+    "dialect": "sqlite",
+    "tables": {
+        "functions": {
+            "name": "functions",
+            "schema": "",
+            "columns": {
+                "id": {
+                    "name": "id",
+                    "type": "integer",
+                    "primaryKey": true,
+                    "autoincrement": false,
+                    "notNull": true
+                },
+                "name": {
+                    "name": "name",
+                    "type": "text",
+                    "primaryKey": false,
+                    "autoincrement": false,
+                    "notNull": true
+                },
+                "code": {
+                    "name": "code",
+                    "type": "text",
+                    "primaryKey": false,
+                    "autoincrement": false,
+                    "notNull": true
+                },
+                "filePath": {
+                    "name": "filePath",
+                    "type": "text",
+                    "primaryKey": false,
+                    "autoincrement": false,
+                    "notNull": true
+                }
+            },
+            "indexes": [],
+            "foreignKeys": [],
+            "compositePrimaryKeys": [],
+            "uniqueConstraints": []
         },
-        "functionId": {
-          "name": "functionId",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "chunkIndex": {
-          "name": "chunkIndex",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "vector": {
-          "name": "vector",
-          "type": "F32_BLOB(3072)",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
+        "functionEmbeddings": {
+            "name": "functionEmbeddings",
+            "schema": "",
+            "columns": {
+                "id": {
+                    "name": "id",
+                    "type": "integer",
+                    "primaryKey": true,
+                    "autoincrement": false,
+                    "notNull": true
+                },
+                "functionId": {
+                    "name": "functionId",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "autoincrement": false,
+                    "notNull": true
+                },
+                "chunkIndex": {
+                    "name": "chunkIndex",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "autoincrement": false,
+                    "notNull": true
+                },
+                "vector": {
+                    "name": "vector",
+                    "type": "F32_BLOB(1536)",
+                    "primaryKey": false,
+                    "autoincrement": false,
+                    "notNull": true
+                }
+            },
+            "indexes": [
+                {
+                    "name": "function_embeddings_vector_idx",
+                    "columns": [
+                        "libsql_vector_idx(\"vector\")"
+                    ],
+                    "isUnique": false
+                }
+            ],
+            "foreignKeys": [],
+            "compositePrimaryKeys": [],
+            "uniqueConstraints": []
         }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
     },
-    "functions": {
-      "name": "functions",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "code": {
-          "name": "code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "filePath": {
-          "name": "filePath",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    }
-  },
-  "views": {},
-  "enums": {},
-  "_meta": {
+    "enums": {},
     "schemas": {},
-    "tables": {},
-    "columns": {}
-  },
-  "internal": {
-    "indexes": {}
-  }
+    "sequences": {},
+    "_meta": {
+        "schemas": {},
+        "tables": {},
+        "columns": {}
+    }
 }

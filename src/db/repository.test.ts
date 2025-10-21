@@ -10,16 +10,17 @@ import {
 } from "./repository.js";
 import type { FunctionInput } from "./types.js";
 
+const VECTOR_DIMS = 1536;
 const createTestEmbedding = (): number[] => {
-  return Array.from({ length: 3072 }, (_, i) => (i % 100) / 100);
+  return Array.from({ length: VECTOR_DIMS }, (_, i) => (i % 100) / 100);
 };
 
 const createTestEmbedding2 = (): number[] => {
-  return Array.from({ length: 3072 }, (_, i) => ((i + 50) % 100) / 100);
+  return Array.from({ length: VECTOR_DIMS }, (_, i) => ((i + 50) % 100) / 100);
 };
 
 const createTestEmbedding3 = (): number[] => {
-  return Array.from({ length: 3072 }, (_, i) => ((i + 25) % 100) / 100);
+  return Array.from({ length: VECTOR_DIMS }, (_, i) => ((i + 25) % 100) / 100);
 };
 
 describe("repository", () => {
