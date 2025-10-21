@@ -14,7 +14,7 @@ import path from "path";
 import { getDefaultDataDir } from "./lib/paths.ts";
 import { initializeDatabase } from "./db/index.ts";
 import { setDbInstance } from "./db/connectionRef.ts";
-import { transformExamplesHandler } from "./tools/transformExamples";
+import { transformExamplesHandler } from "./tools/transformExamples.ts";
 import { indexVerifiedScripts } from "./lib/verifiedIndexer.ts";
 
 const SERVER_NAME =

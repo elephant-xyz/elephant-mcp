@@ -221,12 +221,7 @@ describe("verifiedScripts", () => {
         mockCheckIsRepo.mockResolvedValue(true);
         mockStatus.mockResolvedValue(createMockStatusResult(0));
 
-        class GitError extends Error {
-          constructor(message: string) {
-            super(message);
-            this.name = "GitError";
-          }
-        }
+        const { GitError } = (await vi.importMock("simple-git")) as any;
         const gitError = new GitError("network error");
         mockPull.mockRejectedValue(gitError);
 

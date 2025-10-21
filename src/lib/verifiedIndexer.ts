@@ -16,7 +16,7 @@ import type { IndexerOptions, IndexSummary } from "../types/entities.js";
 import simpleGit from "simple-git";
 import { getEncoding } from "js-tiktoken";
 
-const JS_EXTENSIONS = new Set([".js", ".mjs", ".cjs"]);
+const JS_EXTENSIONS = new Set([".js", ".mjs", ".cjs", "ts", "tsx"]);
 
 const MAX_TOKENS_PER_CHUNK = 8192;
 

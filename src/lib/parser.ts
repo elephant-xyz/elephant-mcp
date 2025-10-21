@@ -50,6 +50,11 @@ export async function extractFunctions(
       `Failed to parse file ${normalizedPath}: invalid syntax tree`,
     );
   }
+  if (tree.rootNode.hasError) {
+    throw new Error(
+      `Failed to parse file ${normalizedPath}: syntax errors present`,
+    );
+  }
 
   const language = parser.getLanguage();
   if (!language) {
