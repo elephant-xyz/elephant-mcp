@@ -14,8 +14,42 @@ import {
 } from "../db/index.js";
 import type { IndexerOptions, IndexSummary } from "../types/entities.js";
 import simpleGit from "simple-git";
+import { getEncoding } from "js-tiktoken";
 
 const JS_EXTENSIONS = new Set([".js", ".mjs", ".cjs"]);
+
+const MAX_TOKENS_PER_CHUNK = 8192;
+
+type TokenEncoder = {
+  encode: (text: string) => number[];
+  decode: (tokens: number[]) => string;
+};
+
+function splitByTokens(
+  enc: TokenEncoder,
+  text: string,
+  maxTokensPerChunk: number,
+): string[] {
+  const tokens = enc.encode(text);
+  if (tokens.length === 0) return [];
+
+  let chunksCount = 1;
+  while (Math.ceil(tokens.length / chunksCount) > maxTokensPerChunk) {
+    chunksCount *= 2;
+  }
+
+  const chunkSize = Math.ceil(tokens.length / chunksCount);
+  const chunks: string[] = [];
+  for (let i = 0; i < tokens.length; i += chunkSize) {
+    const slice = tokens.slice(i, i + chunkSize);
+    const chunkText = enc.decode(slice);
+    if (chunkText.trim().length > 0) {
+      chunks.push(chunkText);
+    }
+  }
+
+  return chunks;
+}
 
 async function listFilesRecursively(rootDir: string): Promise<string[]> {
   const entries = await fs.readdir(rootDir, { withFileTypes: true });
@@ -78,6 +112,7 @@ export async function indexVerifiedScripts(
 
   let savedFunctions = 0;
 
+  const enc: TokenEncoder = getEncoding("cl100k_base");
   for (const filePath of targetFiles) {
     try {
       // Clean previous entries for the file
@@ -95,18 +130,27 @@ export async function indexVerifiedScripts(
         continue;
       }
 
-      // Batch-embed all function codes from this file to reduce API calls
-      const embeddings = await embedManyTexts(functions.map((f) => f.code));
+      // For each function, split into token-bounded equal parts and embed per function
+      for (const fn of functions) {
+        const chunks = splitByTokens(enc, fn.code, MAX_TOKENS_PER_CHUNK);
+        if (chunks.length === 0) continue;
 
-      for (let i = 0; i < functions.length; i++) {
-        const fn = functions[i];
-        const emb = embeddings[i]?.embedding;
-        if (!emb) continue;
+        logger.debug(
+          { filePath: fn.filePath, function: fn.name, chunks: chunks.length },
+          "Embedding function in chunks",
+        );
+
+        const results = await embedManyTexts(chunks);
+        const embeddings = results
+          .map((r) => r?.embedding)
+          .filter((e): e is number[] => Array.isArray(e) && e.length > 0);
+        if (embeddings.length === 0) continue;
+
         await saveFunction(db as any, {
           name: fn.name,
           code: fn.code,
           filePath: fn.filePath, // already absolute per parser
-          embeddings: [emb],
+          embeddings,
         });
         savedFunctions += 1;
       }

@@ -6,6 +6,15 @@ import { promises as fs } from "fs";
 vi.mock("../verifiedScripts.js", () => ({ ensureLatest: vi.fn() }));
 vi.mock("../parser.js", () => ({ extractFunctions: vi.fn() }));
 vi.mock("../embeddings.js", () => ({ embedManyTexts: vi.fn() }));
+vi.mock("js-tiktoken", () => ({
+    getEncoding: vi.fn(() => {
+        // simple stub encoder: 1 token per character
+        return {
+            encode: (text: string) => Array.from({ length: text.length }, () => 1),
+            decode: (tokens: number[]) => "x".repeat(tokens.length),
+        } as any;
+    }),
+}));
 vi.mock("../../db/index.js", () => ({
     getFunctionsByFilePath: vi.fn(async () => []),
     deleteFunction: vi.fn(async () => { }),
@@ -175,6 +184,36 @@ describe("indexVerifiedScripts", () => {
 
         expect(summary.processedFiles.sort()).toEqual([a, b].sort());
         expect(summary.savedFunctions).toBe(1);
+    });
+
+    it("splits long function into multiple chunks and saves all embeddings", async () => {
+        const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "vs-indexer-"));
+        const filePath = path.join(tempRoot, "big.js");
+        await fs.writeFile(filePath, "// big");
+
+        const longCode = "X".repeat(9000); // 9000 tokens with our stub encoder
+
+        vi.mocked(ensureLatest).mockResolvedValue({ path: tempRoot, files: [], isNewClone: true });
+        vi.mocked(extractFunctions).mockResolvedValue([{ name: "bigFn", code: longCode, filePath }] as any);
+        vi.mocked(embedManyTexts).mockImplementation(async (chunks: string[]) =>
+            chunks.map((c, i) => ({ embedding: [i], text: c })) as any,
+        );
+
+        const { indexVerifiedScripts } = await import("../verifiedIndexer.js");
+        const summary = await indexVerifiedScripts({} as any, {});
+
+        expect(summary.savedFunctions).toBe(1);
+
+        const { saveFunction } = await import("../../db/index.js");
+        expect(saveFunction).toHaveBeenCalledWith(
+            {} as any,
+            expect.objectContaining({
+                name: "bigFn",
+                filePath,
+                // 9000 tokens -> 2 chunks of ~4500 each (<=8192)
+                embeddings: expect.arrayContaining([[0], [1]]),
+            }),
+        );
     });
 });
 
