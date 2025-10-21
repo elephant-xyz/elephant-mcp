@@ -41,3 +41,18 @@ export const functionEmbeddingsTable = sqliteTable(
     ),
   }),
 );
+
+// Tracks the last indexed commit per repository path
+export const indexStateTable = sqliteTable("indexState", {
+  repoPath: text("repoPath").primaryKey(),
+  lastIndexedCommit: text("lastIndexedCommit").notNull(),
+  // Store seconds since epoch for simplicity
+  updatedAt: integer("updatedAt").notNull(),
+});
+
+// Optional schema export to help Drizzle Kit detect tables
+export const schema = {
+  functionsTable,
+  functionEmbeddingsTable,
+  indexStateTable,
+};

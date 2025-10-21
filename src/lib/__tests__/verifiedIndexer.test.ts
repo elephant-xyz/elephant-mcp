@@ -16,12 +16,15 @@ vi.mock("../../db/index.js", () => ({
         filePath: input.filePath,
         embeddings: input.embeddings,
     })),
+    getIndexState: vi.fn(async () => null),
+    setIndexState: vi.fn(async () => undefined),
 }));
+vi.mock("simple-git", () => ({ default: () => ({ revparse: async () => "deadbeef" }) }));
 
 const { ensureLatest } = await import("../verifiedScripts.js");
 const { extractFunctions } = await import("../parser.js");
 const { embedManyTexts } = await import("../embeddings.js");
-const { saveFunction, getFunctionsByFilePath, deleteFunction } = await import("../../db/index.js");
+const { saveFunction, getFunctionsByFilePath, deleteFunction, getIndexState, setIndexState } = await import("../../db/index.js");
 
 describe("indexVerifiedScripts", () => {
     beforeEach(() => {
@@ -85,6 +88,38 @@ describe("indexVerifiedScripts", () => {
 
         expect(summary.processedFiles).toEqual([absJs]);
         expect(summary.savedFunctions).toBe(1);
+    });
+
+    it("rescans all if no changed files but commit differs", async () => {
+        const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "vs-indexer-"));
+        const a = path.join(tempRoot, "a.mjs");
+        await fs.writeFile(a, "// a");
+
+        vi.mocked(ensureLatest).mockResolvedValue({ path: tempRoot, files: [], isNewClone: false });
+        vi.mocked(getIndexState).mockResolvedValueOnce({ repoPath: tempRoot, lastIndexedCommit: "old", updatedAt: 1 } as any);
+        vi.mocked(extractFunctions).mockResolvedValue([{ name: "a", code: "function a(){}", filePath: a }] as any);
+        vi.mocked(embedManyTexts).mockResolvedValue([{ embedding: [1], text: "function a(){}" }] as any);
+
+        const { indexVerifiedScripts } = await import("../verifiedIndexer.js");
+        const summary = await indexVerifiedScripts({} as any, {});
+
+        expect(summary.processedFiles.sort()).toEqual([a].sort());
+        expect(summary.savedFunctions).toBe(1);
+        expect(setIndexState).toHaveBeenCalled();
+    });
+
+    it("does not rescan if commit matches and no changed files", async () => {
+        const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "vs-indexer-"));
+        // no js files present
+
+        vi.mocked(ensureLatest).mockResolvedValue({ path: tempRoot, files: [], isNewClone: false });
+        vi.mocked(getIndexState).mockResolvedValueOnce({ repoPath: tempRoot, lastIndexedCommit: "deadbeef", updatedAt: 1 } as any);
+
+        const { indexVerifiedScripts } = await import("../verifiedIndexer.js");
+        const summary = await indexVerifiedScripts({} as any, {});
+
+        expect(summary.processedFiles).toEqual([]);
+        expect(summary.savedFunctions).toBe(0);
     });
 
     it("deletes existing functions before saving new ones", async () => {

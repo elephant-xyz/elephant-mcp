@@ -9,8 +9,11 @@ import {
   getFunctionsByFilePath,
   deleteFunction,
   saveFunction,
+  getIndexState,
+  setIndexState,
 } from "../db/index.js";
 import type { IndexerOptions, IndexSummary } from "../types/entities.js";
+import simpleGit from "simple-git";
 
 const JS_EXTENSIONS = new Set([".js", ".mjs", ".cjs"]);
 
@@ -43,7 +46,13 @@ export async function indexVerifiedScripts(
 
   const repo = await ensureLatest(clonePath);
 
+  // Resolve current HEAD commit of the verified repo
+  const git = simpleGit(repo.path);
+  const headCommit = (await git.revparse(["HEAD"])).trim();
+
   let targetFiles: string[];
+  let shouldUpdateCommitAfter = false;
+
   if (fullRescan || repo.isNewClone) {
     const all = await listFilesRecursively(repo.path);
     targetFiles = filterJsFiles(all);
@@ -51,6 +60,15 @@ export async function indexVerifiedScripts(
     // repo.files are relative to repo.path
     const candidate = repo.files.map((rel) => path.join(repo.path, rel));
     targetFiles = filterJsFiles(candidate);
+
+    // If pull had no changed files, decide based on commit state
+    if (targetFiles.length === 0) {
+      const state = await getIndexState(db as any, repo.path);
+      if (!state || state.lastIndexedCommit !== headCommit) {
+        const all = await listFilesRecursively(repo.path);
+        targetFiles = filterJsFiles(all);
+      }
+    }
   }
 
   logger.info(
@@ -101,6 +119,22 @@ export async function indexVerifiedScripts(
         "Failed to index file",
       );
       // continue with other files
+    }
+  }
+
+  // Update last indexed commit only if we actually saved something
+  if (savedFunctions > 0) {
+    try {
+      await setIndexState(db as any, repo.path, headCommit);
+    } catch (err) {
+      logger.warn(
+        {
+          path: repo.path,
+          commit: headCommit,
+          error: err instanceof Error ? err.message : String(err),
+        },
+        "Failed to update index state",
+      );
     }
   }
 

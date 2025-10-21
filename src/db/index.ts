@@ -1,4 +1,8 @@
-export { functionsTable, functionEmbeddingsTable } from "./schema.js";
+export {
+  functionsTable,
+  functionEmbeddingsTable,
+  indexStateTable,
+} from "./schema.js";
 export { initializeDatabase } from "./migrate.js";
 export {
   saveFunction,
@@ -6,6 +10,8 @@ export {
   getFunctionsByFilePath,
   searchSimilar,
   deleteFunction,
+  getIndexState,
+  setIndexState,
 } from "./repository.js";
 export type {
   FunctionInput,

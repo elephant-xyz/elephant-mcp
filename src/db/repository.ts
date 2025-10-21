@@ -1,6 +1,10 @@
 import type { LibSQLDatabase } from "drizzle-orm/libsql";
 import { eq, sql } from "drizzle-orm";
-import { functionsTable, functionEmbeddingsTable } from "./schema.js";
+import {
+  functionsTable,
+  functionEmbeddingsTable,
+  indexStateTable,
+} from "./schema.js";
 import type {
   FunctionInput,
   FunctionWithChunks,
@@ -202,4 +206,58 @@ export async function deleteFunction(
 
     await tx.delete(functionsTable).where(eq(functionsTable.id, id));
   });
+}
+
+export interface IndexState {
+  repoPath: string;
+  lastIndexedCommit: string;
+  updatedAt: number;
+}
+
+export async function getIndexState(
+  db: LibSQLDatabase,
+  repoPath: string,
+): Promise<IndexState | null> {
+  if (!repoPath || repoPath.trim().length === 0) {
+    throw new Error("repoPath is required");
+  }
+
+  const [row] = await db
+    .select()
+    .from(indexStateTable)
+    .where(eq(indexStateTable.repoPath, repoPath));
+
+  if (!row) return null;
+  return {
+    repoPath: row.repoPath,
+    lastIndexedCommit: row.lastIndexedCommit,
+    updatedAt: row.updatedAt,
+  } as IndexState;
+}
+
+export async function setIndexState(
+  db: LibSQLDatabase,
+  repoPath: string,
+  lastIndexedCommit: string,
+): Promise<IndexState> {
+  if (!repoPath || repoPath.trim().length === 0) {
+    throw new Error("repoPath is required");
+  }
+  if (!lastIndexedCommit || lastIndexedCommit.trim().length === 0) {
+    throw new Error("lastIndexedCommit is required");
+  }
+
+  const nowSeconds = Math.floor(Date.now() / 1000);
+
+  await db.run(
+    sql`INSERT INTO ${indexStateTable} (repoPath, lastIndexedCommit, updatedAt)
+        VALUES (${repoPath}, ${lastIndexedCommit}, ${nowSeconds})
+        ON CONFLICT(repoPath) DO UPDATE SET lastIndexedCommit=excluded.lastIndexedCommit, updatedAt=excluded.updatedAt`,
+  );
+
+  return {
+    repoPath,
+    lastIndexedCommit,
+    updatedAt: nowSeconds,
+  };
 }
