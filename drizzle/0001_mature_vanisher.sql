@@ -1,0 +1,1 @@
+CREATE INDEX `function_embeddings_vector_idx` ON `functionEmbeddings` (libsql_vector_idx("vector"));

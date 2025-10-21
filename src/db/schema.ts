@@ -1,4 +1,4 @@
-import { text, integer, sqliteTable } from "drizzle-orm/sqlite-core";
+import { text, integer, sqliteTable, index } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 import { customType } from "drizzle-orm/sqlite-core";
 
@@ -26,9 +26,17 @@ export const functionsTable = sqliteTable("functions", {
   filePath: text("filePath").notNull(),
 });
 
-export const functionEmbeddingsTable = sqliteTable("functionEmbeddings", {
-  id: integer("id").primaryKey(),
-  functionId: integer("functionId").notNull(),
-  chunkIndex: integer("chunkIndex").notNull(),
-  embedding: float32Array("vector", { dimensions: 3072 }).notNull(),
-});
+export const functionEmbeddingsTable = sqliteTable(
+  "functionEmbeddings",
+  {
+    id: integer("id").primaryKey(),
+    functionId: integer("functionId").notNull(),
+    chunkIndex: integer("chunkIndex").notNull(),
+    embedding: float32Array("vector", { dimensions: 3072 }).notNull(),
+  },
+  (table) => ({
+    vectorIdx: index("function_embeddings_vector_idx").on(
+      sql`libsql_vector_idx(${table.embedding})`,
+    ),
+  }),
+);
