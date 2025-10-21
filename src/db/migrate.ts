@@ -42,7 +42,7 @@ export async function initializeDatabase(dbPath: string) {
           if (pkg && pkg.name === "@elephant-xyz/mcp") {
             return current;
           }
-        } catch (_) {
+        } catch {
           // ignore and continue walking up
         }
       }
