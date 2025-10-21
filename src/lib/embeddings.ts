@@ -1,6 +1,9 @@
 import { embedMany, embed } from "ai";
 import { openai } from "@ai-sdk/openai";
 
+export const EMBEDDING_MODEL = "text-embedding-3-small";
+export const EMBEDDING_DIM = 1536;
+
 export interface EmbeddingResult {
   embedding: number[];
   text: string;
@@ -13,9 +16,14 @@ export async function embedText(text: string): Promise<number[]> {
 
   try {
     const result = await embed({
-      model: openai.textEmbeddingModel("text-embedding-3-small"),
+      model: openai.textEmbeddingModel(EMBEDDING_MODEL),
       value: text,
     });
+    if (result.embedding.length !== EMBEDDING_DIM) {
+      throw new Error(
+        `Embedding dimension mismatch for ${EMBEDDING_MODEL}: expected ${EMBEDDING_DIM}, got ${result.embedding.length}`,
+      );
+    }
     return result.embedding;
   } catch (error) {
     throw new Error(
@@ -38,7 +46,7 @@ export async function embedManyTexts(
 
   try {
     const embeddings = await embedMany({
-      model: openai.textEmbeddingModel("text-embedding-3-small"),
+      model: openai.textEmbeddingModel(EMBEDDING_MODEL),
       values: texts,
     });
 
@@ -48,10 +56,18 @@ export async function embedManyTexts(
       );
     }
 
-    return embeddings.embeddings.map((value, index) => ({
-      embedding: value,
-      text: texts[index],
-    }));
+    return embeddings.embeddings.map((value, index) => {
+      if (value.length !== EMBEDDING_DIM) {
+        throw new Error(
+          `Embedding dimension mismatch for ${EMBEDDING_MODEL}: expected ${EMBEDDING_DIM}, got ${value.length}`,
+        );
+      }
+
+      return {
+        embedding: value,
+        text: texts[index],
+      };
+    });
   } catch (error) {
     if (error instanceof Error && error.message.includes("mismatch")) {
       throw error;

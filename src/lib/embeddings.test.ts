@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { embedText, embedManyTexts } from "./embeddings.ts";
+import { embedText, embedManyTexts, EMBEDDING_DIM } from "./embeddings.ts";
 
 vi.mock("ai", () => ({
   embed: vi.fn(),
@@ -14,13 +14,19 @@ vi.mock("@ai-sdk/openai", () => ({
 
 const { embed, embedMany } = await import("ai");
 
+const createEmbedding = (seed = 0) =>
+  Array.from(
+    { length: EMBEDDING_DIM },
+    (_, index) => seed + index / EMBEDDING_DIM,
+  );
+
 describe("embedText", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it("should return embedding array for valid text", async () => {
-    const mockEmbedding = [0.1, 0.2, 0.3, 0.4, 0.5];
+    const mockEmbedding = createEmbedding(0.1);
     vi.mocked(embed).mockResolvedValue({
       embedding: mockEmbedding,
       value: "test text",
@@ -61,7 +67,7 @@ describe("embedText", () => {
   });
 
   it("should accept text with special characters", async () => {
-    const mockEmbedding = [0.1, 0.2];
+    const mockEmbedding = createEmbedding(1);
     vi.mocked(embed).mockResolvedValue({
       embedding: mockEmbedding,
       value: "special text",
@@ -75,7 +81,7 @@ describe("embedText", () => {
 
   it("should accept very long text", async () => {
     const longText = "a".repeat(10000);
-    const mockEmbedding = [0.1, 0.2];
+    const mockEmbedding = createEmbedding(2);
     vi.mocked(embed).mockResolvedValue({
       embedding: mockEmbedding,
       value: longText,
@@ -94,10 +100,7 @@ describe("embedManyTexts", () => {
   });
 
   it("should return array of embedding results for valid texts", async () => {
-    const mockEmbeddings = [
-      [0.1, 0.2, 0.3],
-      [0.4, 0.5, 0.6],
-    ];
+    const mockEmbeddings = [createEmbedding(0.1), createEmbedding(0.2)];
     const inputTexts = ["text one", "text two"];
     vi.mocked(embedMany).mockResolvedValue({
       embeddings: mockEmbeddings,
@@ -108,8 +111,8 @@ describe("embedManyTexts", () => {
     const result = await embedManyTexts(inputTexts);
 
     expect(result).toEqual([
-      { embedding: [0.1, 0.2, 0.3], text: "text one" },
-      { embedding: [0.4, 0.5, 0.6], text: "text two" },
+      { embedding: mockEmbeddings[0], text: "text one" },
+      { embedding: mockEmbeddings[1], text: "text two" },
     ]);
     expect(embedMany).toHaveBeenCalledWith({
       model: "mocked-model",
@@ -157,9 +160,9 @@ describe("embedManyTexts", () => {
 
   it("should preserve text order in results", async () => {
     const mockEmbeddings = [
-      [0.1, 0.2],
-      [0.3, 0.4],
-      [0.5, 0.6],
+      createEmbedding(3),
+      createEmbedding(4),
+      createEmbedding(5),
     ];
     const orderedTexts = ["first", "second", "third"];
     vi.mocked(embedMany).mockResolvedValue({
@@ -176,7 +179,7 @@ describe("embedManyTexts", () => {
   });
 
   it("should handle single text in array", async () => {
-    const mockEmbedding = [[0.1, 0.2, 0.3]];
+    const mockEmbedding = [createEmbedding(6)];
     const singleText = ["single text"];
     vi.mocked(embedMany).mockResolvedValue({
       embeddings: mockEmbedding,
@@ -188,14 +191,16 @@ describe("embedManyTexts", () => {
 
     expect(result).toHaveLength(1);
     expect(result[0]).toEqual({
-      embedding: [0.1, 0.2, 0.3],
+      embedding: mockEmbedding[0],
       text: "single text",
     });
   });
 
   it("should handle large batch of texts", async () => {
     const batchTexts = Array.from({ length: 100 }, (_, i) => `text ${i}`);
-    const mockEmbeddings = Array.from({ length: 100 }, (_, i) => [i, i + 1]);
+    const mockEmbeddings = Array.from({ length: 100 }, (_, i) =>
+      createEmbedding(i),
+    );
     vi.mocked(embedMany).mockResolvedValue({
       embeddings: mockEmbeddings,
       values: batchTexts,
