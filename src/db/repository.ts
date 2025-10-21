@@ -40,7 +40,11 @@ export async function saveFunction(
       );
     }
 
-    if (embedding.some((value) => typeof value !== "number" || Number.isNaN(value))) {
+    if (
+      embedding.some(
+        (value) => typeof value !== "number" || Number.isNaN(value),
+      )
+    ) {
       throw new Error("Each embedding must only contain numbers");
     }
   }
@@ -155,7 +159,9 @@ export async function searchSimilar(
     );
   }
 
-  if (embedding.some((value) => typeof value !== "number" || Number.isNaN(value))) {
+  if (
+    embedding.some((value) => typeof value !== "number" || Number.isNaN(value))
+  ) {
     throw new Error("Embedding must only contain numbers");
   }
 

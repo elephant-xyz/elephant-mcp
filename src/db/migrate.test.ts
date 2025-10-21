@@ -24,9 +24,8 @@ describe("initializeDatabase", () => {
     let client: DatabaseClient | undefined;
 
     try {
-      const { client: dbClient, isNewDatabase } = await initializeDatabase(
-        testDbPath,
-      );
+      const { client: dbClient, isNewDatabase } =
+        await initializeDatabase(testDbPath);
       client = dbClient;
 
       expect(isNewDatabase).toBe(true);
@@ -40,9 +39,8 @@ describe("initializeDatabase", () => {
     let client: DatabaseClient | undefined;
 
     try {
-      const { client: dbClient, isNewDatabase } = await initializeDatabase(
-        testDbPath,
-      );
+      const { client: dbClient, isNewDatabase } =
+        await initializeDatabase(testDbPath);
       client = dbClient;
 
       expect(isNewDatabase).toBe(true);
@@ -90,9 +88,8 @@ describe("initializeDatabase", () => {
       firstClient?.close();
       firstClient = undefined;
 
-      const { client: dbClient, isNewDatabase } = await initializeDatabase(
-        testDbPath,
-      );
+      const { client: dbClient, isNewDatabase } =
+        await initializeDatabase(testDbPath);
       client = dbClient;
 
       expect(isNewDatabase).toBe(false);
