@@ -222,17 +222,22 @@ export async function getIndexState(
     throw new Error("repoPath is required");
   }
 
-  const [row] = await db
-    .select()
-    .from(indexStateTable)
-    .where(eq(indexStateTable.repoPath, repoPath));
+  try {
+    const [row] = await db
+      .select()
+      .from(indexStateTable)
+      .where(eq(indexStateTable.repoPath, repoPath));
 
-  if (!row) return null;
-  return {
-    repoPath: row.repoPath,
-    lastIndexedCommit: row.lastIndexedCommit,
-    updatedAt: row.updatedAt,
-  } as IndexState;
+    if (!row) return null;
+    return {
+      repoPath: row.repoPath,
+      lastIndexedCommit: row.lastIndexedCommit,
+      updatedAt: row.updatedAt,
+    } as IndexState;
+  } catch (_err) {
+    // If the table does not exist yet (older databases), treat as no state
+    return null;
+  }
 }
 
 export async function setIndexState(
