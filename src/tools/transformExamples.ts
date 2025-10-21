@@ -31,10 +31,8 @@ export async function transformExamplesHandler(
         const results = await searchSimilar(db, embedding, k);
 
         const matches = results.map((r) => ({
-            id: r.function.id,
             name: r.function.name,
-            filePath: r.function.filePath,
-            distance: r.distance,
+            code: r.function.code,
         }));
 
         return createTextResult({ count: matches.length, matches });

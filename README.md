@@ -39,7 +39,7 @@ Embeds an input string and returns nearest functions from the local embeddings D
   - `text` (string, required): Input text to embed and search
   - `topK` (number, optional, default 5, max 50): Number of results
 - Output
-  - `{ count: number, matches: Array<{ id: number; name: string; filePath: string; distance: number }> }`
+  - `{ count: number, matches: Array<{ name: string; code: string }> }`
 - Errors
   - `{ error: "Missing OPENAI_API_KEY" }` when OpenAI key is not set
   - `{ error: "Database is not initialized" }` when DB is unavailable
