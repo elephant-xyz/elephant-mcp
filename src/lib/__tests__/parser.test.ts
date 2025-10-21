@@ -322,18 +322,18 @@ function 你好() {
       expect(Array.isArray(result)).toBe(true);
     });
 
-    it("handles malformed JavaScript gracefully", async () => {
+    it("throws when JavaScript is malformed", async () => {
       const filePath = await createTestFile(
         "malformed.js",
         'function broken( {\n  return "incomplete',
       );
 
-      const result = await extractFunctions(filePath);
-
-      expect(Array.isArray(result)).toBe(true);
+      await expect(extractFunctions(filePath)).rejects.toThrow(
+        /Failed to parse file .*malformed\.js: syntax errors present/,
+      );
     });
 
-    it("handles file with syntax errors", async () => {
+    it("throws when file has syntax errors", async () => {
       const filePath = await createTestFile(
         "syntax-error.js",
         `function test() {
@@ -342,9 +342,9 @@ function 你好() {
 }`,
       );
 
-      const result = await extractFunctions(filePath);
-
-      expect(Array.isArray(result)).toBe(true);
+      await expect(extractFunctions(filePath)).rejects.toThrow(
+        /Failed to parse file .*syntax-error\.js: syntax errors present/,
+      );
     });
   });
 
