@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { initializeDatabase } from "./migrate.js";
 import { unlinkSync, existsSync } from "node:fs";
+import { initializeDatabase } from "./migrate.js";
 import { functionsTable, functionEmbeddingsTable } from "./schema.js";
+
+type DatabaseClient = Awaited<ReturnType<typeof initializeDatabase>>["client"];
 
 describe("initializeDatabase", () => {
   const testDbPath = "./test-db.sqlite";
@@ -19,91 +21,130 @@ describe("initializeDatabase", () => {
   });
 
   it("should create a new database if it does not exist", async () => {
-    const { client, isNewDatabase } = await initializeDatabase(testDbPath);
+    let client: DatabaseClient | undefined;
 
-    expect(isNewDatabase).toBe(true);
-    expect(existsSync(testDbPath)).toBe(true);
+    try {
+      const { client: dbClient, isNewDatabase } = await initializeDatabase(
+        testDbPath,
+      );
+      client = dbClient;
 
-    client.close();
+      expect(isNewDatabase).toBe(true);
+      expect(existsSync(testDbPath)).toBe(true);
+    } finally {
+      client?.close();
+    }
   });
 
   it("should apply migrations to new database", async () => {
-    const { client, isNewDatabase } = await initializeDatabase(testDbPath);
+    let client: DatabaseClient | undefined;
 
-    expect(isNewDatabase).toBe(true);
+    try {
+      const { client: dbClient, isNewDatabase } = await initializeDatabase(
+        testDbPath,
+      );
+      client = dbClient;
 
-    const tables = await client.execute(
-      "SELECT name FROM sqlite_master WHERE type='table'",
-    );
+      expect(isNewDatabase).toBe(true);
 
-    expect(tables).toBeDefined();
+      const tables = await client.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'",
+      );
 
-    client.close();
+      expect(tables).toBeDefined();
+    } finally {
+      client?.close();
+    }
   });
 
   it("should connect to existing database", async () => {
-    const { client: firstClient } = await initializeDatabase(testDbPath);
-    firstClient.close();
+    let firstClient: DatabaseClient | undefined;
+    let client: DatabaseClient | undefined;
 
-    const { client, isNewDatabase } = await initializeDatabase(testDbPath);
+    try {
+      const firstInitialization = await initializeDatabase(testDbPath);
+      firstClient = firstInitialization.client;
 
-    expect(isNewDatabase).toBe(false);
-    expect(existsSync(testDbPath)).toBe(true);
+      firstClient?.close();
+      firstClient = undefined;
 
-    client.close();
+      const { client: dbClient, isNewDatabase } = await initializeDatabase(
+        testDbPath,
+      );
+      client = dbClient;
+
+      expect(isNewDatabase).toBe(false);
+      expect(existsSync(testDbPath)).toBe(true);
+    } finally {
+      firstClient?.close();
+      client?.close();
+    }
   });
 
   it("should allow database operations after initialization", async () => {
-    const { db, client } = await initializeDatabase(testDbPath);
+    let client: DatabaseClient | undefined;
 
-    await db.insert(functionsTable).values({
-      name: "testFunction",
-      code: "console.log('test')",
-      filePath: "/test/path.ts",
-    });
+    try {
+      const { db, client: dbClient } = await initializeDatabase(testDbPath);
+      client = dbClient;
 
-    const result = await db.select().from(functionsTable);
+      await db.insert(functionsTable).values({
+        name: "testFunction",
+        code: "console.log('test')",
+        filePath: "/test/path.ts",
+      });
 
-    expect(result).toHaveLength(1);
-    expect(result[0]?.name).toBe("testFunction");
+      const result = await db.select().from(functionsTable);
 
-    client.close();
+      expect(result).toHaveLength(1);
+      expect(result[0]?.name).toBe("testFunction");
+    } finally {
+      client?.close();
+    }
   });
 
   it("should support vector embeddings", async () => {
-    const { db, client } = await initializeDatabase(testDbPath);
+    let client: DatabaseClient | undefined;
 
-    await db.insert(functionsTable).values({
-      name: "testFunction",
-      code: "console.log('test')",
-      filePath: "/test/path.ts",
-    });
+    try {
+      const { db, client: dbClient } = await initializeDatabase(testDbPath);
+      client = dbClient;
 
-    const functions = await db.select().from(functionsTable);
-    const functionId = functions[0]?.id;
+      await db.insert(functionsTable).values({
+        name: "testFunction",
+        code: "console.log('test')",
+        filePath: "/test/path.ts",
+      });
 
-    if (!functionId) {
-      throw new Error("Function not inserted");
+      const functions = await db.select().from(functionsTable);
+      const functionId = functions[0]?.id;
+
+      if (!functionId) {
+        throw new Error("Function not inserted");
+      }
+
+      const testVector = Array.from(
+        { length: 1536 },
+        (_, i) => (i % 100) / 100,
+      );
+
+      await client.execute({
+        sql: `INSERT INTO functionEmbeddings (functionId, chunkIndex, vector) VALUES (?, ?, vector32(?))`,
+        args: [functionId, 0, JSON.stringify(testVector)],
+      });
+
+      const embeddings = await db.select().from(functionEmbeddingsTable);
+
+      expect(embeddings).toHaveLength(1);
+      expect(embeddings[0]?.functionId).toBe(functionId);
+
+      const retrievedVector = embeddings[0]?.embedding;
+      expect(retrievedVector).toHaveLength(1536);
+      expect(retrievedVector?.[0]).toBeCloseTo(testVector[0]!, 2);
+      expect(retrievedVector?.[1]).toBeCloseTo(testVector[1]!, 2);
+      expect(retrievedVector?.[2]).toBeCloseTo(testVector[2]!, 2);
+    } finally {
+      client?.close();
     }
-
-    const testVector = Array.from({ length: 1536 }, (_, i) => (i % 100) / 100);
-
-    await client.execute({
-      sql: `INSERT INTO functionEmbeddings (functionId, chunkIndex, vector) VALUES (?, ?, vector32(?))`,
-      args: [functionId, 0, JSON.stringify(testVector)],
-    });
-
-    const embeddings = await db.select().from(functionEmbeddingsTable);
-
-    expect(embeddings).toHaveLength(1);
-    expect(embeddings[0]?.functionId).toBe(functionId);
-
-    const retrievedVector = embeddings[0]?.embedding;
-    expect(retrievedVector).toHaveLength(1536);
-    expect(retrievedVector?.[0]).toBeCloseTo(testVector[0]!, 2);
-    expect(retrievedVector?.[1]).toBeCloseTo(testVector[1]!, 2);
-    expect(retrievedVector?.[2]).toBeCloseTo(testVector[2]!, 2);
-
-    client.close();
   });
 });
