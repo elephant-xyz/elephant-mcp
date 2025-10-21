@@ -59,19 +59,28 @@ export async function initializeDatabase(dbPath: string) {
   const candidateFromTwoUp = path.join(moduleDir, "../../drizzle");
   const candidateFromThreeUp = path.join(moduleDir, "../../../drizzle");
 
-  let migrationsFolder = candidateFromTwoUp;
-  if (!existsSync(path.join(migrationsFolder, "meta/_journal.json"))) {
-    if (
-      candidateFromPkgRoot &&
-      existsSync(path.join(candidateFromPkgRoot, "meta/_journal.json"))
-    ) {
-      migrationsFolder = candidateFromPkgRoot;
-    } else if (
-      existsSync(path.join(candidateFromThreeUp, "meta/_journal.json"))
-    ) {
-      migrationsFolder = candidateFromThreeUp;
-    }
+  const candidateEntries = [
+    { label: "candidateFromTwoUp", path: candidateFromTwoUp },
+    candidateFromPkgRoot
+      ? { label: "candidateFromPkgRoot", path: candidateFromPkgRoot }
+      : undefined,
+    { label: "candidateFromThreeUp", path: candidateFromThreeUp },
+  ].filter(Boolean) as Array<{ label: string; path: string }>;
+
+  const resolvedCandidate = candidateEntries.find(({ path: candidatePath }) =>
+    existsSync(path.join(candidatePath, "meta/_journal.json")),
+  );
+
+  if (!resolvedCandidate) {
+    const attemptedPaths = candidateEntries
+      .map(({ label, path: candidatePath }) => `${label}: ${candidatePath}`)
+      .join(", ");
+    throw new Error(
+      `Unable to locate Drizzle migrations folder; meta/_journal.json not found in any candidate paths (${attemptedPaths}).`,
+    );
   }
+
+  const migrationsFolder = resolvedCandidate.path;
 
   try {
     logger.info("Applying migrations");
