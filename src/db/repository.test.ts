@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { initializeDatabase } from "./migrate.js";
 import { unlinkSync, existsSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { randomUUID } from "node:crypto";
 import {
   saveFunction,
   getFunctionById,
@@ -24,14 +27,15 @@ const createTestEmbedding3 = (): number[] => {
 };
 
 describe("repository", () => {
-  const testDbPath = "./test-repository.sqlite";
+  let testDbPath: string;
   let db: Awaited<ReturnType<typeof initializeDatabase>>["db"];
   let client: Awaited<ReturnType<typeof initializeDatabase>>["client"];
 
   beforeEach(async () => {
-    if (existsSync(testDbPath)) {
-      unlinkSync(testDbPath);
-    }
+    testDbPath = join(
+      tmpdir(),
+      `repository-test-${process.pid}-${randomUUID()}.sqlite`,
+    );
     const result = await initializeDatabase(testDbPath);
     db = result.db;
     client = result.client;
@@ -39,7 +43,7 @@ describe("repository", () => {
 
   afterEach(() => {
     client.close();
-    if (existsSync(testDbPath)) {
+    if (testDbPath && existsSync(testDbPath)) {
       unlinkSync(testDbPath);
     }
   });
