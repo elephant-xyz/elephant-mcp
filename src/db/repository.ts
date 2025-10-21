@@ -234,7 +234,7 @@ export async function getIndexState(
       lastIndexedCommit: row.lastIndexedCommit,
       updatedAt: row.updatedAt,
     } as IndexState;
-  } catch (_err) {
+  } catch {
     // If the table does not exist yet (older databases), treat as no state
     return null;
   }
