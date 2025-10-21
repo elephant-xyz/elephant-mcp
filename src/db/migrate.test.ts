@@ -47,11 +47,33 @@ describe("initializeDatabase", () => {
 
       expect(isNewDatabase).toBe(true);
 
-      const tables = await client.execute(
-        "SELECT name FROM sqlite_master WHERE type='table'",
+      const tablesResult = await client.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
+      );
+      const indexesResult = await client.execute(
+        "SELECT name FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_%'",
       );
 
-      expect(tables).toBeDefined();
+      const tableNames = tablesResult.rows
+        .map((row) => row.name as string)
+        .filter((name): name is string => typeof name === "string")
+        .sort();
+      const indexNames = indexesResult.rows
+        .map((row) => row.name as string)
+        .filter((name): name is string => typeof name === "string")
+        .sort();
+
+      expect(tableNames).toEqual([
+        "__drizzle_migrations",
+        "functionEmbeddings",
+        "function_embeddings_vector_idx_shadow",
+        "functions",
+        "libsql_vector_meta_shadow",
+      ]);
+      expect(indexNames).toEqual([
+        "function_embeddings_vector_idx",
+        "function_embeddings_vector_idx_shadow_idx",
+      ]);
     } finally {
       client?.close();
     }
