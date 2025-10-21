@@ -47,13 +47,14 @@ export async function saveFunction(
       throw new Error("Failed to insert function");
     }
 
-    const embeddingRows = input.embeddings.map((embedding, index) => ({
-      functionId: insertedFunction.id,
-      chunkIndex: index,
-      embedding,
-    }));
+    for (let index = 0; index < input.embeddings.length; index++) {
+      const embedding = input.embeddings[index];
+      if (!embedding) continue;
 
-    await tx.insert(functionEmbeddingsTable).values(embeddingRows);
+      await tx.run(
+        sql`INSERT INTO ${functionEmbeddingsTable} (functionId, chunkIndex, vector) VALUES (${insertedFunction.id}, ${index}, vector32(${JSON.stringify(embedding)}))`,
+      );
+    }
 
     return {
       id: insertedFunction.id,
@@ -145,25 +146,26 @@ export async function searchSimilar(
   }
 
   const embeddingJson = JSON.stringify(embedding);
-  const results = await db
-    .select({
-      embeddingId: sql<number>`vector_results.id`,
-      distance: sql<number>`vector_results.distance`,
-      functionId: functionEmbeddingsTable.functionId,
-    })
-    .from(
-      sql.raw(
-        `vector_top_k('function_embeddings_vector_idx', vector32('${embeddingJson}'), ${topK}) as vector_results`,
-      ),
-    )
-    .leftJoin(
-      functionEmbeddingsTable,
-      sql`${functionEmbeddingsTable.id} = vector_results.id`,
-    );
+
+  const rawResults = await db.all<{
+    id: number;
+    distance: number;
+    functionId: number;
+  }>(
+    sql.raw(`
+      SELECT 
+        fe.id,
+        fe.functionId,
+        vector_distance_cos(fe.vector, vector32('${embeddingJson}')) as distance
+      FROM functionEmbeddings fe
+      ORDER BY distance
+      LIMIT ${topK}
+    `),
+  );
 
   const functionMap = new Map<number, FunctionWithChunks>();
 
-  for (const result of results) {
+  for (const result of rawResults) {
     if (result.functionId && !functionMap.has(result.functionId)) {
       const func = await getFunctionById(db, result.functionId);
       if (func) {
@@ -172,7 +174,7 @@ export async function searchSimilar(
     }
   }
 
-  return results
+  return rawResults
     .map((result) => {
       if (!result.functionId) return null;
       const func = functionMap.get(result.functionId);

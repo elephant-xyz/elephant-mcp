@@ -15,7 +15,8 @@ const float32Array = customType<{
     return Array.from(new Float32Array(value.buffer));
   },
   toDriver(value: number[]) {
-    return sql`vector32(${JSON.stringify(value)})`;
+    const float32 = new Float32Array(value);
+    return Buffer.from(float32.buffer);
   },
 });
 
