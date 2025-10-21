@@ -1,8 +1,9 @@
 import { promises as fs } from "fs";
-import { fileURLToPath } from "url";
 import path from "path";
 import Parser, { Query, type QueryMatch, type SyntaxNode } from "tree-sitter";
 import JavaScript from "tree-sitter-javascript";
+// Import the query file as raw text using Vite's ?raw suffix
+import querySourceRaw from "../queries/functions.scm?raw";
 
 type ExtractedFunction = {
   name: string;
@@ -10,22 +11,8 @@ type ExtractedFunction = {
   filePath: string;
 };
 
-let cachedQuerySource: Buffer | null = null;
-
 async function loadQuerySource(): Promise<Buffer> {
-  if (cachedQuerySource) return cachedQuerySource;
-
-  const currentDir = path.dirname(fileURLToPath(import.meta.url));
-  const queryPath = path.join(currentDir, "..", "queries", "functions.scm");
-
-  try {
-    cachedQuerySource = await fs.readFile(queryPath);
-    return cachedQuerySource;
-  } catch (error) {
-    throw new Error(
-      `Failed to load query file from ${queryPath}: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
+  return Buffer.from(querySourceRaw, "utf8");
 }
 
 export async function extractFunctions(

@@ -23,3 +23,9 @@ interface ViAPI {
 }
 
 declare const vi: ViAPI;
+
+// Type declaration for .scm files imported as raw text
+declare module "*.scm?raw" {
+  const content: string;
+  export default content;
+}

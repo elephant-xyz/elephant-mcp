@@ -7,6 +7,10 @@ import { logger } from "./logger.ts";
 import { listClassesByDataGroupHandler } from "./tools/dataGroups.ts";
 import { listPropertiesByClassNameHandler, getPropertySchemaByClassNameHandler } from "./tools/classes.ts";
 import { setServerInstance } from "./lib/serverRef.ts";
+import path from "path";
+import { getDefaultDataDir } from "./lib/paths.ts";
+import { initializeDatabase } from "./db/index.ts";
+import { indexVerifiedScripts } from "./lib/verifiedIndexer.ts";
 
 const SERVER_NAME = typeof packageJson.name === "string" ? packageJson.name : "@elephant-xyz/mcp";
 const SERVER_VERSION = typeof packageJson.version === "string" ? packageJson.version : "0.0.0";
@@ -109,6 +113,35 @@ async function main() {
       version: SERVER_VERSION,
     },
   });
+
+  // Kick off background initialization and indexing. Failures should not block MCP.
+  (async () => {
+    try {
+      const dataDir = getDefaultDataDir();
+      const dbPath = path.join(dataDir, "db", "elephant-mcp.sqlite");
+      const { db } = await initializeDatabase(dbPath);
+
+      const clonePath = path.join(dataDir, "verified-scripts");
+      const result = await indexVerifiedScripts(db, { clonePath, fullRescan: false });
+
+      logger.info(
+        {
+          processedFiles: result.processedFiles.length,
+          savedFunctions: result.savedFunctions,
+          dbPath,
+          clonePath,
+        },
+        "Verified scripts indexing completed",
+      );
+    } catch (error) {
+      logger.warn(
+        {
+          error: error instanceof Error ? error.message : String(error),
+        },
+        "Startup indexing failed; continuing without index",
+      );
+    }
+  })();
 
   // Graceful shutdown handling (emit MCP log before exit)
   process.on("SIGTERM", () => {
