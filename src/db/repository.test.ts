@@ -148,7 +148,24 @@ describe("repository", () => {
       };
 
       await expect(saveFunction(db, input)).rejects.toThrow(
-        "Each embedding must be a non-empty array",
+        `Each embedding must be an array of length ${VECTOR_DIMS}`,
+      );
+    });
+
+    it("should throw error for embedding containing non-number values", async () => {
+      const input: FunctionInput = {
+        name: "testFunction",
+        code: "function test() {}",
+        filePath: "/src/test.ts",
+        embeddings: [
+          Array.from({ length: VECTOR_DIMS }, (_, index) =>
+            index === 0 ? "nan" : index / VECTOR_DIMS,
+          ) as unknown as number[],
+        ],
+      };
+
+      await expect(saveFunction(db, input)).rejects.toThrow(
+        "Each embedding must only contain numbers",
       );
     });
   });
@@ -295,7 +312,7 @@ describe("repository", () => {
       const results = await searchSimilar(db, emb1, 2);
 
       expect(results).toHaveLength(2);
-      expect(results[0]?.function.name).toBe("function1");
+      expect(results[0]?.functionWithChunks.name).toBe("function1");
       expect(results[0]?.distance).toBeDefined();
       expect(typeof results[0]?.distance).toBe("number");
     });
@@ -317,8 +334,20 @@ describe("repository", () => {
 
     it("should throw error for empty embedding", async () => {
       await expect(searchSimilar(db, [], 5)).rejects.toThrow(
-        "Embedding must be a non-empty array",
+        `Embedding must be an array of length ${VECTOR_DIMS}`,
       );
+    });
+
+    it("should throw error for embedding containing non-number values", async () => {
+      await expect(
+        searchSimilar(
+          db,
+          Array.from({ length: VECTOR_DIMS }, (_, index) =>
+            index === 0 ? NaN : index / VECTOR_DIMS,
+          ),
+          5,
+        ),
+      ).rejects.toThrow("Embedding must only contain numbers");
     });
 
     it("should throw error for invalid topK", async () => {

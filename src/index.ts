@@ -115,6 +115,7 @@ const getServer = () => {
           .positive()
           .max(50)
           .optional()
+          .default(5)
           .describe("Number of results (default 5)"),
       },
     },

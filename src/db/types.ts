@@ -14,6 +14,6 @@ export interface FunctionInput {
 }
 
 export interface VectorSearchResult {
-  function: FunctionWithChunks;
+  functionWithChunks: FunctionWithChunks;
   distance: number;
 }

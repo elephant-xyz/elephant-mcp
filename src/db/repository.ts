@@ -11,6 +11,8 @@ import type {
   VectorSearchResult,
 } from "./types.js";
 
+const EMBEDDING_DIMENSION = 1536;
+
 export async function saveFunction(
   db: LibSQLDatabase,
   input: FunctionInput,
@@ -32,8 +34,14 @@ export async function saveFunction(
   }
 
   for (const embedding of input.embeddings) {
-    if (!Array.isArray(embedding) || embedding.length === 0) {
-      throw new Error("Each embedding must be a non-empty array");
+    if (!Array.isArray(embedding) || embedding.length !== EMBEDDING_DIMENSION) {
+      throw new Error(
+        `Each embedding must be an array of length ${EMBEDDING_DIMENSION}`,
+      );
+    }
+
+    if (embedding.some((value) => typeof value !== "number" || Number.isNaN(value))) {
+      throw new Error("Each embedding must only contain numbers");
     }
   }
 
@@ -141,8 +149,14 @@ export async function searchSimilar(
   embedding: number[],
   topK: number,
 ): Promise<VectorSearchResult[]> {
-  if (!Array.isArray(embedding) || embedding.length === 0) {
-    throw new Error("Embedding must be a non-empty array");
+  if (!Array.isArray(embedding) || embedding.length !== EMBEDDING_DIMENSION) {
+    throw new Error(
+      `Embedding must be an array of length ${EMBEDDING_DIMENSION}`,
+    );
+  }
+
+  if (embedding.some((value) => typeof value !== "number" || Number.isNaN(value))) {
+    throw new Error("Embedding must only contain numbers");
   }
 
   if (!Number.isInteger(topK) || topK <= 0) {
@@ -183,10 +197,7 @@ export async function searchSimilar(
       if (!result.functionId) return null;
       const func = functionMap.get(result.functionId);
       if (!func) return null;
-      return {
-        function: func,
-        distance: result.distance,
-      };
+      return { functionWithChunks: func, distance: result.distance };
     })
     .filter((r): r is VectorSearchResult => r !== null);
 }

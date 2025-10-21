@@ -12,11 +12,7 @@ function clamp(value: number, min: number, max: number): number {
 export async function transformExamplesHandler(text: string, topK?: number) {
   try {
     const { OPENAI_API_KEY } = getConfig();
-
-    if (
-      !OPENAI_API_KEY ||
-      OPENAI_API_KEY.length === 0
-    ) {
+    if (!OPENAI_API_KEY || OPENAI_API_KEY.length === 0) {
       return createTextResult({ error: "Missing OPENAI_API_KEY" });
     }
 
@@ -34,8 +30,8 @@ export async function transformExamplesHandler(text: string, topK?: number) {
     const results = await searchSimilar(db, embedding, k);
 
     const matches = results.map((r) => ({
-      name: r.function.name,
-      code: r.function.code,
+      name: r.functionWithChunks.name,
+      code: r.functionWithChunks.code,
     }));
 
     return createTextResult({ count: matches.length, matches });
