@@ -5,7 +5,10 @@ import { z } from "zod";
 import packageJson from "../package.json";
 import { logger } from "./logger.ts";
 import { listClassesByDataGroupHandler } from "./tools/dataGroups.ts";
-import { listPropertiesByClassNameHandler, getPropertySchemaByClassNameHandler } from "./tools/classes.ts";
+import {
+  listPropertiesByClassNameHandler,
+  getPropertySchemaByClassNameHandler,
+} from "./tools/classes.ts";
 import { setServerInstance } from "./lib/serverRef.ts";
 import path from "path";
 import { getDefaultDataDir } from "./lib/paths.ts";
@@ -14,8 +17,10 @@ import { setDbInstance } from "./db/connectionRef.ts";
 import { transformExamplesHandler } from "./tools/transformExamples";
 import { indexVerifiedScripts } from "./lib/verifiedIndexer.ts";
 
-const SERVER_NAME = typeof packageJson.name === "string" ? packageJson.name : "@elephant-xyz/mcp";
-const SERVER_VERSION = typeof packageJson.version === "string" ? packageJson.version : "0.0.0";
+const SERVER_NAME =
+  typeof packageJson.name === "string" ? packageJson.name : "@elephant-xyz/mcp";
+const SERVER_VERSION =
+  typeof packageJson.version === "string" ? packageJson.version : "0.0.0";
 
 const getServer = () => {
   const server = new McpServer(
@@ -84,21 +89,26 @@ const getServer = () => {
       },
     },
     async (args: { className: string; propertyName: string }) => {
-      return getPropertySchemaByClassNameHandler(args.className, args.propertyName);
+      return getPropertySchemaByClassNameHandler(
+        args.className,
+        args.propertyName,
+      );
     },
   );
 
   server.registerTool(
-    "transformExamples",
+    "getVerifiedScriptExamples",
     {
-      title: "Transform input into similar examples",
+      title: "Get verified script examples",
       description:
-        "Embeds input text and returns nearest functions from the local embeddings DB",
+        "Get most relevant working examples of the code, that maps data to the Elephant schema",
       inputSchema: {
-        text: z
+        query: z
           .string()
           .min(1, "text is required")
-          .describe("Input text to embed and search"),
+          .describe(
+            "Description of the example meaning. Wll be used to search for similar examples.",
+          ),
         topK: z
           .number()
           .int()
@@ -108,8 +118,8 @@ const getServer = () => {
           .describe("Number of results (default 5)"),
       },
     },
-    async (args: { text: string; topK?: number }) => {
-      return transformExamplesHandler(args.text, args.topK);
+    async (args: { query: string; topK?: number }) => {
+      return transformExamplesHandler(args.query, args.topK);
     },
   );
 
@@ -150,7 +160,10 @@ async function main() {
       setDbInstance(db);
 
       const clonePath = path.join(dataDir, "verified-scripts");
-      const result = await indexVerifiedScripts(db, { clonePath, fullRescan: false });
+      const result = await indexVerifiedScripts(db, {
+        clonePath,
+        fullRescan: false,
+      });
 
       logger.info(
         {
@@ -209,16 +222,18 @@ main().catch((error) => {
   });
   // Best-effort MCP logging of startup error if connected
   if (serverRef?.isConnected()) {
-    void serverRef.sendLoggingMessage({
-      level: "error",
-      logger: "startup",
-      data: {
-        message: "Server startup error",
-        error: error instanceof Error ? error.message : String(error),
-      },
-    }).finally(() => {
-      process.exit(1);
-    });
+    void serverRef
+      .sendLoggingMessage({
+        level: "error",
+        logger: "startup",
+        data: {
+          message: "Server startup error",
+          error: error instanceof Error ? error.message : String(error),
+        },
+      })
+      .finally(() => {
+        process.exit(1);
+      });
   } else {
     process.exit(1);
   }
