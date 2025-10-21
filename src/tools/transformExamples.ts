@@ -3,6 +3,7 @@ import { logger } from "../logger.ts";
 import { embedText } from "../lib/embeddings.ts";
 import { getDbInstance } from "../db/connectionRef.ts";
 import { searchSimilar } from "../db/repository.ts";
+import { getConfig } from "../config.ts";
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -10,9 +11,11 @@ function clamp(value: number, min: number, max: number): number {
 
 export async function transformExamplesHandler(text: string, topK?: number) {
   try {
+    const { OPENAI_API_KEY } = getConfig();
+
     if (
-      !process.env.OPENAI_API_KEY ||
-      process.env.OPENAI_API_KEY.length === 0
+      !OPENAI_API_KEY ||
+      OPENAI_API_KEY.length === 0
     ) {
       return createTextResult({ error: "Missing OPENAI_API_KEY" });
     }
