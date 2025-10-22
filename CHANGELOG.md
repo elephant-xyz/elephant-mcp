@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/elephant-xyz/elephant-mcp/compare/v1.1.0...v1.2.0) (2025-10-22)
+
+
+### Features
+
+* code samples ([#9](https://github.com/elephant-xyz/elephant-mcp/issues/9)) ([6ef0730](https://github.com/elephant-xyz/elephant-mcp/commit/6ef073024869b5ac7c6fce96090c1535ac68c8d0))
+
 # [1.1.0](https://github.com/elephant-xyz/elephant-mcp/compare/v1.0.1...v1.1.0) (2025-10-17)
 
 
