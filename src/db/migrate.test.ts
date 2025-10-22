@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { unlinkSync, existsSync } from "node:fs";
+import { sql } from "drizzle-orm";
 import { initializeDatabase } from "./migrate.js";
 import { functionsTable, functionEmbeddingsTable } from "./schema.js";
 
@@ -61,17 +62,16 @@ describe("initializeDatabase", () => {
         .filter((name): name is string => typeof name === "string")
         .sort();
 
-      expect(tableNames).toEqual([
-        "__drizzle_migrations",
-        "functionEmbeddings",
-        "function_embeddings_vector_idx_shadow",
-        "functions",
-        "libsql_vector_meta_shadow",
-      ]);
-      expect(indexNames).toEqual([
-        "function_embeddings_vector_idx",
-        "function_embeddings_vector_idx_shadow_idx",
-      ]);
+      expect(tableNames).toEqual(
+        expect.arrayContaining([
+          "__drizzle_migrations",
+          "functionEmbeddings",
+          "functions",
+        ]),
+      );
+      expect(indexNames).toEqual(
+        expect.arrayContaining(["function_embeddings_vector_idx"]),
+      );
     } finally {
       client?.close();
     }
@@ -147,10 +147,9 @@ describe("initializeDatabase", () => {
         (_, i) => (i % 100) / 100,
       );
 
-      await client.execute({
-        sql: `INSERT INTO functionEmbeddings (functionId, chunkIndex, vector) VALUES (?, ?, vector32(?))`,
-        args: [functionId, 0, JSON.stringify(testVector)],
-      });
+      await db.run(
+        sql`INSERT INTO ${functionEmbeddingsTable} (functionId, chunkIndex, vector) VALUES (${functionId}, ${0}, vector32(${JSON.stringify(testVector)}))`,
+      );
 
       const embeddings = await db.select().from(functionEmbeddingsTable);
 

@@ -127,23 +127,38 @@ export async function getFunctionsByFilePath(
     .from(functionsTable)
     .where(eq(functionsTable.filePath, filePath));
 
-  const results: FunctionWithChunks[] = [];
-
-  for (const func of functions) {
-    const chunks = await db
-      .select()
-      .from(functionEmbeddingsTable)
-      .where(eq(functionEmbeddingsTable.functionId, func.id))
-      .orderBy(functionEmbeddingsTable.chunkIndex);
-
-    results.push({
-      id: func.id,
-      name: func.name,
-      code: func.code,
-      filePath: func.filePath,
-      embeddings: chunks.map((chunk) => chunk.embedding),
-    });
+  if (functions.length === 0) {
+    return [];
   }
+
+  const functionIds = functions.map((f) => f.id);
+
+  const allChunks = await db
+    .select()
+    .from(functionEmbeddingsTable)
+    .where(sql`${functionEmbeddingsTable.functionId} IN ${functionIds}`)
+    .orderBy(
+      functionEmbeddingsTable.functionId,
+      functionEmbeddingsTable.chunkIndex,
+    );
+
+  const chunksByFunctionId = new Map<number, typeof allChunks>();
+  for (const chunk of allChunks) {
+    if (!chunksByFunctionId.has(chunk.functionId)) {
+      chunksByFunctionId.set(chunk.functionId, []);
+    }
+    chunksByFunctionId.get(chunk.functionId)!.push(chunk);
+  }
+
+  const results: FunctionWithChunks[] = functions.map((func) => ({
+    id: func.id,
+    name: func.name,
+    code: func.code,
+    filePath: func.filePath,
+    embeddings: (chunksByFunctionId.get(func.id) || []).map(
+      (chunk) => chunk.embedding,
+    ),
+  }));
 
   return results;
 }

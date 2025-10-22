@@ -16,7 +16,7 @@ import type { IndexerOptions, IndexSummary } from "../types/entities.js";
 import simpleGit from "simple-git";
 import { getEncoding } from "js-tiktoken";
 
-const JS_EXTENSIONS = new Set([".js", ".mjs", ".cjs", "ts", "tsx"]);
+const JS_EXTENSIONS = new Set([".js", ".mjs", ".cjs", ".ts", ".tsx"]);
 
 const MAX_TOKENS_PER_CHUNK = 8192;
 
@@ -69,7 +69,10 @@ async function listFilesRecursively(rootDir: string): Promise<string[]> {
 }
 
 function filterJsFiles(files: string[]): string[] {
-  return files.filter((f) => JS_EXTENSIONS.has(path.extname(f)));
+  return files.filter((f) => {
+    const ext = path.extname(f);
+    return JS_EXTENSIONS.has(ext);
+  });
 }
 
 export async function indexVerifiedScripts(
@@ -96,7 +99,7 @@ export async function indexVerifiedScripts(
 
     // If pull had no changed files, decide based on commit state
     if (targetFiles.length === 0) {
-      const state = await getIndexState(db as any, repo.path);
+      const state = await getIndexState(db, repo.path);
       if (!state || state.lastIndexedCommit !== headCommit) {
         const all = await listFilesRecursively(repo.path);
         targetFiles = filterJsFiles(all);
@@ -115,12 +118,9 @@ export async function indexVerifiedScripts(
   for (const filePath of targetFiles) {
     try {
       // Clean previous entries for the file
-      const existing = await getFunctionsByFilePath(
-        db as any,
-        path.resolve(filePath),
-      );
+      const existing = await getFunctionsByFilePath(db, path.resolve(filePath));
       for (const func of existing) {
-        await deleteFunction(db as any, func.id);
+        await deleteFunction(db, func.id);
       }
 
       // Extract functions
@@ -145,7 +145,7 @@ export async function indexVerifiedScripts(
           .filter((e): e is number[] => Array.isArray(e) && e.length > 0);
         if (embeddings.length === 0) continue;
 
-        await saveFunction(db as any, {
+        await saveFunction(db, {
           name: fn.name,
           code: fn.code,
           filePath: fn.filePath, // already absolute per parser
@@ -168,7 +168,7 @@ export async function indexVerifiedScripts(
   // Update last indexed commit only if we actually saved something
   if (savedFunctions > 0) {
     try {
-      await setIndexState(db as any, repo.path, headCommit);
+      await setIndexState(db, repo.path, headCommit);
     } catch (err) {
       logger.warn(
         {

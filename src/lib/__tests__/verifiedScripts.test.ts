@@ -92,17 +92,19 @@ describe("verifiedScripts", () => {
     birthtime: new Date(),
   });
 
-  const createMockDirent = (name: string, isDir: boolean): Dirent<string> => ({
-    name,
-    isDirectory: () => isDir,
-    isFile: () => !isDir,
-    isBlockDevice: () => false,
-    isCharacterDevice: () => false,
-    isSymbolicLink: () => false,
-    isFIFO: () => false,
-    isSocket: () => false,
-    parentPath: "",
-  });
+  const createMockDirent = (name: string, isDir: boolean): Dirent =>
+    ({
+      name,
+      isDirectory: () => isDir,
+      isFile: () => !isDir,
+      isBlockDevice: () => false,
+      isCharacterDevice: () => false,
+      isSymbolicLink: () => false,
+      isFIFO: () => false,
+      isSocket: () => false,
+      path: "",
+      parentPath: "",
+    }) as Dirent;
 
   const createMockPullResult = (
     changes: number,
@@ -247,7 +249,7 @@ describe("verifiedScripts", () => {
       it("should clone repository and list all files", async () => {
         mockMkdir.mockResolvedValue(undefined);
         mockClone.mockResolvedValue("");
-        const mockDirents: Dirent<string>[] = [
+        const mockDirents = [
           createMockDirent("file1.ts", false),
           createMockDirent("file2.ts", false),
           createMockDirent(".git", true),

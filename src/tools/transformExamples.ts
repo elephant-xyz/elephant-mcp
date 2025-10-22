@@ -36,11 +36,14 @@ export async function transformExamplesHandler(text: string, topK?: number) {
 
     return createTextResult({ count: matches.length, matches });
   } catch (error) {
-    logger.error("transformExamples failed", {
-      error: error instanceof Error ? error.message : String(error),
-      textLength: typeof text === "string" ? text.length : undefined,
-      topK,
-    });
+    logger.error(
+      {
+        error: error instanceof Error ? error.message : String(error),
+        textLength: typeof text === "string" ? text.length : undefined,
+        topK,
+      },
+      "transformExamples failed",
+    );
     return createTextResult({ error: "Failed to transform examples" });
   }
 }

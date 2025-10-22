@@ -92,6 +92,19 @@ describe("embedText", () => {
 
     expect(result).toEqual(mockEmbedding);
   });
+
+  it("should throw error when embedding dimension is incorrect", async () => {
+    const wrongDimensionEmbedding = createEmbedding(0.1).slice(0, 100);
+    vi.mocked(embed).mockResolvedValue({
+      embedding: wrongDimensionEmbedding,
+      value: "test text",
+      usage: { tokens: 2 },
+    });
+
+    await expect(embedText("test text")).rejects.toThrow(
+      /Embedding dimension mismatch/,
+    );
+  });
 });
 
 describe("embedManyTexts", () => {
@@ -211,5 +224,19 @@ describe("embedManyTexts", () => {
 
     expect(result).toHaveLength(100);
     expect(result[50].text).toBe("text 50");
+  });
+
+  it("should throw error when one embedding has incorrect dimension", async () => {
+    const validEmbedding = createEmbedding(0.1);
+    const wrongDimensionEmbedding = createEmbedding(0.2).slice(0, 100);
+    vi.mocked(embedMany).mockResolvedValue({
+      embeddings: [validEmbedding, wrongDimensionEmbedding],
+      values: ["text one", "text two"],
+      usage: { tokens: 4 },
+    });
+
+    await expect(embedManyTexts(["text one", "text two"])).rejects.toThrow(
+      /Embedding dimension mismatch/,
+    );
   });
 });
