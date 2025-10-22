@@ -1,8 +1,9 @@
 import { z } from "zod";
 
 const configSchema = z.object({
-  NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
+  NODE_ENV: z.enum(["development", "production", "test"]).default("production"),
   LOG_LEVEL: z.enum(["error", "warn", "info", "debug"]).default("info"),
+  OPENAI_API_KEY: z.string().min(1).optional(),
 });
 
 export type Config = z.infer<typeof configSchema>;

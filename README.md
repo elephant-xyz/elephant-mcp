@@ -2,6 +2,8 @@
 
 Elephant MCP connects Claude-compatible clients to the Elephant data graph, exposing discoverable tools for listing data groups, classes, and individual property schemas. The server is published on npm as `@elephant-xyz/mcp`.
 
+> **Important:** Set the `OPENAI_API_KEY` environment variable before starting Elephant MCP to unlock relevant `getVerifiedScriptExamples` responses. Without it, the server skips tailored code samples.
+
 ## 🚀 Prompt Recommendations
 
 **For best results with Elephant MCP, always specify the Data Group you're working on in your prompts and add `use elephant mcp` at the end.**
@@ -30,6 +32,7 @@ This helps the AI understand which data context to use and ensures it leverages 
 - `listClassesByDataGroup` – Lists classes attached to an Elephant data group, including friendly names and descriptions.
 - `listPropertiesByClassName` – Returns schema property keys for a class (excluding transport-only fields).
 - `getPropertySchema` – Fetches the full JSON Schema for a specific property and class combination.
+- `getVerifiedScriptExamples` – Returns a list of working examples of the code, that maps data to the Elephant schema.
 
 ## Supported MCP Clients
 
@@ -43,8 +46,12 @@ This helps the AI understand which data context to use and ensures it leverages 
    {
      "command": "npx",
      "args": ["-y", "@elephant-xyz/mcp@latest"],
+     "env": {
+       "OPENAI_API_KEY": "sk-your-openai-key",
+     },
    }
    ```
+   Replace the placeholder with your actual key. On macOS/Linux you can instead launch Cursor from a shell where you first run `export OPENAI_API_KEY=sk-your-openai-key`; on Windows PowerShell use `$env:OPENAI_API_KEY="sk-your-openai-key"`.
 3. Save and toggle the Elephant connection inside Cursor’s MCP panel.
 4. If you are hacking on a local checkout, switch the command to `npm start` and set `cwd` to your repository path.
 
@@ -53,13 +60,16 @@ This helps the AI understand which data context to use and ensures it leverages 
 [<img alt="Install in VS Code (npx)" src="https://img.shields.io/badge/Install%20in%20VS%20Code-0098FF?style=for-the-badge&logo=visualstudiocode&logoColor=white">](https://insiders.vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%7B%22name%22%3A%22%40elephant-xyz%2Fmcp%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40elephant-xyz%2Fmcp%40latest%22%5D%7D)
 
 1. Install the **Model Context Protocol** extension.
-2. Accept the pre-populated install flow above or add manually under _Settings → MCP → Servers_ with `npx -y @elephant-xyz/mcp@latest`.
+2. Accept the pre-populated install flow above or add manually under _Settings → MCP → Servers_ with:
+   - `OPENAI_API_KEY=sk-your-openai-key npx -y @elephant-xyz/mcp@latest`
 3. Reload VS Code and enable the Elephant server in the MCP panel.
 
 ### Claude Code
 
+macOS/Linux:
+
 ```bash
-claude mcp add elephant -- npx -y @elephant-xyz/mcp@latest
+claude mcp add elephant --env OPENAI_API_KEY=sk-your-openai-key -- npx -y @elephant-xyz/mcp@latest
 ```
 
 Restart Claude Code after adding the server so the tools appear in the `@tools` palette. Replace the URL and API key placeholders with your deployment details if you expose the server remotely.
@@ -69,7 +79,7 @@ Restart Claude Code after adding the server so the tools appear in the `@tools` 
 - **CLI setup**
 
   ```bash
-  codex mcp add elephant -- npx -y @elephant-xyz/mcp@latest
+   codex mcp add elephant --env OPENAI_API_KEY=sk-your-openai-key -- npx -y @elephant-xyz/mcp@latest
   ```
 
   You can explore additional options with `codex mcp --help`. Inside the Codex TUI, run `/mcp` to view currently connected servers.
@@ -80,6 +90,7 @@ Restart Claude Code after adding the server so the tools appear in the `@tools` 
   [mcp.elephant]
   command = "npx"
   args = ["-y", "@elephant-xyz/mcp@latest"]
+  env = { OPENAI_API_KEY = "sk-your-openai-key" }
   ```
   Save the file and restart Codex to load the new server.
 
@@ -93,6 +104,9 @@ Create (or edit) `.gemini/settings.json` in your project and add:
     "elephant": {
       "command": "npx",
       "args": ["-y", "@elephant-xyz/mcp@latest"],
+      "env": {
+        "OPENAI_API_KEY": "sk-your-openai-key",
+      },
     },
   },
 }

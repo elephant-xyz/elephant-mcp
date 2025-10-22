@@ -1,0 +1,100 @@
+{
+    "id": "0000_initial",
+    "prevId": "",
+    "version": "5",
+    "dialect": "sqlite",
+    "tables": {
+        "functions": {
+            "name": "functions",
+            "schema": "",
+            "columns": {
+                "id": {
+                    "name": "id",
+                    "type": "integer",
+                    "primaryKey": true,
+                    "autoincrement": false,
+                    "notNull": true
+                },
+                "name": {
+                    "name": "name",
+                    "type": "text",
+                    "primaryKey": false,
+                    "autoincrement": false,
+                    "notNull": true
+                },
+                "code": {
+                    "name": "code",
+                    "type": "text",
+                    "primaryKey": false,
+                    "autoincrement": false,
+                    "notNull": true
+                },
+                "filePath": {
+                    "name": "filePath",
+                    "type": "text",
+                    "primaryKey": false,
+                    "autoincrement": false,
+                    "notNull": true
+                }
+            },
+            "indexes": [],
+            "foreignKeys": [],
+            "compositePrimaryKeys": [],
+            "uniqueConstraints": []
+        },
+        "functionEmbeddings": {
+            "name": "functionEmbeddings",
+            "schema": "",
+            "columns": {
+                "id": {
+                    "name": "id",
+                    "type": "integer",
+                    "primaryKey": true,
+                    "autoincrement": false,
+                    "notNull": true
+                },
+                "functionId": {
+                    "name": "functionId",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "autoincrement": false,
+                    "notNull": true
+                },
+                "chunkIndex": {
+                    "name": "chunkIndex",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "autoincrement": false,
+                    "notNull": true
+                },
+                "vector": {
+                    "name": "vector",
+                    "type": "F32_BLOB(1536)",
+                    "primaryKey": false,
+                    "autoincrement": false,
+                    "notNull": true
+                }
+            },
+            "indexes": [
+                {
+                    "name": "function_embeddings_vector_idx",
+                    "columns": [
+                        "libsql_vector_idx(\"vector\")"
+                    ],
+                    "isUnique": false
+                }
+            ],
+            "foreignKeys": [],
+            "compositePrimaryKeys": [],
+            "uniqueConstraints": []
+        }
+    },
+    "enums": {},
+    "schemas": {},
+    "sequences": {},
+    "_meta": {
+        "schemas": {},
+        "tables": {},
+        "columns": {}
+    }
+}

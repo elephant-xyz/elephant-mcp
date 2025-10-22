@@ -5,11 +5,22 @@ import { z } from "zod";
 import packageJson from "../package.json";
 import { logger } from "./logger.ts";
 import { listClassesByDataGroupHandler } from "./tools/dataGroups.ts";
-import { listPropertiesByClassNameHandler, getPropertySchemaByClassNameHandler } from "./tools/classes.ts";
+import {
+  listPropertiesByClassNameHandler,
+  getPropertySchemaByClassNameHandler,
+} from "./tools/classes.ts";
 import { setServerInstance } from "./lib/serverRef.ts";
+import path from "path";
+import { getDefaultDataDir } from "./lib/paths.ts";
+import { initializeDatabase } from "./db/index.ts";
+import { setDbInstance } from "./db/connectionRef.ts";
+import { transformExamplesHandler } from "./tools/transformExamples.ts";
+import { indexVerifiedScripts } from "./lib/verifiedIndexer.ts";
 
-const SERVER_NAME = typeof packageJson.name === "string" ? packageJson.name : "@elephant-xyz/mcp";
-const SERVER_VERSION = typeof packageJson.version === "string" ? packageJson.version : "0.0.0";
+const SERVER_NAME =
+  typeof packageJson.name === "string" ? packageJson.name : "@elephant-xyz/mcp";
+const SERVER_VERSION =
+  typeof packageJson.version === "string" ? packageJson.version : "0.0.0";
 
 const getServer = () => {
   const server = new McpServer(
@@ -78,7 +89,38 @@ const getServer = () => {
       },
     },
     async (args: { className: string; propertyName: string }) => {
-      return getPropertySchemaByClassNameHandler(args.className, args.propertyName);
+      return getPropertySchemaByClassNameHandler(
+        args.className,
+        args.propertyName,
+      );
+    },
+  );
+
+  server.registerTool(
+    "getVerifiedScriptExamples",
+    {
+      title: "Get verified script examples",
+      description:
+        "Get most relevant working examples of the code, that maps data to the Elephant schema",
+      inputSchema: {
+        query: z
+          .string()
+          .min(1, "text is required")
+          .describe(
+            "Description of the example meaning. Wll be used to search for similar examples.",
+          ),
+        topK: z
+          .number()
+          .int()
+          .positive()
+          .max(50)
+          .optional()
+          .default(5)
+          .describe("Number of results (default 5)"),
+      },
+    },
+    async (args: { query: string; topK?: number }) => {
+      return transformExamplesHandler(args.query, args.topK);
     },
   );
 
@@ -92,6 +134,12 @@ async function main() {
     serverName: SERVER_NAME,
     version: SERVER_VERSION,
   });
+
+  // Ensure the database is initialized before accepting any tool calls
+  const dataDir = getDefaultDataDir();
+  const dbPath = path.join(dataDir, "db", "elephant-mcp.sqlite");
+  const { db } = await initializeDatabase(dbPath);
+  setDbInstance(db);
 
   const server = getServer();
   serverRef = server;
@@ -109,6 +157,34 @@ async function main() {
       version: SERVER_VERSION,
     },
   });
+
+  // Kick off background indexing. Failures should not block MCP.
+  (async () => {
+    try {
+      const clonePath = path.join(dataDir, "verified-scripts");
+      const result = await indexVerifiedScripts(db, {
+        clonePath,
+        fullRescan: false,
+      });
+
+      logger.info(
+        {
+          processedFiles: result.processedFiles.length,
+          savedFunctions: result.savedFunctions,
+          dbPath,
+          clonePath,
+        },
+        "Verified scripts indexing completed",
+      );
+    } catch (error) {
+      logger.warn(
+        {
+          error: error instanceof Error ? error.message : String(error),
+        },
+        "Startup indexing failed; continuing without index",
+      );
+    }
+  })();
 
   // Graceful shutdown handling (emit MCP log before exit)
   process.on("SIGTERM", () => {
@@ -148,16 +224,18 @@ main().catch((error) => {
   });
   // Best-effort MCP logging of startup error if connected
   if (serverRef?.isConnected()) {
-    void serverRef.sendLoggingMessage({
-      level: "error",
-      logger: "startup",
-      data: {
-        message: "Server startup error",
-        error: error instanceof Error ? error.message : String(error),
-      },
-    }).finally(() => {
-      process.exit(1);
-    });
+    void serverRef
+      .sendLoggingMessage({
+        level: "error",
+        logger: "startup",
+        data: {
+          message: "Server startup error",
+          error: error instanceof Error ? error.message : String(error),
+        },
+      })
+      .finally(() => {
+        process.exit(1);
+      });
   } else {
     process.exit(1);
   }

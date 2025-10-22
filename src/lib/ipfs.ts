@@ -1,5 +1,6 @@
 import { createHelia, type Helia } from "helia";
-import { json as createJsonClient, Json } from "@helia/json";
+import { json as createJsonClient } from "@helia/json";
+import type { JSON as Json } from "@helia/json";
 import { CID } from "multiformats/cid";
 import { sha256, sha512 } from "multiformats/hashes/sha2";
 import { identity } from "multiformats/hashes/identity";

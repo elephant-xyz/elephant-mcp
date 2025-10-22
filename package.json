@@ -4,7 +4,9 @@
   "description": "Model Context Protocol server that exposes Elephant data graph tooling",
   "type": "module",
   "main": "dist/index.js",
-  "bin": "./dist/index.js",
+  "bin": {
+    "mcp": "dist/index.js"
+  },
   "repository": {
     "url": "https://github.com/elephant-xyz/elephant-mcp"
   },
@@ -12,14 +14,19 @@
     "build": "vite build",
     "dev": "node --watch src/index.ts",
     "start": "node dist/index.js",
+    "prepare": "npm run build",
     "test": "vitest",
     "test:ci": "vitest run --reporter=json --outputFile=test-results.json",
+    "db:init": "rm -rf drizzle && drizzle-kit generate && drizzle-kit migrate",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
     "format": "prettier --write src/**/*.ts",
     "format:check": "prettier --check src/**/*.ts",
     "release": "semantic-release",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio"
   },
   "keywords": [
     "mcp",
@@ -45,6 +52,7 @@
     "@typescript-eslint/eslint-plugin": "^8.46.0",
     "@typescript-eslint/parser": "^8.46.0",
     "concurrently": "^9.2.1",
+    "drizzle-kit": "^0.31.5",
     "eslint": "^9.37.0",
     "globals": "^16.4.0",
     "prettier": "^3.0.0",
@@ -54,11 +62,20 @@
     "vitest": "^3.2.4"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^2.0.53",
+    "@helia/json": "^4.0.0",
+    "@libsql/client": "^0.15.15",
     "@modelcontextprotocol/sdk": "^1.20.0",
+    "ai": "^5.0.76",
+    "drizzle-orm": "^0.44.6",
+    "helia": "^5.0.0",
+    "js-tiktoken": "1.0.21",
+    "multiformats": "^13.0.0",
     "pino": "^9.0.0",
     "pino-pretty": "^13.1.1",
-    "helia": "^5.0.0",
-    "@helia/json": "^4.0.0",
-    "multiformats": "^13.0.0"
+    "simple-git": "^3.28.0",
+    "terser": "^5.44.0",
+    "tree-sitter": "^0.25.0",
+    "tree-sitter-javascript": "^0.25.0"
   }
 }
