@@ -27,7 +27,10 @@ function resolveClass(
   return { key: target, cid: manifest[target].ipfsCid, available: classKeys };
 }
 
-export async function listPropertiesByClassNameHandler(className: string) {
+export async function listPropertiesByClassNameHandler(
+  className: string,
+  withTypes = false,
+) {
   try {
     const manifest = await fetchManifest();
     const resolved = resolveClass(manifest, className);
@@ -51,6 +54,7 @@ export async function listPropertiesByClassNameHandler(className: string) {
     }
 
     const keyToDescription = new Map<string, string | null>();
+    const keyToSchema = new Map<string, JsonSchemaNode>();
 
     const addProps = (node: JsonSchemaNode | null | undefined) => {
       if (node?.properties) {
@@ -64,6 +68,21 @@ export async function listPropertiesByClassNameHandler(className: string) {
             if ((existing == null || existing === "") && description) {
               keyToDescription.set(key, description);
             }
+          }
+
+          if (!keyToSchema.has(key)) {
+            // Capture the first encountered schema node for this key
+            const captured: JsonSchemaNode = { ...(prop as JsonSchemaNode) };
+            if (key === "property_type") {
+              // Inject enum options for property_type for better UX
+              captured["enum"] = [
+                "LandParcel",
+                "Building",
+                "Unit",
+                "ManufacturedHome",
+              ];
+            }
+            keyToSchema.set(key, captured);
           }
         }
       }
@@ -81,7 +100,20 @@ export async function listPropertiesByClassNameHandler(className: string) {
 
     const properties = Array.from(keyToDescription.entries())
       .filter(([k]) => normalizeKey(k) !== "source_http_request")
-      .map(([key, description]) => ({ key, description: description ?? null }))
+      .map(([key, description]) => {
+        if (withTypes) {
+          // When including types, avoid duplicating description at the root level.
+          // The full schema (including description) will be returned under `schema`.
+          return { key, schema: keyToSchema.get(key) ?? {} } as {
+            key: string;
+            schema: JsonSchemaNode;
+          };
+        }
+        return { key, description: description ?? null } as {
+          key: string;
+          description: string | null;
+        };
+      })
       .sort((a, b) => a.key.localeCompare(b.key));
 
     return createTextResult({ properties });

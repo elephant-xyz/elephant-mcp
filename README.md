@@ -21,6 +21,20 @@ This helps the AI understand which data context to use and ensures it leverages 
 [![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=%40elephant-xyz%2Fmcp&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBlbGVwaGFudC14eXovbWNwQGxhdGVzdCJdfQ==)
 [<img alt="Install in VS Code (npx)" src="https://img.shields.io/badge/Install%20in%20VS%20Code-0098FF?style=for-the-badge&logo=visualstudiocode&logoColor=white">](https://insiders.vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%7B%22name%22%3A%22%40elephant-xyz%2Fmcp%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40elephant-xyz%2Fmcp%40latest%22%5D%7D)
 
+## Generate Transform Prompt
+
+In most clients, type `/generate_transform` to insert a guided workflow that helps you map your data to the Elephant schema and produce a verified transform.
+
+If your client does not support slash-commands, you can copy/paste the prompt content directly from this repository:
+
+- `prompts/create_transform/01_assistant_intro.md`
+- `prompts/create_transform/02_assistant_instructions.md`
+- `prompts/create_transform/03_user_task.md`
+
+```diff
+- OpenAI Codex does not support /generate_transform natively yet. To use it in Codex, open the files under prompts/create_transform and copy/paste their contents into your session.
+```
+
 ## Why Elephant?
 
 - Ready-to-use `npx` launcher compatible with Claude, Cursor, VS Code, Gemini CLI, and other MCP clients.
