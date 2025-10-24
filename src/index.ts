@@ -32,6 +32,7 @@ const getServer = () => {
       capabilities: {
         // Enable MCP logging capability so clients can receive server logs
         logging: {},
+        prompts: {},
       },
     },
   );
@@ -122,6 +123,43 @@ const getServer = () => {
     async (args: { query: string; topK?: number }) => {
       return transformExamplesHandler(args.query, args.topK);
     },
+  );
+
+  server.registerPrompt(
+    "create_transform",
+    {
+      title: "CreateTransformScripts",
+      description:
+        "Multi-step flow to gather inputs and generate data_extractor.js using MCP tools",
+    },
+    () => ({
+      messages: [
+        {
+          role: "assistant",
+          content: {
+            type: "text",
+            text:
+              "To get started, please provide:\n\n1) Where are the input HTML examples located? (absolute path, URL, or glob)\n2) Which Elephant data group should we map? (case-insensitive name)",
+          },
+        },
+        {
+          role: "assistant",
+          content: {
+            type: "text",
+            text:
+              "You are a senior data engineer. Use the available Elephant MCP tools to complete this task.\n\n- Fetch all classes for the specified data group using the 'listClassesByDataGroup' tool.\n- Assume every object defined by the schema is present in the input HTML; attempt to match and extract all of them.\n- Consult examples with the 'getVerifiedScriptExamples' tool when you need patterns for specific mappings.\n- Produce a single JavaScript file named 'data_extractor.js' that extracts and maps the data to the Elephant schema.\n- Use only the 'cheerio' library for HTML parsing/manipulation; do not use any other third-party libraries.\n- Be explicit about assumptions and cover all classes discovered.",
+          },
+        },
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text:
+              "After I answer the two questions, generate 'data_extractor.js' that: (1) uses robust HTML parsing, (2) enumerates schema classes from the chosen data group, (3) attempts to extract instances for each class and map properties, and (4) leverages 'getVerifiedScriptExamples' for mapping guidance when needed.",
+          },
+        },
+      ],
+    }),
   );
 
   return server;
