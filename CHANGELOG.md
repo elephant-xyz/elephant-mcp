@@ -1,3 +1,10 @@
+## [1.2.1](https://github.com/elephant-xyz/elephant-mcp/compare/v1.2.0...v1.2.1) (2025-10-31)
+
+
+### Bug Fixes
+
+* **ipfs:** swap IPFS fetch order for getJsonByCid ([#12](https://github.com/elephant-xyz/elephant-mcp/issues/12)) ([f3216af](https://github.com/elephant-xyz/elephant-mcp/commit/f3216afa66171f06f14ef6d13b77f8078c0b44c2))
+
 # [1.2.0](https://github.com/elephant-xyz/elephant-mcp/compare/v1.1.0...v1.2.0) (2025-10-22)
 
 
