@@ -35,21 +35,16 @@ async function getJsonClient(): Promise<Json> {
 
 export async function getJsonByCid<T>(cidString: string): Promise<T> {
   try {
-    const json = await getJsonClient();
-    const cid = CID.parse(cidString);
-    const data = await json.get(cid);
+    const jsonString = await fetchFromIpfs(cidString);
+    const data = JSON.parse(jsonString);
     return data as T;
-  } catch (error) {
-    logger.warn("Helia fetch failed, trying IPFS gateways", {
-      cid: cidString,
-      error: error instanceof Error ? error.message : String(error),
-    });
-
+  } catch (gatewayError) {
     try {
-      const jsonString = await fetchFromIpfs(cidString);
-      const data = JSON.parse(jsonString);
+      const json = await getJsonClient();
+      const cid = CID.parse(cidString);
+      const data = await json.get(cid);
       return data as T;
-    } catch (gatewayError) {
+    } catch (error) {
       logger.error("Failed to fetch JSON by CID from both Helia and gateways", {
         cid: cidString,
         heliaError: error instanceof Error ? error.message : String(error),
