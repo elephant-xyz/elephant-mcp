@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/elephant-xyz/elephant-mcp/compare/v1.2.1...v1.3.0) (2025-11-12)
+
+
+### Features
+
+* **schema:** filtering deprecated schema  ([#13](https://github.com/elephant-xyz/elephant-mcp/issues/13)) ([1dbf968](https://github.com/elephant-xyz/elephant-mcp/commit/1dbf968e1e80c1c0349285955fa73cb4dbd1d4b8))
+
 ## [1.2.1](https://github.com/elephant-xyz/elephant-mcp/compare/v1.2.0...v1.2.1) (2025-10-31)
 
 
