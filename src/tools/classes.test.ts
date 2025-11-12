@@ -61,7 +61,9 @@ describe("listPropertiesByClassNameHandler", () => {
       "id",
     ]);
     expect(
-      resultData.properties.find((p: { key: string }) => p.key === "deprecatedField"),
+      resultData.properties.find(
+        (p: { key: string }) => p.key === "deprecatedField",
+      ),
     ).toBeUndefined();
   });
 
@@ -182,7 +184,10 @@ describe("getPropertySchemaByClassNameHandler", () => {
 
     mockGetJsonByCid.mockResolvedValue(schema);
 
-    const result = await getPropertySchemaByClassNameHandler("property", "status");
+    const result = await getPropertySchemaByClassNameHandler(
+      "property",
+      "status",
+    );
     const resultData = JSON.parse(result.content[0].text);
 
     expect(resultData.schema.enum).toEqual(["active", "pending", "inactive"]);
@@ -203,7 +208,10 @@ describe("getPropertySchemaByClassNameHandler", () => {
 
     mockGetJsonByCid.mockResolvedValue(schema);
 
-    const result = await getPropertySchemaByClassNameHandler("property", "type");
+    const result = await getPropertySchemaByClassNameHandler(
+      "property",
+      "type",
+    );
     const resultData = JSON.parse(result.content[0].text);
 
     expect(resultData.schema.enum).toEqual(["type1", "type2", "type3"]);
@@ -247,7 +255,10 @@ describe("getPropertySchemaByClassNameHandler", () => {
 
     mockGetJsonByCid.mockResolvedValue(schema);
 
-    const result = await getPropertySchemaByClassNameHandler("property", "name");
+    const result = await getPropertySchemaByClassNameHandler(
+      "property",
+      "name",
+    );
     const resultData = JSON.parse(result.content[0].text);
 
     expect(resultData.schema).toEqual({
@@ -274,4 +285,3 @@ describe("getPropertySchemaByClassNameHandler", () => {
     expect(resultData.schema.enum).toEqual(["value1", "value2"]);
   });
 });
-

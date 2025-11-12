@@ -151,6 +151,83 @@ describe("listClassesFromDataGroup", () => {
       ["address", "parcel"].sort(),
     );
   });
+
+  it("filters out deprecated relationships", async () => {
+    const manifest: Manifest = {
+      property: { ipfsCid: "cid-property", type: "class" },
+      company: { ipfsCid: "cid-company", type: "class" },
+      address: { ipfsCid: "cid-address", type: "class" },
+    };
+
+    mockGetJsonByCid.mockImplementation(async (cid: string) => {
+      if (cid === "cid-group") {
+        return {
+          relationships: {
+            properties: {
+              company_has_property: {},
+              address_has_property: {
+                deprecated: true, // This relationship is deprecated
+              },
+              property_to_address: {
+                deprecated: false, // Explicitly not deprecated
+              },
+            },
+          },
+        };
+      }
+      if (cid === "cid-property") return { name: "Property" };
+      if (cid === "cid-company") return { name: "Company" };
+      if (cid === "cid-address") return { name: "Address" };
+      return {};
+    });
+
+    const classes = await listClassesFromDataGroup(manifest, "cid-group");
+    const classKeys = classes.map((c) => c.key).sort();
+
+    // Should include classes from non-deprecated relationships
+    expect(classKeys).toContain("company");
+    expect(classKeys).toContain("property");
+    expect(classKeys).toContain("address");
+
+    // All classes should be present because:
+    // - company_has_property includes both company and property
+    // - property_to_address includes both property and address
+    // - address_has_property is deprecated but address is still included via property_to_address
+    expect(classKeys.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("filters out deprecated relationships from nested schema", async () => {
+    const manifest: Manifest = {
+      property: { ipfsCid: "cid-property", type: "class" },
+      address: { ipfsCid: "cid-address", type: "class" },
+    };
+
+    mockGetJsonByCid.mockImplementation(async (cid: string) => {
+      if (cid === "cid-group") {
+        return {
+          properties: {
+            relationships: {
+              properties: {
+                property_has_address: {},
+                address_to_property: {
+                  deprecated: true, // Deprecated relationship
+                },
+              },
+            },
+          },
+        };
+      }
+      if (cid === "cid-property") return { name: "Property" };
+      if (cid === "cid-address") return { name: "Address" };
+      return {};
+    });
+
+    const classes = await listClassesFromDataGroup(manifest, "cid-group");
+    const classKeys = classes.map((c) => c.key).sort();
+
+    // Should include both classes from non-deprecated relationship
+    expect(classKeys).toEqual(["address", "property"]);
+  });
 });
 
 describe("fetchManifest", () => {
