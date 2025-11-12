@@ -55,6 +55,11 @@ export async function listPropertiesByClassNameHandler(className: string) {
     const addProps = (node: JsonSchemaNode | null | undefined) => {
       if (node?.properties) {
         for (const [key, prop] of Object.entries(node.properties)) {
+          // Skip deprecated properties
+          if (prop?.deprecated === true) {
+            continue;
+          }
+
           const description = prop?.description ?? null;
           // Prefer first found description; if not set yet or existing is null and new has value, set it
           if (!keyToDescription.has(key)) {
@@ -166,7 +171,34 @@ export async function getPropertySchemaByClassNameHandler(
       return createTextResult({ error: message });
     }
 
-    return createTextResult({ schema: propSchema });
+    // Check if the property itself is deprecated
+    if (propSchema.deprecated === true) {
+      const message = `Property '${propertyName}' is deprecated for class '${className}'.`;
+      logger.warn(message);
+      return createTextResult({ error: message });
+    }
+
+    // Filter out deprecated enum values
+    const filteredSchema = { ...propSchema };
+    if (
+      filteredSchema.deprecated_enum_values &&
+      Array.isArray(filteredSchema.enum)
+    ) {
+      const deprecatedValues = Array.isArray(
+        filteredSchema.deprecated_enum_values,
+      )
+        ? filteredSchema.deprecated_enum_values
+        : Object.keys(filteredSchema.deprecated_enum_values);
+
+      filteredSchema.enum = filteredSchema.enum.filter(
+        (value) => !deprecatedValues.includes(String(value)),
+      );
+
+      // Remove deprecated_enum_values from the returned schema
+      delete filteredSchema.deprecated_enum_values;
+    }
+
+    return createTextResult({ schema: filteredSchema });
   } catch (error) {
     logger.error("getPropertySchema failed", {
       className,

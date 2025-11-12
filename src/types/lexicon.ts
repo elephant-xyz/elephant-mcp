@@ -13,6 +13,9 @@ export interface JsonSchemaNode extends Record<string, unknown> {
   oneOf?: JsonSchemaNode[];
   allOf?: JsonSchemaNode[];
   anyOf?: JsonSchemaNode[];
+  deprecated?: boolean;
+  deprecated_enum_values?: string[] | Record<string, unknown>;
+  enum?: unknown[];
 }
 
 export interface DataGroupSchema extends JsonSchemaNode {

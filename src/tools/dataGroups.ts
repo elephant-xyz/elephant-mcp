@@ -61,7 +61,12 @@ export async function listClassesFromDataGroup(
     {};
   const candidate = new Set<string>();
 
-  for (const key of Object.keys(properties)) {
+  for (const [key, relSchema] of Object.entries(properties)) {
+    // Skip deprecated relationships
+    if (relSchema?.deprecated === true) {
+      continue;
+    }
+
     const pair = extractClassPairs(key);
     if (!pair) continue;
     const [a, b] = pair;
