@@ -120,6 +120,8 @@ The stdio transport means no port or server identity flags are required. Optiona
 
 - `LOG_LEVEL` – Pino log level (`error`, `warn`, `info`, `debug`; defaults to `info`).
 
+Zod compatibility note: this server and its dependencies require **zod v3**. Installs will fail if a v4 copy is hoisted into `node_modules`; the `postinstall` script enforces the v3 constraint to avoid runtime errors such as `keyValidator._parse is not a function`.
+
 ## Need to Contribute?
 
 Development setup, testing, and release workflows live in [`CONTRIBUTING.md`](CONTRIBUTING.md).
