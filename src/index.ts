@@ -2,6 +2,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import fs from "fs";
 import packageJson from "../package.json";
 import { logger } from "./logger.ts";
 import { listClassesByDataGroupHandler } from "./tools/dataGroups.ts";
@@ -32,6 +33,7 @@ const getServer = () => {
       capabilities: {
         // Enable MCP logging capability so clients can receive server logs
         logging: {},
+        prompts: {},
       },
     },
   );
@@ -59,16 +61,23 @@ const getServer = () => {
     {
       title: "List properties by class name",
       description:
-        "Lists JSON Schema property names for an Elephant class (excludes source_http_request)",
+        "Lists JSON Schema property names for an Elephant class (excludes source_http_request). Set withTypes=true to include full JSON Schema per property.",
       inputSchema: {
         className: z
           .string()
           .min(1, "className is required")
           .describe("The class name, case-insensitive"),
+        withTypes: z
+          .boolean()
+          .optional()
+          .default(false)
+          .describe(
+            "When true, include full JSON Schema for each property (type, enum, pattern, etc.)",
+          ),
       },
     },
-    async (args: { className: string }) => {
-      return listPropertiesByClassNameHandler(args.className);
+    async (args: { className: string; withTypes?: boolean }) => {
+      return listPropertiesByClassNameHandler(args.className, args.withTypes);
     },
   );
 
@@ -122,6 +131,68 @@ const getServer = () => {
     async (args: { query: string; topK?: number }) => {
       return transformExamplesHandler(args.query, args.topK);
     },
+  );
+
+  // Load externalized prompt content from markdown files
+  const PROMPTS_BASE_DIR = path.join(process.cwd(), "prompts", "create_transform");
+  const readPromptText = (fileName: string, fallback: string): string => {
+    try {
+      const fullPath = path.join(PROMPTS_BASE_DIR, fileName);
+      return fs.readFileSync(fullPath, "utf8");
+    } catch (error) {
+      logger.warn(
+        {
+          fileName,
+          dir: PROMPTS_BASE_DIR,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        "Failed to read prompt file; using fallback content",
+      );
+      return fallback;
+    }
+  };
+
+  server.registerPrompt(
+    "generate_transform",
+    {
+      title: "GenerateTransformScripts",
+      description:
+        "Multi-step flow to gather inputs and generate data_extractor.js using MCP tools",
+    },
+    () => ({
+      messages: [
+        {
+          role: "assistant",
+          content: {
+            type: "text",
+            text: readPromptText(
+              "01_assistant_intro.md",
+              "To get started, please provide:\n\n1) Where are the input HTML examples located? (absolute path, URL, or glob)\n2) Which Elephant data group should we map? (case-insensitive name)\n3) Do you have a data dictionary with additional information about possible values and/or enums? If yes, please share its path/URL or paste the relevant details.",
+            ),
+          },
+        },
+        {
+          role: "assistant",
+          content: {
+            type: "text",
+            text: readPromptText(
+              "02_assistant_instructions.md",
+              "You are a senior data engineer. Use the available Elephant MCP tools to complete this task.\n\n- Fetch all classes for the specified data group using the 'listClassesByDataGroup' tool.\n- Assume every object defined by the schema is present in the input HTML; attempt to match and extract all of them.\n- Consult examples with the 'getVerifiedScriptExamples' tool when you need patterns for specific mappings.\n- Use only the 'cheerio' library for HTML parsing/manipulation; do not use any other third-party libraries.\n- Be explicit about assumptions and cover all classes discovered.\n\nRequired Output Files\n\nCreate the following files as part of the solution (produce an empty file if a file is not applicable to the chosen schema):\n- data_extractor.js\n- layoutMapping.js\n- ownerMapping.js\n- structureMapping.js\n- utilityMapping.js\n\nOutput Specification\n\nFor each property, generate these files inside the {data_dir} directory:\n- property.json (This is required for the property data extraction)\n- address.json (copy unnormalized_address OR individual address fields from address content; DO NOT extract from HTML)\n- lot.json\n- tax_*.json\n- flood_storm_information.json\n- sales_*.json\n- deed_*.json\n- file_*.json\n- person_*.json or company_*.json (never both; non-applicable type is null)\n- structure.json, utility.json, layout_*.json\n- relationship_sales_person.json and relationship_sales_company.json (according to owner/sales relationships)\n- relationship_deed_file.json and relationship_sales_deed.json (according to deed relationships)",
+            ),
+          },
+        },
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: readPromptText(
+              "03_user_task.md",
+              "After I answer the two questions, generate 'data_extractor.js' that: (1) uses robust HTML parsing, (2) enumerates schema classes from the chosen data group, (3) attempts to extract instances for each class and map properties, and (4) leverages 'getVerifiedScriptExamples' for mapping guidance when needed.",
+            ),
+          },
+        },
+      ],
+    }),
   );
 
   return server;
