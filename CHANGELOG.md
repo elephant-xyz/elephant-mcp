@@ -1,3 +1,12 @@
+## [1.3.1](https://github.com/elephant-xyz/elephant-mcp/compare/v1.3.0...v1.3.1) (2025-11-20)
+
+
+### Bug Fixes
+
+* dumo zod-to-json-schema ([#14](https://github.com/elephant-xyz/elephant-mcp/issues/14)) ([abfcb52](https://github.com/elephant-xyz/elephant-mcp/commit/abfcb52fb15838d1caafa64c4bf43c698439e357))
+* fix zod version ([bfb603d](https://github.com/elephant-xyz/elephant-mcp/commit/bfb603d8adb948b69328c364134dc55790331db1))
+* override zod version ([#15](https://github.com/elephant-xyz/elephant-mcp/issues/15)) ([87b58b2](https://github.com/elephant-xyz/elephant-mcp/commit/87b58b2704fe4706366587a761d55db3f888c1e7))
+
 ## [1.3.1](https://github.com/elephant-xyz/elephant-mcp/compare/v1.3.0...v1.3.1) (2025-11-19)
 
 

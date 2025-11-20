@@ -83,11 +83,23 @@
   },
   "overrides": {
     "zod": "^3.25.76",
-    "@ai-sdk/openai": { "zod": "^3.25.76" },
-    "@ai-sdk/gateway": { "zod": "^3.25.76" },
-    "@ai-sdk/provider-utils": { "zod": "^3.25.76" },
-    "ai": { "zod": "^3.25.76" },
-    "@modelcontextprotocol/sdk": { "zod": "^3.25.76" },
-    "zod-to-json-schema": { "zod": "^3.25.76" }
+    "@ai-sdk/openai": {
+      "zod": "^3.25.76"
+    },
+    "@ai-sdk/gateway": {
+      "zod": "^3.25.76"
+    },
+    "@ai-sdk/provider-utils": {
+      "zod": "^3.25.76"
+    },
+    "ai": {
+      "zod": "^3.25.76"
+    },
+    "@modelcontextprotocol/sdk": {
+      "zod": "^3.25.76"
+    },
+    "zod-to-json-schema": {
+      "zod": "^3.25.76"
+    }
   }
 }
