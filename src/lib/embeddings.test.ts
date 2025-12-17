@@ -55,6 +55,9 @@ describe("embedText", () => {
     expect(embed).toHaveBeenCalledWith({
       model: "mocked-openai-model",
       value: "test text",
+      providerOptions: {
+        openai: { dimensions: EMBEDDING_DIM },
+      },
     });
   });
 
@@ -146,6 +149,9 @@ describe("embedManyTexts", () => {
     expect(embedMany).toHaveBeenCalledWith({
       model: "mocked-openai-model",
       values: inputTexts,
+      providerOptions: {
+        openai: { dimensions: EMBEDDING_DIM },
+      },
     });
   });
 
@@ -279,6 +285,9 @@ describe("embedding provider selection", () => {
     expect(embed).toHaveBeenCalledWith({
       model: "mocked-bedrock-model",
       value: "test text",
+      providerOptions: {
+        openai: { dimensions: EMBEDDING_DIM },
+      },
     });
   });
 });

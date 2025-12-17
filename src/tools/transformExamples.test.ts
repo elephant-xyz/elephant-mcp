@@ -46,7 +46,7 @@ describe("transformExamplesHandler", () => {
 
   describe("successful search", () => {
     const mockDb = {} as ReturnType<typeof connectionRef.getDbInstance>;
-    const mockEmbedding = Array.from({ length: 1536 }, (_, i) => i / 1536);
+    const mockEmbedding = Array.from({ length: 1024 }, (_, i) => i / 1024);
 
     beforeEach(() => {
       vi.mocked(connectionRef.getDbInstance).mockReturnValue(mockDb);
@@ -154,7 +154,7 @@ describe("transformExamplesHandler", () => {
 
   describe("error handling", () => {
     const mockDb = {} as ReturnType<typeof connectionRef.getDbInstance>;
-    const mockEmbedding = Array.from({ length: 1536 }, (_, i) => i / 1536);
+    const mockEmbedding = Array.from({ length: 1024 }, (_, i) => i / 1024);
 
     beforeEach(() => {
       vi.mocked(connectionRef.getDbInstance).mockReturnValue(mockDb);

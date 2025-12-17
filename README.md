@@ -3,8 +3,8 @@
 Elephant MCP connects Claude-compatible clients to the Elephant data graph, exposing discoverable tools for listing data groups, classes, and individual property schemas. The server is published on npm as `@elephant-xyz/mcp`.
 
 > **Embedding Provider:** The `getVerifiedScriptExamples` tool uses text embeddings for semantic code search. The server supports two embedding providers:
-> - **OpenAI** (preferred when `OPENAI_API_KEY` is set) - Uses `text-embedding-3-small`
-> - **AWS Bedrock** (automatic fallback) - Uses `amazon.titan-embed-text-v1` via IAM authentication
+> - **OpenAI** (preferred when `OPENAI_API_KEY` is set) - Uses `text-embedding-3-small` with 1024 dimensions
+> - **AWS Bedrock** (automatic fallback) - Uses `amazon.titan-embed-text-v2` via IAM authentication
 >
 > When running on AWS, the server automatically uses Bedrock if no OpenAI key is provided.
 
@@ -175,7 +175,7 @@ When using AWS Bedrock (no `OPENAI_API_KEY` set), the server authenticates using
 2. Shared credentials file (`~/.aws/credentials`)
 3. IAM instance role (when running on EC2/ECS/Lambda)
 
-Ensure your IAM role or user has permissions for `bedrock:InvokeModel` on the `amazon.titan-embed-text-v1` model.
+Ensure your IAM role or user has permissions for `bedrock:InvokeModel` on the `amazon.titan-embed-text-v2` model.
 
 Zod compatibility note: this server and its dependencies require **zod v3**. Installs will fail if a v4 copy is hoisted into `node_modules`; the `postinstall` script enforces the v3 constraint to avoid runtime errors such as `keyValidator._parse is not a function`.
 

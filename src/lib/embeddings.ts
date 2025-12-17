@@ -3,12 +3,14 @@ import { openai } from "@ai-sdk/openai";
 import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
 import { getEmbeddingProvider, getConfig } from "../config.ts";
 
-// Both OpenAI text-embedding-3-small and Amazon Titan Embed Text v1 use 1536 dimensions
-export const EMBEDDING_DIM = 1536;
+// Both providers are configured to output 1024 dimensions
+// OpenAI text-embedding-3-small supports custom dimensions via API parameter
+// Amazon Titan Embed Text V2 outputs 1024 dimensions by default
+export const EMBEDDING_DIM = 1024;
 
 // Model IDs
 const OPENAI_EMBEDDING_MODEL = "text-embedding-3-small";
-const BEDROCK_EMBEDDING_MODEL = "amazon.titan-embed-text-v1";
+const BEDROCK_EMBEDDING_MODEL = "amazon.titan-embed-text-v2:0";
 
 // Cached Bedrock client (lazy-initialized to avoid issues if AWS_REGION isn't set at import time)
 let cachedBedrockClient: ReturnType<typeof createAmazonBedrock> | null = null;
@@ -51,6 +53,9 @@ export async function embedText(text: string): Promise<number[]> {
     const result = await embed({
       model: getEmbeddingModel(),
       value: text,
+      providerOptions: {
+        openai: { dimensions: EMBEDDING_DIM },
+      },
     });
     if (result.embedding.length !== EMBEDDING_DIM) {
       throw new Error(
@@ -81,6 +86,9 @@ export async function embedManyTexts(
     const embeddings = await embedMany({
       model: getEmbeddingModel(),
       values: texts,
+      providerOptions: {
+        openai: { dimensions: EMBEDDING_DIM },
+      },
     });
 
     if (embeddings.embeddings.length !== texts.length) {
