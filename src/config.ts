@@ -2,6 +2,7 @@ import { z } from "zod";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { fromNodeProviderChain } from "@aws-sdk/credential-providers";
 
 const configSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("production"),
@@ -45,15 +46,16 @@ export function isDevelopment(): boolean {
 }
 
 /**
- * Checks if AWS credentials appear to be available.
- * This is a best-effort detection - actual permissions are validated at runtime.
+ * Checks if AWS credentials appear to be available (sync, fast check).
+ * This is a best-effort detection based on environment variables and files.
+ * For actual credential validation, use verifyAwsCredentials().
  *
  * AWS credentials can come from:
  * 1. Environment variables (AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY)
  * 2. Shared credentials file (~/.aws/credentials)
  * 3. AWS profile (AWS_PROFILE env var with credentials file)
  * 4. ECS container credentials (AWS_CONTAINER_CREDENTIALS_*)
- * 5. EC2 instance metadata (IAM role) - always available on EC2/ECS/Lambda unless disabled
+ * 5. EC2 instance metadata (IAM role) - requires async verification
  */
 export function hasAwsCredentials(): boolean {
   const cfg = getConfig();
@@ -86,19 +88,64 @@ export function hasAwsCredentials(): boolean {
     return true;
   }
 
-  // EC2 metadata service is available by default on AWS compute
-  // Only explicitly disabled if AWS_EC2_METADATA_DISABLED=true
-  if (cfg.AWS_EC2_METADATA_DISABLED !== "true") {
-    // We can't reliably detect if we're on EC2/ECS/Lambda without network call
-    // So we don't assume it's available unless other indicators are present
-  }
-
   return false;
 }
 
 /**
- * Checks if at least one embedding provider is configured.
- * Returns true if either OpenAI API key or AWS credentials are available.
+ * Verifies AWS credentials by actually resolving them through the credential provider chain.
+ * This is more accurate than hasAwsCredentials() as it:
+ * - Validates that credentials can actually be loaded
+ * - Detects EC2/ECS/Lambda IAM roles via metadata service
+ * - Returns the credential source for logging
+ *
+ * Note: This may take up to ~1s if EC2 metadata service times out.
+ */
+export async function verifyAwsCredentials(): Promise<{
+  valid: boolean;
+  source?: string;
+  error?: string;
+}> {
+  try {
+    const credentialProvider = fromNodeProviderChain();
+    const credentials = await credentialProvider();
+
+    // Determine the source based on available indicators
+    const cfg = getConfig();
+    let source = "AWS credential provider chain";
+
+    if (cfg.AWS_ACCESS_KEY_ID && cfg.AWS_SECRET_ACCESS_KEY) {
+      source = "environment variables";
+    } else if (
+      cfg.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI ||
+      cfg.AWS_CONTAINER_CREDENTIALS_FULL_URI
+    ) {
+      source = "container credentials (ECS/Lambda)";
+    } else if (cfg.AWS_PROFILE) {
+      source = `profile: ${cfg.AWS_PROFILE}`;
+    } else if (existsSync(join(homedir(), ".aws", "credentials"))) {
+      source = "shared credentials file";
+    } else {
+      // Likely EC2 instance metadata or other chain source
+      source = "instance metadata (IAM role)";
+    }
+
+    // Check if credentials have required fields
+    if (credentials.accessKeyId && credentials.secretAccessKey) {
+      return { valid: true, source };
+    }
+
+    return { valid: false, error: "Credentials missing required fields" };
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    return { valid: false, error: errorMessage };
+  }
+}
+
+/**
+ * Checks if at least one embedding provider is configured (sync, fast check).
+ * Returns true if either OpenAI API key or AWS credentials appear to be available.
+ * For actual validation, use verifyEmbeddingProvider().
  */
 export function hasEmbeddingProvider(): boolean {
   const cfg = getConfig();
@@ -114,6 +161,48 @@ export function hasEmbeddingProvider(): boolean {
   }
 
   return false;
+}
+
+/**
+ * Verifies that at least one embedding provider is properly configured.
+ * This performs actual credential validation for AWS Bedrock.
+ *
+ * Returns details about the available provider or error information.
+ */
+export async function verifyEmbeddingProvider(): Promise<{
+  available: boolean;
+  provider?: "openai" | "bedrock";
+  source?: string;
+  error?: string;
+}> {
+  const cfg = getConfig();
+
+  // OpenAI is available if API key is set (no async validation needed)
+  if (cfg.OPENAI_API_KEY) {
+    return {
+      available: true,
+      provider: "openai",
+      source: "OPENAI_API_KEY environment variable",
+    };
+  }
+
+  // Try to verify AWS credentials
+  const awsResult = await verifyAwsCredentials();
+  if (awsResult.valid) {
+    return {
+      available: true,
+      provider: "bedrock",
+      source: `AWS Bedrock (${awsResult.source})`,
+    };
+  }
+
+  // No provider available
+  return {
+    available: false,
+    error:
+      awsResult.error ||
+      "No embedding provider configured. Set OPENAI_API_KEY or configure AWS credentials.",
+  };
 }
 
 export type EmbeddingProvider = "openai" | "bedrock";

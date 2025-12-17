@@ -8,6 +8,12 @@ vi.mock("node:fs", () => ({
   existsSync: vi.fn(),
 }));
 
+// Mock AWS credential provider
+const mockCredentialProvider = vi.fn();
+vi.mock("@aws-sdk/credential-providers", () => ({
+  fromNodeProviderChain: () => mockCredentialProvider,
+}));
+
 // Store original env
 const originalEnv = { ...process.env };
 
@@ -228,6 +234,162 @@ describe("config", () => {
       const { getEmbeddingProviderDescription } = await resetConfigModule();
 
       expect(getEmbeddingProviderDescription()).toBe("None configured");
+    });
+  });
+
+  describe("verifyAwsCredentials", () => {
+    it("should return valid with source when credentials resolve successfully", async () => {
+      process.env.AWS_ACCESS_KEY_ID = "AKIAIOSFODNN7EXAMPLE";
+      process.env.AWS_SECRET_ACCESS_KEY = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+      mockCredentialProvider.mockResolvedValue({
+        accessKeyId: "AKIAIOSFODNN7EXAMPLE",
+        secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+      });
+      vi.mocked(existsSync).mockReturnValue(false);
+
+      const { verifyAwsCredentials } = await resetConfigModule();
+      const result = await verifyAwsCredentials();
+
+      expect(result.valid).toBe(true);
+      expect(result.source).toBe("environment variables");
+    });
+
+    it("should return valid with container credentials source", async () => {
+      process.env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI =
+        "/v2/credentials/uuid";
+      mockCredentialProvider.mockResolvedValue({
+        accessKeyId: "AKIAIOSFODNN7EXAMPLE",
+        secretAccessKey: "secret",
+      });
+      vi.mocked(existsSync).mockReturnValue(false);
+
+      const { verifyAwsCredentials } = await resetConfigModule();
+      const result = await verifyAwsCredentials();
+
+      expect(result.valid).toBe(true);
+      expect(result.source).toBe("container credentials (ECS/Lambda)");
+    });
+
+    it("should return valid with profile source", async () => {
+      process.env.AWS_PROFILE = "my-profile";
+      mockCredentialProvider.mockResolvedValue({
+        accessKeyId: "AKIAIOSFODNN7EXAMPLE",
+        secretAccessKey: "secret",
+      });
+      vi.mocked(existsSync).mockReturnValue(false);
+
+      const { verifyAwsCredentials } = await resetConfigModule();
+      const result = await verifyAwsCredentials();
+
+      expect(result.valid).toBe(true);
+      expect(result.source).toBe("profile: my-profile");
+    });
+
+    it("should return valid with shared credentials file source", async () => {
+      mockCredentialProvider.mockResolvedValue({
+        accessKeyId: "AKIAIOSFODNN7EXAMPLE",
+        secretAccessKey: "secret",
+      });
+      vi.mocked(existsSync).mockReturnValue(true);
+
+      const { verifyAwsCredentials } = await resetConfigModule();
+      const result = await verifyAwsCredentials();
+
+      expect(result.valid).toBe(true);
+      expect(result.source).toBe("shared credentials file");
+    });
+
+    it("should return valid with instance metadata source when no other indicators", async () => {
+      mockCredentialProvider.mockResolvedValue({
+        accessKeyId: "AKIAIOSFODNN7EXAMPLE",
+        secretAccessKey: "secret",
+      });
+      vi.mocked(existsSync).mockReturnValue(false);
+
+      const { verifyAwsCredentials } = await resetConfigModule();
+      const result = await verifyAwsCredentials();
+
+      expect(result.valid).toBe(true);
+      expect(result.source).toBe("instance metadata (IAM role)");
+    });
+
+    it("should return invalid with error when credentials fail to resolve", async () => {
+      mockCredentialProvider.mockRejectedValue(
+        new Error("Could not load credentials from any providers"),
+      );
+      vi.mocked(existsSync).mockReturnValue(false);
+
+      const { verifyAwsCredentials } = await resetConfigModule();
+      const result = await verifyAwsCredentials();
+
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain("Could not load credentials");
+    });
+
+    it("should return invalid when credentials missing required fields", async () => {
+      mockCredentialProvider.mockResolvedValue({});
+      vi.mocked(existsSync).mockReturnValue(false);
+
+      const { verifyAwsCredentials } = await resetConfigModule();
+      const result = await verifyAwsCredentials();
+
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain("missing required fields");
+    });
+  });
+
+  describe("verifyEmbeddingProvider", () => {
+    it("should return OpenAI when API key is set", async () => {
+      process.env.OPENAI_API_KEY = "sk-test-key";
+
+      const { verifyEmbeddingProvider } = await resetConfigModule();
+      const result = await verifyEmbeddingProvider();
+
+      expect(result.available).toBe(true);
+      expect(result.provider).toBe("openai");
+      expect(result.source).toBe("OPENAI_API_KEY environment variable");
+    });
+
+    it("should return Bedrock when AWS credentials are valid", async () => {
+      mockCredentialProvider.mockResolvedValue({
+        accessKeyId: "AKIAIOSFODNN7EXAMPLE",
+        secretAccessKey: "secret",
+      });
+      vi.mocked(existsSync).mockReturnValue(true);
+
+      const { verifyEmbeddingProvider } = await resetConfigModule();
+      const result = await verifyEmbeddingProvider();
+
+      expect(result.available).toBe(true);
+      expect(result.provider).toBe("bedrock");
+      expect(result.source).toContain("AWS Bedrock");
+    });
+
+    it("should return not available when no provider is configured", async () => {
+      mockCredentialProvider.mockRejectedValue(
+        new Error("Could not load credentials"),
+      );
+      vi.mocked(existsSync).mockReturnValue(false);
+
+      const { verifyEmbeddingProvider } = await resetConfigModule();
+      const result = await verifyEmbeddingProvider();
+
+      expect(result.available).toBe(false);
+      expect(result.error).toBeDefined();
+    });
+
+    it("should prefer OpenAI over Bedrock", async () => {
+      process.env.OPENAI_API_KEY = "sk-test-key";
+      process.env.AWS_ACCESS_KEY_ID = "AKIAIOSFODNN7EXAMPLE";
+      process.env.AWS_SECRET_ACCESS_KEY = "secret";
+
+      const { verifyEmbeddingProvider } = await resetConfigModule();
+      const result = await verifyEmbeddingProvider();
+
+      expect(result.available).toBe(true);
+      expect(result.provider).toBe("openai");
+      // AWS credentials should not even be checked
+      expect(mockCredentialProvider).not.toHaveBeenCalled();
     });
   });
 });
