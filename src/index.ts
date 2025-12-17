@@ -158,8 +158,14 @@ async function main() {
   // Ensure the database is initialized before accepting any tool calls
   const dataDir = getDefaultDataDir();
   const dbPath = path.join(dataDir, "db", "elephant-mcp.sqlite");
-  const { db } = await initializeDatabase(dbPath);
+  const { db, dimensionMismatchRebuild } = await initializeDatabase(dbPath);
   setDbInstance(db);
+
+  if (dimensionMismatchRebuild) {
+    logger.info(
+      "Database was rebuilt due to embedding dimension change - will re-index verified scripts",
+    );
+  }
 
   const server = getServer();
   serverRef = server;
@@ -181,16 +187,18 @@ async function main() {
             source: embeddingProviderResult.source,
           }
         : { error: embeddingProviderResult.error },
+      dimensionMismatchRebuild,
     },
   });
 
   // Kick off background indexing. Failures should not block MCP.
+  // Force full rescan if database was rebuilt due to dimension mismatch.
   (async () => {
     try {
       const clonePath = path.join(dataDir, "verified-scripts");
       const result = await indexVerifiedScripts(db, {
         clonePath,
-        fullRescan: false,
+        fullRescan: dimensionMismatchRebuild,
       });
 
       logger.info(

@@ -1,14 +1,79 @@
-import { createClient } from "@libsql/client";
+import { createClient, type Client } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
 import { migrate } from "drizzle-orm/libsql/migrator";
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { mkdir, readFile } from "node:fs/promises";
+import { mkdir, readFile, unlink } from "node:fs/promises";
 import { logger } from "../logger.js";
 import { fileURLToPath } from "node:url";
+import { EMBEDDING_DIM } from "../lib/embeddings.js";
+
+/**
+ * Check if the database has a dimension mismatch with the current embedding model.
+ * Returns the database dimension if found, or null if table doesn't exist or is empty.
+ */
+async function getDatabaseEmbeddingDimension(
+  client: Client,
+): Promise<number | null> {
+  try {
+    // Check table schema for the vector column type
+    const schemaResult = await client.execute(
+      "SELECT sql FROM sqlite_master WHERE type='table' AND name='functionEmbeddings'",
+    );
+
+    if (schemaResult.rows.length === 0) {
+      return null; // Table doesn't exist
+    }
+
+    const createSql = schemaResult.rows[0]?.sql as string | undefined;
+    if (!createSql) {
+      return null;
+    }
+
+    // Parse F32_BLOB(N) from the schema
+    const match = createSql.match(/F32_BLOB\((\d+)\)/i);
+    if (match && match[1]) {
+      return parseInt(match[1], 10);
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Check if the database needs to be rebuilt due to dimension mismatch.
+ */
+async function checkDimensionCompatibility(
+  client: Client,
+  dbPath: string,
+): Promise<{ compatible: boolean; dbDimension?: number }> {
+  const dbDimension = await getDatabaseEmbeddingDimension(client);
+
+  if (dbDimension === null) {
+    // No existing embeddings table, compatible
+    return { compatible: true };
+  }
+
+  if (dbDimension !== EMBEDDING_DIM) {
+    logger.warn(
+      {
+        dbDimension,
+        expectedDimension: EMBEDDING_DIM,
+        dbPath,
+      },
+      "Embedding dimension mismatch detected - database needs rebuild",
+    );
+    return { compatible: false, dbDimension };
+  }
+
+  return { compatible: true, dbDimension };
+}
 
 export async function initializeDatabase(dbPath: string) {
-  const isNewDatabase = !existsSync(dbPath);
+  let isNewDatabase = !existsSync(dbPath);
+  let dimensionMismatchRebuild = false;
 
   if (isNewDatabase) {
     logger.info({ dbPath }, "Database does not exist, creating new database");
@@ -18,6 +83,42 @@ export async function initializeDatabase(dbPath: string) {
     }
   } else {
     logger.info({ dbPath }, "Database exists, checking for pending migrations");
+
+    // Check for dimension mismatch before proceeding
+    const tempClient = createClient({ url: `file:${dbPath}` });
+    try {
+      const compatibility = await checkDimensionCompatibility(
+        tempClient,
+        dbPath,
+      );
+      if (!compatibility.compatible) {
+        logger.warn(
+          {
+            dbPath,
+            dbDimension: compatibility.dbDimension,
+            expectedDimension: EMBEDDING_DIM,
+          },
+          "Deleting database due to embedding dimension mismatch - will rebuild with correct dimensions",
+        );
+        tempClient.close();
+
+        // Delete the old database
+        await unlink(dbPath);
+        isNewDatabase = true;
+        dimensionMismatchRebuild = true;
+
+        // Ensure directory exists
+        const dir = path.dirname(dbPath);
+        if (!existsSync(dir)) {
+          await mkdir(dir, { recursive: true });
+        }
+      } else {
+        tempClient.close();
+      }
+    } catch (error) {
+      tempClient.close();
+      throw error;
+    }
   }
 
   const client = createClient({
@@ -100,5 +201,5 @@ export async function initializeDatabase(dbPath: string) {
     throw error;
   }
 
-  return { db, client, isNewDatabase };
+  return { db, client, isNewDatabase, dimensionMismatchRebuild };
 }
