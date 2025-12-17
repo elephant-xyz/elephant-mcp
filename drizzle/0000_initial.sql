@@ -9,7 +9,7 @@ CREATE TABLE `functionEmbeddings` (
   `id` integer PRIMARY KEY NOT NULL,
   `functionId` integer NOT NULL,
   `chunkIndex` integer NOT NULL,
-  `vector` F32_BLOB(1536) NOT NULL
+  `vector` F32_BLOB(1024) NOT NULL
 );
 --> statement-breakpoint
 CREATE INDEX `function_embeddings_vector_idx` ON `functionEmbeddings` (libsql_vector_idx("vector"));

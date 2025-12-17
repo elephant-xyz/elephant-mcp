@@ -3,8 +3,8 @@
 Elephant MCP connects Claude-compatible clients to the Elephant data graph, exposing discoverable tools for listing data groups, classes, and individual property schemas. The server is published on npm as `@elephant-xyz/mcp`.
 
 > **Embedding Provider:** The `getVerifiedScriptExamples` tool uses text embeddings for semantic code search. The server supports two embedding providers:
-> - **OpenAI** (preferred when `OPENAI_API_KEY` is set) - Uses `text-embedding-3-small` with 1536 dimensions
-> - **AWS Bedrock** (automatic fallback) - Uses `amazon.titan-embed-text-v1` via IAM authentication
+> - **OpenAI** (preferred when `OPENAI_API_KEY` is set) - Uses `text-embedding-3-small` with 1024 dimensions
+> - **AWS Bedrock** (automatic fallback) - Uses `amazon.titan-embed-text-v2` via IAM authentication
 >
 > When running on AWS, the server automatically uses Bedrock if no OpenAI key is provided.
 
@@ -176,7 +176,7 @@ When using AWS Bedrock (no `OPENAI_API_KEY` set), the server authenticates using
 3. ECS/Lambda container credentials (`AWS_CONTAINER_CREDENTIALS_*`)
 4. IAM instance role (when running on EC2/ECS/Lambda)
 
-Ensure your IAM role or user has permissions for `bedrock:InvokeModel` on the `amazon.titan-embed-text-v1` model.
+Ensure your IAM role or user has permissions for `bedrock:InvokeModel` on the `amazon.titan-embed-text-v2` model.
 
 **Important:** At least one embedding provider must be configured. If neither `OPENAI_API_KEY` nor AWS credentials are available, the `getVerifiedScriptExamples` tool will return an error prompting you to configure credentials.
 
