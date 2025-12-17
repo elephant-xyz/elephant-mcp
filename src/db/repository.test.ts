@@ -13,7 +13,7 @@ import {
 } from "./repository.js";
 import type { FunctionInput } from "./types.js";
 
-const VECTOR_DIMS = 1024;
+const VECTOR_DIMS = 1536;
 const createTestEmbedding = (): number[] => {
   return Array.from({ length: VECTOR_DIMS }, (_, i) => (i % 100) / 100);
 };

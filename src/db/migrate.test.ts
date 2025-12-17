@@ -143,7 +143,7 @@ describe("initializeDatabase", () => {
       }
 
       const testVector = Array.from(
-        { length: 1024 },
+        { length: 1536 },
         (_, i) => (i % 100) / 100,
       );
 
@@ -157,7 +157,7 @@ describe("initializeDatabase", () => {
       expect(embeddings[0]?.functionId).toBe(functionId);
 
       const retrievedVector = embeddings[0]?.embedding;
-      expect(retrievedVector).toHaveLength(1024);
+      expect(retrievedVector).toHaveLength(1536);
       expect(retrievedVector?.[0]).toBeCloseTo(testVector[0]!, 2);
       expect(retrievedVector?.[1]).toBeCloseTo(testVector[1]!, 2);
       expect(retrievedVector?.[2]).toBeCloseTo(testVector[2]!, 2);

@@ -11,7 +11,7 @@ import type {
   VectorSearchResult,
 } from "./types.js";
 
-const EMBEDDING_DIMENSION = 1024;
+const EMBEDDING_DIMENSION = 1536;
 
 export async function saveFunction(
   db: LibSQLDatabase,
