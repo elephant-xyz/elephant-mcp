@@ -180,6 +180,18 @@ Ensure your IAM role or user has permissions for `bedrock:InvokeModel` on the `a
 
 **Important:** At least one embedding provider must be configured. If neither `OPENAI_API_KEY` nor AWS credentials are available, the `getVerifiedScriptExamples` tool will return an error prompting you to configure credentials.
 
+### Credential Verification
+
+At startup, the server verifies embedding provider credentials:
+- For **OpenAI**: Checks that `OPENAI_API_KEY` is set
+- For **AWS Bedrock**: Resolves credentials through the full AWS credential provider chain and logs the detected source
+
+The verification result is logged and included in the MCP startup message for debugging.
+
+### Database Compatibility
+
+The embedding database is automatically rebuilt when switching between embedding models with different vector dimensions (e.g., switching from a 1536-dimension model to a 1024-dimension model). This ensures the `getVerifiedScriptExamples` tool works correctly after model changes. The server will re-index all verified scripts after a rebuild.
+
 Zod compatibility note: this server and its dependencies require **zod v3**. Installs will fail if a v4 copy is hoisted into `node_modules`; the `postinstall` script enforces the v3 constraint to avoid runtime errors such as `keyValidator._parse is not a function`.
 
 ## Need to Contribute?
