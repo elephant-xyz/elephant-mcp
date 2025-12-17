@@ -8,7 +8,7 @@ Elephant MCP connects Claude-compatible clients to the Elephant data graph, expo
 >
 > When running on AWS, the server automatically uses Bedrock if no OpenAI key is provided.
 
-## Prompt Recommendations
+## 🚀 Prompt Recommendations
 
 **For best results with Elephant MCP, always specify the Data Group you're working on in your prompts and add `use elephant mcp` at the end.**
 
