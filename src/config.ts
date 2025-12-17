@@ -59,6 +59,7 @@ export function isDevelopment(): boolean {
  */
 export function hasAwsCredentials(): boolean {
   const cfg = getConfig();
+  const credentialsPath = join(homedir(), ".aws", "credentials");
 
   // Check explicit environment credentials
   if (cfg.AWS_ACCESS_KEY_ID && cfg.AWS_SECRET_ACCESS_KEY) {
@@ -74,17 +75,12 @@ export function hasAwsCredentials(): boolean {
   }
 
   // Check for AWS profile (which references credentials file)
-  if (cfg.AWS_PROFILE) {
-    // Profile is set, check if credentials file exists
-    const credentialsPath = join(homedir(), ".aws", "credentials");
-    if (existsSync(credentialsPath)) {
-      return true;
-    }
+  if (cfg.AWS_PROFILE && existsSync(credentialsPath)) {
+    return true;
   }
 
   // Check for default credentials file (default profile)
-  const defaultCredentialsPath = join(homedir(), ".aws", "credentials");
-  if (existsSync(defaultCredentialsPath)) {
+  if (existsSync(credentialsPath)) {
     return true;
   }
 

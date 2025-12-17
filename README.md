@@ -176,7 +176,7 @@ When using AWS Bedrock (no `OPENAI_API_KEY` set), the server authenticates using
 3. ECS/Lambda container credentials (`AWS_CONTAINER_CREDENTIALS_*`)
 4. IAM instance role (when running on EC2/ECS/Lambda)
 
-Ensure your IAM role or user has permissions for `bedrock:InvokeModel` on the `amazon.titan-embed-text-v2` model.
+Ensure your IAM role or user has the `bedrock:InvokeModel` permission and access to the `amazon.titan-embed-text-v2:0` embedding model in the configured `AWS_REGION`. In some regions, you must explicitly request access to this model in the AWS Bedrock Console before it can be invoked.
 
 **Important:** At least one embedding provider must be configured. If neither `OPENAI_API_KEY` nor AWS credentials are available, the `getVerifiedScriptExamples` tool will return an error prompting you to configure credentials.
 

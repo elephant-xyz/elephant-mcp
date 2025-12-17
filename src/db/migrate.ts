@@ -116,7 +116,11 @@ export async function initializeDatabase(dbPath: string) {
         tempClient.close();
       }
     } catch (error) {
-      tempClient.close();
+      try {
+        tempClient.close();
+      } catch {
+        // Ignore close errors to preserve original error
+      }
       throw error;
     }
   }
