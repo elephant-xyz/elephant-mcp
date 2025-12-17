@@ -65,6 +65,7 @@
   "dependencies": {
     "@ai-sdk/amazon-bedrock": "^3.0.67",
     "@ai-sdk/openai": "^2.0.53",
+    "@aws-sdk/credential-providers": "^3.0.0",
     "@helia/json": "^4.0.0",
     "@libsql/client": "^0.15.15",
     "@modelcontextprotocol/sdk": "^1.20.0",

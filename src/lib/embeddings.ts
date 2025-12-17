@@ -1,6 +1,7 @@
 import { embedMany, embed } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
+import { fromNodeProviderChain } from "@aws-sdk/credential-providers";
 import { getEmbeddingProvider, getConfig } from "../config.ts";
 
 // Both providers output 1536 dimensions
@@ -19,6 +20,9 @@ function getBedrockClient() {
   if (!cachedBedrockClient) {
     cachedBedrockClient = createAmazonBedrock({
       region: getConfig().AWS_REGION,
+      // Use AWS credential provider chain for proper credential handling
+      // in container/ECS/Lambda/EC2 environments with IAM roles
+      credentialProvider: fromNodeProviderChain(),
     });
   }
   return cachedBedrockClient;

@@ -64,9 +64,13 @@ export async function transformExamplesHandler(text: string, topK?: number) {
     ) {
       return createTextResult({
         error: `Embedding provider authentication failed (${providerDescription}). Check your credentials and permissions.`,
+        details: errorMessage,
       });
     }
 
-    return createTextResult({ error: "Failed to transform examples" });
+    return createTextResult({
+      error: "Failed to transform examples",
+      details: errorMessage,
+    });
   }
 }
