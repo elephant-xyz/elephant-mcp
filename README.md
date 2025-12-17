@@ -2,7 +2,7 @@
 
 Elephant MCP connects Claude-compatible clients to the Elephant data graph, exposing discoverable tools for listing data groups, classes, and individual property schemas. The server is published on npm as `@elephant-xyz/mcp`.
 
-> **Embedding Provider:** The `getVerifiedScriptExamples` tool uses text embeddings for semantic code search. The server uses **AWS Bedrock** with `amazon.titan-embed-text-v1` via IAM authentication.
+> **Embedding Provider:** The `getVerifiedScriptExamples` tool uses text embeddings for semantic code search. The server uses **AWS Bedrock** with `amazon.titan-embed-text-v2:0` via IAM authentication.
 
 ## 🚀 Prompt Recommendations
 
@@ -131,7 +131,7 @@ The server authenticates using the standard AWS credential chain:
 3. ECS/Lambda container credentials (`AWS_CONTAINER_CREDENTIALS_*`)
 4. IAM instance role (when running on EC2/ECS/Lambda)
 
-Ensure your IAM role or user has permissions for `bedrock:InvokeModel` on the `amazon.titan-embed-text-v1` model.
+Ensure your IAM role or user has permissions for `bedrock:InvokeModel` on the `amazon.titan-embed-text-v2:0` model.
 
 **Important:** AWS credentials must be configured for the `getVerifiedScriptExamples` tool to work. If AWS credentials are not available, the tool will return an error prompting you to configure credentials.
 
