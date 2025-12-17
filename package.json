@@ -58,11 +58,15 @@
     "globals": "^16.4.0",
     "prettier": "^3.0.0",
     "semantic-release": "^24.0.0",
+    "tree-sitter-cli": "^0.26.3",
+    "tree-sitter-javascript": "^0.25.0",
+    "tree-sitter-wasm-prebuilt": "^0.0.3",
     "typescript": "^5.9.3",
     "vite": "^7.1.9",
     "vitest": "^3.2.4"
   },
   "dependencies": {
+    "@ai-sdk/amazon-bedrock": "^3.0.67",
     "@ai-sdk/openai": "^2.0.53",
     "@helia/json": "^4.0.0",
     "@libsql/client": "^0.15.15",
@@ -77,13 +81,15 @@
     "simple-git": "^3.28.0",
     "terser": "^5.44.0",
     "tree-sitter": "^0.25.0",
-    "tree-sitter-javascript": "^0.25.0",
     "zod": "^3.25.76",
     "zod-to-json-schema": "^3.22.3"
   },
   "overrides": {
     "zod": "^3.25.76",
     "@ai-sdk/openai": {
+      "zod": "^3.25.76"
+    },
+    "@ai-sdk/amazon-bedrock": {
       "zod": "^3.25.76"
     },
     "@ai-sdk/gateway": {

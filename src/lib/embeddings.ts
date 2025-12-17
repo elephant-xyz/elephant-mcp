@@ -1,12 +1,36 @@
 import { embedMany, embed } from "ai";
 import { openai } from "@ai-sdk/openai";
+import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
+import { getEmbeddingProvider, getConfig } from "../config.ts";
 
-export const EMBEDDING_MODEL = "text-embedding-3-small";
+// Both OpenAI text-embedding-3-small and Amazon Titan Embed Text v1 use 1536 dimensions
 export const EMBEDDING_DIM = 1536;
+
+// Model IDs
+const OPENAI_EMBEDDING_MODEL = "text-embedding-3-small";
+const BEDROCK_EMBEDDING_MODEL = "amazon.titan-embed-text-v1";
 
 export interface EmbeddingResult {
   embedding: number[];
   text: string;
+}
+
+function getEmbeddingModel() {
+  const provider = getEmbeddingProvider();
+  if (provider === "openai") {
+    return openai.textEmbeddingModel(OPENAI_EMBEDDING_MODEL);
+  }
+  const bedrock = createAmazonBedrock({
+    region: getConfig().AWS_REGION,
+  });
+  return bedrock.embedding(BEDROCK_EMBEDDING_MODEL);
+}
+
+export function getActiveEmbeddingModel(): string {
+  const provider = getEmbeddingProvider();
+  return provider === "openai"
+    ? OPENAI_EMBEDDING_MODEL
+    : BEDROCK_EMBEDDING_MODEL;
 }
 
 export async function embedText(text: string): Promise<number[]> {
@@ -16,12 +40,12 @@ export async function embedText(text: string): Promise<number[]> {
 
   try {
     const result = await embed({
-      model: openai.textEmbeddingModel(EMBEDDING_MODEL),
+      model: getEmbeddingModel(),
       value: text,
     });
     if (result.embedding.length !== EMBEDDING_DIM) {
       throw new Error(
-        `Embedding dimension mismatch for ${EMBEDDING_MODEL}: expected ${EMBEDDING_DIM}, got ${result.embedding.length}`,
+        `Embedding dimension mismatch for ${getActiveEmbeddingModel()}: expected ${EMBEDDING_DIM}, got ${result.embedding.length}`,
       );
     }
     return result.embedding;
@@ -46,7 +70,7 @@ export async function embedManyTexts(
 
   try {
     const embeddings = await embedMany({
-      model: openai.textEmbeddingModel(EMBEDDING_MODEL),
+      model: getEmbeddingModel(),
       values: texts,
     });
 
@@ -59,7 +83,7 @@ export async function embedManyTexts(
     return embeddings.embeddings.map((value, index) => {
       if (value.length !== EMBEDDING_DIM) {
         throw new Error(
-          `Embedding dimension mismatch for ${EMBEDDING_MODEL}: expected ${EMBEDDING_DIM}, got ${value.length}`,
+          `Embedding dimension mismatch for ${getActiveEmbeddingModel()}: expected ${EMBEDDING_DIM}, got ${value.length}`,
         );
       }
 

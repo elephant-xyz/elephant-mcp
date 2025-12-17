@@ -8,8 +8,24 @@ vi.mock("ai", () => ({
 
 vi.mock("@ai-sdk/openai", () => ({
   openai: {
-    textEmbeddingModel: vi.fn(() => "mocked-model"),
+    textEmbeddingModel: vi.fn(() => "mocked-openai-model"),
   },
+}));
+
+vi.mock("@ai-sdk/amazon-bedrock", () => ({
+  createAmazonBedrock: vi.fn(() => ({
+    embedding: vi.fn(() => "mocked-bedrock-model"),
+  })),
+}));
+
+vi.mock("../config.ts", () => ({
+  getEmbeddingProvider: vi.fn(() => "openai"),
+  getConfig: vi.fn(() => ({
+    NODE_ENV: "test",
+    LOG_LEVEL: "info",
+    OPENAI_API_KEY: "test-key",
+    AWS_REGION: "us-east-1",
+  })),
 }));
 
 const { embed, embedMany } = await import("ai");
@@ -37,7 +53,7 @@ describe("embedText", () => {
 
     expect(result).toEqual(mockEmbedding);
     expect(embed).toHaveBeenCalledWith({
-      model: "mocked-model",
+      model: "mocked-openai-model",
       value: "test text",
     });
   });
@@ -128,7 +144,7 @@ describe("embedManyTexts", () => {
       { embedding: mockEmbeddings[1], text: "text two" },
     ]);
     expect(embedMany).toHaveBeenCalledWith({
-      model: "mocked-model",
+      model: "mocked-openai-model",
       values: inputTexts,
     });
   });
@@ -238,5 +254,31 @@ describe("embedManyTexts", () => {
     await expect(embedManyTexts(["text one", "text two"])).rejects.toThrow(
       /Embedding dimension mismatch/,
     );
+  });
+});
+
+describe("embedding provider selection", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("should use bedrock model when provider is bedrock", async () => {
+    const { getEmbeddingProvider } = await import("../config.ts");
+    vi.mocked(getEmbeddingProvider).mockReturnValue("bedrock");
+
+    const mockEmbedding = createEmbedding(0.1);
+    vi.mocked(embed).mockResolvedValue({
+      embedding: mockEmbedding,
+      value: "test text",
+      usage: { tokens: 2 },
+    });
+
+    const result = await embedText("test text");
+
+    expect(result).toEqual(mockEmbedding);
+    expect(embed).toHaveBeenCalledWith({
+      model: "mocked-bedrock-model",
+      value: "test text",
+    });
   });
 });

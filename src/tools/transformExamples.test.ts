@@ -2,12 +2,10 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import * as embeddings from "../lib/embeddings.ts";
 import * as connectionRef from "../db/connectionRef.ts";
 import * as repository from "../db/repository.ts";
-import * as config from "../config.ts";
 
 vi.mock("../lib/embeddings.ts");
 vi.mock("../db/connectionRef.ts");
 vi.mock("../db/repository.ts");
-vi.mock("../config.ts");
 vi.mock("../logger.ts", () => ({
   logger: {
     error: vi.fn(),
@@ -25,48 +23,19 @@ describe("transformExamplesHandler", () => {
   });
 
   describe("validation", () => {
-    it("should return error when OPENAI_API_KEY is missing", async () => {
-      vi.mocked(config.getConfig).mockReturnValue({
-        NODE_ENV: "test",
-        OPENAI_API_KEY: "",
-        LOG_LEVEL: "info",
-      });
-
-      const result = await transformExamplesHandler("test query");
-
-      expect(result.content[0]?.text).toContain("Missing OPENAI_API_KEY");
-    });
-
     it("should return error when text is empty", async () => {
-      vi.mocked(config.getConfig).mockReturnValue({
-        NODE_ENV: "test",
-        OPENAI_API_KEY: "test-key",
-        LOG_LEVEL: "info",
-      });
-
       const result = await transformExamplesHandler("");
 
       expect(result.content[0]?.text).toContain("Text cannot be empty");
     });
 
     it("should return error when text is whitespace only", async () => {
-      vi.mocked(config.getConfig).mockReturnValue({
-        NODE_ENV: "test",
-        OPENAI_API_KEY: "test-key",
-        LOG_LEVEL: "info",
-      });
-
       const result = await transformExamplesHandler("   ");
 
       expect(result.content[0]?.text).toContain("Text cannot be empty");
     });
 
     it("should return error when database is not initialized", async () => {
-      vi.mocked(config.getConfig).mockReturnValue({
-        NODE_ENV: "test",
-        OPENAI_API_KEY: "test-key",
-        LOG_LEVEL: "info",
-      });
       vi.mocked(connectionRef.getDbInstance).mockReturnValue(undefined);
 
       const result = await transformExamplesHandler("test query");
@@ -80,11 +49,6 @@ describe("transformExamplesHandler", () => {
     const mockEmbedding = Array.from({ length: 1536 }, (_, i) => i / 1536);
 
     beforeEach(() => {
-      vi.mocked(config.getConfig).mockReturnValue({
-        NODE_ENV: "test",
-        OPENAI_API_KEY: "test-key",
-        LOG_LEVEL: "info",
-      });
       vi.mocked(connectionRef.getDbInstance).mockReturnValue(mockDb);
       vi.mocked(embeddings.embedText).mockResolvedValue(mockEmbedding);
     });
@@ -193,11 +157,6 @@ describe("transformExamplesHandler", () => {
     const mockEmbedding = Array.from({ length: 1536 }, (_, i) => i / 1536);
 
     beforeEach(() => {
-      vi.mocked(config.getConfig).mockReturnValue({
-        NODE_ENV: "test",
-        OPENAI_API_KEY: "test-key",
-        LOG_LEVEL: "info",
-      });
       vi.mocked(connectionRef.getDbInstance).mockReturnValue(mockDb);
     });
 
