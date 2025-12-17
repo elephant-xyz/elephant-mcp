@@ -10,6 +10,18 @@ export const EMBEDDING_DIM = 1536;
 const OPENAI_EMBEDDING_MODEL = "text-embedding-3-small";
 const BEDROCK_EMBEDDING_MODEL = "amazon.titan-embed-text-v1";
 
+// Cached Bedrock client (lazy-initialized to avoid issues if AWS_REGION isn't set at import time)
+let cachedBedrockClient: ReturnType<typeof createAmazonBedrock> | null = null;
+
+function getBedrockClient() {
+  if (!cachedBedrockClient) {
+    cachedBedrockClient = createAmazonBedrock({
+      region: getConfig().AWS_REGION,
+    });
+  }
+  return cachedBedrockClient;
+}
+
 export interface EmbeddingResult {
   embedding: number[];
   text: string;
@@ -20,10 +32,7 @@ function getEmbeddingModel() {
   if (provider === "openai") {
     return openai.textEmbeddingModel(OPENAI_EMBEDDING_MODEL);
   }
-  const bedrock = createAmazonBedrock({
-    region: getConfig().AWS_REGION,
-  });
-  return bedrock.embedding(BEDROCK_EMBEDDING_MODEL);
+  return getBedrockClient().embedding(BEDROCK_EMBEDDING_MODEL);
 }
 
 export function getActiveEmbeddingModel(): string {
