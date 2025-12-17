@@ -2,10 +2,12 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import * as embeddings from "../lib/embeddings.ts";
 import * as connectionRef from "../db/connectionRef.ts";
 import * as repository from "../db/repository.ts";
+import * as config from "../config.ts";
 
 vi.mock("../lib/embeddings.ts");
 vi.mock("../db/connectionRef.ts");
 vi.mock("../db/repository.ts");
+vi.mock("../config.ts");
 vi.mock("../logger.ts", () => ({
   logger: {
     error: vi.fn(),
@@ -20,6 +22,11 @@ import { transformExamplesHandler } from "./transformExamples.ts";
 describe("transformExamplesHandler", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Default: embedding provider is available
+    vi.mocked(config.hasEmbeddingProvider).mockReturnValue(true);
+    vi.mocked(config.getEmbeddingProviderDescription).mockReturnValue(
+      "OpenAI (OPENAI_API_KEY)",
+    );
   });
 
   describe("validation", () => {
@@ -41,6 +48,20 @@ describe("transformExamplesHandler", () => {
       const result = await transformExamplesHandler("test query");
 
       expect(result.content[0]?.text).toContain("Database is not initialized");
+    });
+
+    it("should return error when no embedding provider is configured", async () => {
+      const mockDb = {} as ReturnType<typeof connectionRef.getDbInstance>;
+      vi.mocked(connectionRef.getDbInstance).mockReturnValue(mockDb);
+      vi.mocked(config.hasEmbeddingProvider).mockReturnValue(false);
+
+      const result = await transformExamplesHandler("test query");
+
+      expect(result.content[0]?.text).toContain(
+        "No embedding provider configured",
+      );
+      expect(result.content[0]?.text).toContain("OPENAI_API_KEY");
+      expect(result.content[0]?.text).toContain("AWS credentials");
     });
   });
 
@@ -185,6 +206,34 @@ describe("transformExamplesHandler", () => {
       const result = await transformExamplesHandler("test query");
 
       expect(result.content[0]?.text).toContain("Failed to transform examples");
+    });
+
+    it("should return helpful error for credential issues", async () => {
+      vi.mocked(embeddings.embedText).mockRejectedValue(
+        new Error("Could not load credentials from any providers"),
+      );
+      vi.mocked(config.getEmbeddingProviderDescription).mockReturnValue(
+        "AWS Bedrock (shared credentials file)",
+      );
+
+      const result = await transformExamplesHandler("test query");
+
+      expect(result.content[0]?.text).toContain("authentication failed");
+      expect(result.content[0]?.text).toContain("AWS Bedrock");
+    });
+
+    it("should return helpful error for AccessDenied errors", async () => {
+      vi.mocked(embeddings.embedText).mockRejectedValue(
+        new Error("AccessDenied: User is not authorized"),
+      );
+      vi.mocked(config.getEmbeddingProviderDescription).mockReturnValue(
+        "AWS Bedrock (environment credentials)",
+      );
+
+      const result = await transformExamplesHandler("test query");
+
+      expect(result.content[0]?.text).toContain("authentication failed");
+      expect(result.content[0]?.text).toContain("credentials and permissions");
     });
   });
 });

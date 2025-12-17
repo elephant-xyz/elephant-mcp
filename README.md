@@ -173,9 +173,12 @@ The stdio transport means no port or server identity flags are required. Environ
 When using AWS Bedrock (no `OPENAI_API_KEY` set), the server authenticates using the standard AWS credential chain:
 1. Environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`)
 2. Shared credentials file (`~/.aws/credentials`)
-3. IAM instance role (when running on EC2/ECS/Lambda)
+3. ECS/Lambda container credentials (`AWS_CONTAINER_CREDENTIALS_*`)
+4. IAM instance role (when running on EC2/ECS/Lambda)
 
 Ensure your IAM role or user has permissions for `bedrock:InvokeModel` on the `amazon.titan-embed-text-v2` model.
+
+**Important:** At least one embedding provider must be configured. If neither `OPENAI_API_KEY` nor AWS credentials are available, the `getVerifiedScriptExamples` tool will return an error prompting you to configure credentials.
 
 Zod compatibility note: this server and its dependencies require **zod v3**. Installs will fail if a v4 copy is hoisted into `node_modules`; the `postinstall` script enforces the v3 constraint to avoid runtime errors such as `keyValidator._parse is not a function`.
 
