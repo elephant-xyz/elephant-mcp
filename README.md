@@ -2,11 +2,7 @@
 
 Elephant MCP connects Claude-compatible clients to the Elephant data graph, exposing discoverable tools for listing data groups, classes, and individual property schemas. The server is published on npm as `@elephant-xyz/mcp`.
 
-> **Embedding Provider:** The `getVerifiedScriptExamples` tool uses text embeddings for semantic code search. The server supports two embedding providers:
-> - **OpenAI** (preferred when `OPENAI_API_KEY` is set) - Uses `text-embedding-3-small` with 1024 dimensions
-> - **AWS Bedrock** (automatic fallback) - Uses `amazon.titan-embed-text-v2` via IAM authentication
->
-> When running on AWS, the server automatically uses Bedrock if no OpenAI key is provided.
+> **Embedding Provider:** The `getVerifiedScriptExamples` tool uses text embeddings for semantic code search. The server uses **AWS Bedrock** with `amazon.titan-embed-text-v1` via IAM authentication.
 
 ## 🚀 Prompt Recommendations
 
@@ -51,14 +47,12 @@ This helps the AI understand which data context to use and ensures it leverages 
      "command": "npx",
      "args": ["-y", "@elephant-xyz/mcp@latest"],
      "env": {
-       // Option 1: Use OpenAI embeddings
-       "OPENAI_API_KEY": "sk-your-openai-key",
-       // Option 2: Use AWS Bedrock (omit OPENAI_API_KEY)
-       // "AWS_REGION": "us-east-1"  // optional, defaults to us-east-1
-     },
+       // Optional: override default region
+       // "AWS_REGION": "us-east-1"
+     }
    }
    ```
-   For OpenAI, replace the placeholder with your actual key. For AWS Bedrock, remove the `OPENAI_API_KEY` line and ensure your environment has valid AWS credentials (IAM role, environment variables, or AWS credentials file).
+   Ensure your environment has valid AWS credentials (IAM role, environment variables, or AWS credentials file).
 3. Save and toggle the Elephant connection inside Cursor's MCP panel.
 4. If you are hacking on a local checkout, switch the command to `npm start` and set `cwd` to your repository path.
 
@@ -68,19 +62,12 @@ This helps the AI understand which data context to use and ensures it leverages 
 
 1. Install the **Model Context Protocol** extension.
 2. Accept the pre-populated install flow above or add manually under _Settings → MCP → Servers_ with:
-   - OpenAI: `OPENAI_API_KEY=sk-your-openai-key npx -y @elephant-xyz/mcp@latest`
-   - AWS Bedrock: `npx -y @elephant-xyz/mcp@latest` (uses IAM credentials from environment)
+   `npx -y @elephant-xyz/mcp@latest` (uses IAM credentials from environment)
 3. Reload VS Code and enable the Elephant server in the MCP panel.
 
 ### Claude Code
 
-macOS/Linux with OpenAI:
-
-```bash
-claude mcp add elephant --env OPENAI_API_KEY=sk-your-openai-key -- npx -y @elephant-xyz/mcp@latest
-```
-
-macOS/Linux with AWS Bedrock (uses IAM credentials):
+macOS/Linux:
 
 ```bash
 claude mcp add elephant -- npx -y @elephant-xyz/mcp@latest
@@ -92,12 +79,6 @@ Restart Claude Code after adding the server so the tools appear in the `@tools` 
 
 - **CLI setup**
 
-  With OpenAI:
-  ```bash
-  codex mcp add elephant --env OPENAI_API_KEY=sk-your-openai-key -- npx -y @elephant-xyz/mcp@latest
-  ```
-
-  With AWS Bedrock:
   ```bash
   codex mcp add elephant -- npx -y @elephant-xyz/mcp@latest
   ```
@@ -107,15 +88,6 @@ Restart Claude Code after adding the server so the tools appear in the `@tools` 
 - **config.toml setup**
   Edit `~/.codex/config.toml` (or open _MCP settings → Open config.toml_ from the IDE extension) and add:
 
-  For OpenAI:
-  ```toml
-  [mcp.elephant]
-  command = "npx"
-  args = ["-y", "@elephant-xyz/mcp@latest"]
-  env = { OPENAI_API_KEY = "sk-your-openai-key" }
-  ```
-
-  For AWS Bedrock:
   ```toml
   [mcp.elephant]
   command = "npx"
@@ -128,31 +100,15 @@ Restart Claude Code after adding the server so the tools appear in the `@tools` 
 
 Create (or edit) `.gemini/settings.json` in your project and add:
 
-With OpenAI:
 ```jsonc
 {
   "mcpServers": {
     "elephant": {
       "command": "npx",
-      "args": ["-y", "@elephant-xyz/mcp@latest"],
-      "env": {
-        "OPENAI_API_KEY": "sk-your-openai-key",
-      },
-    },
-  },
-}
-```
-
-With AWS Bedrock:
-```jsonc
-{
-  "mcpServers": {
-    "elephant": {
-      "command": "npx",
-      "args": ["-y", "@elephant-xyz/mcp@latest"],
+      "args": ["-y", "@elephant-xyz/mcp@latest"]
       // Uses IAM credentials from environment
-    },
-  },
+    }
+  }
 }
 ```
 
@@ -164,21 +120,20 @@ The stdio transport means no port or server identity flags are required. Environ
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `OPENAI_API_KEY` | OpenAI API key for embeddings. When set, OpenAI is used; otherwise falls back to AWS Bedrock. | _(optional)_ |
 | `AWS_REGION` | AWS region for Bedrock API calls. | `us-east-1` |
 | `LOG_LEVEL` | Pino log level (`error`, `warn`, `info`, `debug`). | `info` |
 
 ### AWS Bedrock Authentication
 
-When using AWS Bedrock (no `OPENAI_API_KEY` set), the server authenticates using the standard AWS credential chain:
+The server authenticates using the standard AWS credential chain:
 1. Environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`)
 2. Shared credentials file (`~/.aws/credentials`)
 3. ECS/Lambda container credentials (`AWS_CONTAINER_CREDENTIALS_*`)
 4. IAM instance role (when running on EC2/ECS/Lambda)
 
-Ensure your IAM role or user has permissions for `bedrock:InvokeModel` on the `amazon.titan-embed-text-v2` model.
+Ensure your IAM role or user has permissions for `bedrock:InvokeModel` on the `amazon.titan-embed-text-v1` model.
 
-**Important:** At least one embedding provider must be configured. If neither `OPENAI_API_KEY` nor AWS credentials are available, the `getVerifiedScriptExamples` tool will return an error prompting you to configure credentials.
+**Important:** AWS credentials must be configured for the `getVerifiedScriptExamples` tool to work. If AWS credentials are not available, the tool will return an error prompting you to configure credentials.
 
 Zod compatibility note: this server and its dependencies require **zod v3**. Installs will fail if a v4 copy is hoisted into `node_modules`; the `postinstall` script enforces the v3 constraint to avoid runtime errors such as `keyValidator._parse is not a function`.
 
