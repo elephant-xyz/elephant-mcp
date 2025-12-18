@@ -1,3 +1,10 @@
+# [1.6.0](https://github.com/elephant-xyz/elephant-mcp/compare/v1.5.0...v1.6.0) (2025-12-18)
+
+
+### Features
+
+* trigger release ([04491aa](https://github.com/elephant-xyz/elephant-mcp/commit/04491aa66e242f67471fac8409a541e8c0cb9a88))
+
 # [1.5.0](https://github.com/elephant-xyz/elephant-mcp/compare/v1.4.0...v1.5.0) (2025-12-18)
 
 
