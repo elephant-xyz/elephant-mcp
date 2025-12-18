@@ -1,3 +1,10 @@
+# [1.5.0](https://github.com/elephant-xyz/elephant-mcp/compare/v1.4.0...v1.5.0) (2025-12-18)
+
+
+### Features
+
+* add support for AWS Bedrock as an embedding provider ([#18](https://github.com/elephant-xyz/elephant-mcp/issues/18)) ([8cb3579](https://github.com/elephant-xyz/elephant-mcp/commit/8cb3579afe39ed45f33234a614dc403c51e6c7ba))
+
 # [1.4.0](https://github.com/elephant-xyz/elephant-mcp/compare/v1.3.0...v1.4.0) (2025-11-20)
 
 
