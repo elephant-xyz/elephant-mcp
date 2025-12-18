@@ -22,69 +22,54 @@ import { transformExamplesHandler } from "./transformExamples.ts";
 describe("transformExamplesHandler", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Default: embedding provider is available
+    vi.mocked(config.hasEmbeddingProvider).mockReturnValue(true);
+    vi.mocked(config.getEmbeddingProviderDescription).mockReturnValue(
+      "OpenAI (OPENAI_API_KEY)",
+    );
   });
 
   describe("validation", () => {
-    it("should return error when OPENAI_API_KEY is missing", async () => {
-      vi.mocked(config.getConfig).mockReturnValue({
-        NODE_ENV: "test",
-        OPENAI_API_KEY: "",
-        LOG_LEVEL: "info",
-      });
-
-      const result = await transformExamplesHandler("test query");
-
-      expect(result.content[0]?.text).toContain("Missing OPENAI_API_KEY");
-    });
-
     it("should return error when text is empty", async () => {
-      vi.mocked(config.getConfig).mockReturnValue({
-        NODE_ENV: "test",
-        OPENAI_API_KEY: "test-key",
-        LOG_LEVEL: "info",
-      });
-
       const result = await transformExamplesHandler("");
 
       expect(result.content[0]?.text).toContain("Text cannot be empty");
     });
 
     it("should return error when text is whitespace only", async () => {
-      vi.mocked(config.getConfig).mockReturnValue({
-        NODE_ENV: "test",
-        OPENAI_API_KEY: "test-key",
-        LOG_LEVEL: "info",
-      });
-
       const result = await transformExamplesHandler("   ");
 
       expect(result.content[0]?.text).toContain("Text cannot be empty");
     });
 
     it("should return error when database is not initialized", async () => {
-      vi.mocked(config.getConfig).mockReturnValue({
-        NODE_ENV: "test",
-        OPENAI_API_KEY: "test-key",
-        LOG_LEVEL: "info",
-      });
       vi.mocked(connectionRef.getDbInstance).mockReturnValue(undefined);
 
       const result = await transformExamplesHandler("test query");
 
       expect(result.content[0]?.text).toContain("Database is not initialized");
     });
+
+    it("should return error when no embedding provider is configured", async () => {
+      const mockDb = {} as ReturnType<typeof connectionRef.getDbInstance>;
+      vi.mocked(connectionRef.getDbInstance).mockReturnValue(mockDb);
+      vi.mocked(config.hasEmbeddingProvider).mockReturnValue(false);
+
+      const result = await transformExamplesHandler("test query");
+
+      expect(result.content[0]?.text).toContain(
+        "No embedding provider configured",
+      );
+      expect(result.content[0]?.text).toContain("OPENAI_API_KEY");
+      expect(result.content[0]?.text).toContain("AWS credentials");
+    });
   });
 
   describe("successful search", () => {
     const mockDb = {} as ReturnType<typeof connectionRef.getDbInstance>;
-    const mockEmbedding = Array.from({ length: 1536 }, (_, i) => i / 1536);
+    const mockEmbedding = Array.from({ length: 1024 }, (_, i) => i / 1024);
 
     beforeEach(() => {
-      vi.mocked(config.getConfig).mockReturnValue({
-        NODE_ENV: "test",
-        OPENAI_API_KEY: "test-key",
-        LOG_LEVEL: "info",
-      });
       vi.mocked(connectionRef.getDbInstance).mockReturnValue(mockDb);
       vi.mocked(embeddings.embedText).mockResolvedValue(mockEmbedding);
     });
@@ -190,14 +175,9 @@ describe("transformExamplesHandler", () => {
 
   describe("error handling", () => {
     const mockDb = {} as ReturnType<typeof connectionRef.getDbInstance>;
-    const mockEmbedding = Array.from({ length: 1536 }, (_, i) => i / 1536);
+    const mockEmbedding = Array.from({ length: 1024 }, (_, i) => i / 1024);
 
     beforeEach(() => {
-      vi.mocked(config.getConfig).mockReturnValue({
-        NODE_ENV: "test",
-        OPENAI_API_KEY: "test-key",
-        LOG_LEVEL: "info",
-      });
       vi.mocked(connectionRef.getDbInstance).mockReturnValue(mockDb);
     });
 
@@ -226,6 +206,34 @@ describe("transformExamplesHandler", () => {
       const result = await transformExamplesHandler("test query");
 
       expect(result.content[0]?.text).toContain("Failed to transform examples");
+    });
+
+    it("should return helpful error for credential issues", async () => {
+      vi.mocked(embeddings.embedText).mockRejectedValue(
+        new Error("Could not load credentials from any providers"),
+      );
+      vi.mocked(config.getEmbeddingProviderDescription).mockReturnValue(
+        "AWS Bedrock (shared credentials file)",
+      );
+
+      const result = await transformExamplesHandler("test query");
+
+      expect(result.content[0]?.text).toContain("authentication failed");
+      expect(result.content[0]?.text).toContain("AWS Bedrock");
+    });
+
+    it("should return helpful error for AccessDenied errors", async () => {
+      vi.mocked(embeddings.embedText).mockRejectedValue(
+        new Error("AccessDenied: User is not authorized"),
+      );
+      vi.mocked(config.getEmbeddingProviderDescription).mockReturnValue(
+        "AWS Bedrock (environment credentials)",
+      );
+
+      const result = await transformExamplesHandler("test query");
+
+      expect(result.content[0]?.text).toContain("authentication failed");
+      expect(result.content[0]?.text).toContain("credentials and permissions");
     });
   });
 });

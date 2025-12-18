@@ -16,6 +16,7 @@ import { initializeDatabase } from "./db/index.ts";
 import { setDbInstance } from "./db/connectionRef.ts";
 import { transformExamplesHandler } from "./tools/transformExamples.ts";
 import { indexVerifiedScripts } from "./lib/verifiedIndexer.ts";
+import { verifyEmbeddingProvider } from "./config.ts";
 
 const SERVER_NAME =
   typeof packageJson.name === "string" ? packageJson.name : "@elephant-xyz/mcp";
@@ -135,11 +136,36 @@ async function main() {
     version: SERVER_VERSION,
   });
 
+  // Verify embedding provider credentials at startup
+  const embeddingProviderResult = await verifyEmbeddingProvider();
+  if (embeddingProviderResult.available) {
+    logger.info(
+      {
+        provider: embeddingProviderResult.provider,
+        source: embeddingProviderResult.source,
+      },
+      "Embedding provider verified",
+    );
+  } else {
+    logger.warn(
+      {
+        error: embeddingProviderResult.error,
+      },
+      "No embedding provider available - getVerifiedScriptExamples will not work",
+    );
+  }
+
   // Ensure the database is initialized before accepting any tool calls
   const dataDir = getDefaultDataDir();
   const dbPath = path.join(dataDir, "db", "elephant-mcp.sqlite");
-  const { db } = await initializeDatabase(dbPath);
+  const { db, dimensionMismatchRebuild } = await initializeDatabase(dbPath);
   setDbInstance(db);
+
+  if (dimensionMismatchRebuild) {
+    logger.info(
+      "Database was rebuilt due to embedding dimension change - will re-index verified scripts",
+    );
+  }
 
   const server = getServer();
   serverRef = server;
@@ -155,16 +181,24 @@ async function main() {
       message: "MCP server started with stdio transport",
       serverName: SERVER_NAME,
       version: SERVER_VERSION,
+      embeddingProvider: embeddingProviderResult.available
+        ? {
+            provider: embeddingProviderResult.provider,
+            source: embeddingProviderResult.source,
+          }
+        : { error: embeddingProviderResult.error },
+      dimensionMismatchRebuild,
     },
   });
 
   // Kick off background indexing. Failures should not block MCP.
+  // Force full rescan if database was rebuilt due to dimension mismatch.
   (async () => {
     try {
       const clonePath = path.join(dataDir, "verified-scripts");
       const result = await indexVerifiedScripts(db, {
         clonePath,
-        fullRescan: false,
+        fullRescan: dimensionMismatchRebuild,
       });
 
       logger.info(

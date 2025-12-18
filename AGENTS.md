@@ -22,7 +22,14 @@ Adopt Conventional Commits (`feat:`, `chore:`, `docs:`) as seen in the history t
 
 ## Configuration & Operational Notes
 
-Runtime configuration is minimal; `src/config.ts` currently only normalizes logging defaults. Document new environment variables when you add them, and avoid hard-coding secrets. Pino logging is structured; keep contextual metadata small and redact user-provided content where necessary.
+Runtime configuration is handled in `src/config.ts`, which validates environment variables for:
+- **Embedding providers**: `OPENAI_API_KEY` for OpenAI, or AWS credentials (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_PROFILE`, `AWS_REGION`) for Bedrock
+- **Logging**: `LOG_LEVEL` (`error`, `warn`, `info`, `debug`) and `NODE_ENV`
+- **Credential verification**: At startup, the server verifies embedding provider credentials using `verifyEmbeddingProvider()` which resolves AWS credentials through the full provider chain
+
+The database layer (`src/db/migrate.ts`) automatically detects embedding dimension mismatches and rebuilds the database when switching between models with different vector sizes.
+
+Document new environment variables when you add them, and avoid hard-coding secrets. Pino logging is structured; keep contextual metadata small and redact user-provided content where necessary.
 
 ## Tests
 

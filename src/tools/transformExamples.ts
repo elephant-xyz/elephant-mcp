@@ -3,7 +3,10 @@ import { logger } from "../logger.ts";
 import { embedText } from "../lib/embeddings.ts";
 import { getDbInstance } from "../db/connectionRef.ts";
 import { searchSimilar } from "../db/repository.ts";
-import { getConfig } from "../config.ts";
+import {
+  hasEmbeddingProvider,
+  getEmbeddingProviderDescription,
+} from "../config.ts";
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -11,11 +14,6 @@ function clamp(value: number, min: number, max: number): number {
 
 export async function transformExamplesHandler(text: string, topK?: number) {
   try {
-    const { OPENAI_API_KEY } = getConfig();
-    if (!OPENAI_API_KEY || OPENAI_API_KEY.length === 0) {
-      return createTextResult({ error: "Missing OPENAI_API_KEY" });
-    }
-
     if (!text || text.trim().length === 0) {
       return createTextResult({ error: "Text cannot be empty" });
     }
@@ -23,6 +21,14 @@ export async function transformExamplesHandler(text: string, topK?: number) {
     const db = getDbInstance();
     if (!db) {
       return createTextResult({ error: "Database is not initialized" });
+    }
+
+    // Check if embedding provider is configured before attempting to generate embeddings
+    if (!hasEmbeddingProvider()) {
+      return createTextResult({
+        error:
+          "No embedding provider configured. Set OPENAI_API_KEY or configure AWS credentials for Bedrock.",
+      });
     }
 
     const embedding = await embedText(text);
@@ -36,14 +42,35 @@ export async function transformExamplesHandler(text: string, topK?: number) {
 
     return createTextResult({ count: matches.length, matches });
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const providerDescription = getEmbeddingProviderDescription();
+
     logger.error(
       {
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMessage,
         textLength: typeof text === "string" ? text.length : undefined,
         topK,
+        embeddingProvider: providerDescription,
       },
       "transformExamples failed",
     );
-    return createTextResult({ error: "Failed to transform examples" });
+
+    // Provide more helpful error messages for common issues
+    if (
+      errorMessage.includes("credential") ||
+      errorMessage.includes("Credential") ||
+      errorMessage.includes("AccessDenied") ||
+      errorMessage.includes("UnauthorizedException")
+    ) {
+      return createTextResult({
+        error: `Embedding provider authentication failed (${providerDescription}). Check your credentials and permissions.`,
+        details: errorMessage,
+      });
+    }
+
+    return createTextResult({
+      error: "Failed to transform examples",
+      details: errorMessage,
+    });
   }
 }

@@ -2,7 +2,11 @@
 
 Elephant MCP connects Claude-compatible clients to the Elephant data graph, exposing discoverable tools for listing data groups, classes, and individual property schemas. The server is published on npm as `@elephant-xyz/mcp`.
 
-> **Important:** Set the `OPENAI_API_KEY` environment variable before starting Elephant MCP to unlock relevant `getVerifiedScriptExamples` responses. Without it, the server skips tailored code samples.
+> **Embedding Provider:** The `getVerifiedScriptExamples` tool uses text embeddings for semantic code search. The server supports two embedding providers:
+> - **OpenAI** (preferred when `OPENAI_API_KEY` is set) - Uses `text-embedding-3-small` with 1024 dimensions
+> - **AWS Bedrock** (automatic fallback) - Uses `amazon.titan-embed-text-v2` via IAM authentication
+>
+> When running on AWS, the server automatically uses Bedrock if no OpenAI key is provided.
 
 ## 🚀 Prompt Recommendations
 
@@ -47,12 +51,15 @@ This helps the AI understand which data context to use and ensures it leverages 
      "command": "npx",
      "args": ["-y", "@elephant-xyz/mcp@latest"],
      "env": {
+       // Option 1: Use OpenAI embeddings
        "OPENAI_API_KEY": "sk-your-openai-key",
+       // Option 2: Use AWS Bedrock (omit OPENAI_API_KEY)
+       // "AWS_REGION": "us-east-1"  // optional, defaults to us-east-1
      },
    }
    ```
-   Replace the placeholder with your actual key. On macOS/Linux you can instead launch Cursor from a shell where you first run `export OPENAI_API_KEY=sk-your-openai-key`; on Windows PowerShell use `$env:OPENAI_API_KEY="sk-your-openai-key"`.
-3. Save and toggle the Elephant connection inside Cursor’s MCP panel.
+   For OpenAI, replace the placeholder with your actual key. For AWS Bedrock, remove the `OPENAI_API_KEY` line and ensure your environment has valid AWS credentials (IAM role, environment variables, or AWS credentials file).
+3. Save and toggle the Elephant connection inside Cursor's MCP panel.
 4. If you are hacking on a local checkout, switch the command to `npm start` and set `cwd` to your repository path.
 
 ### Visual Studio Code
@@ -61,36 +68,59 @@ This helps the AI understand which data context to use and ensures it leverages 
 
 1. Install the **Model Context Protocol** extension.
 2. Accept the pre-populated install flow above or add manually under _Settings → MCP → Servers_ with:
-   - `OPENAI_API_KEY=sk-your-openai-key npx -y @elephant-xyz/mcp@latest`
+   - OpenAI: `OPENAI_API_KEY=sk-your-openai-key npx -y @elephant-xyz/mcp@latest`
+   - AWS Bedrock: `npx -y @elephant-xyz/mcp@latest` (uses IAM credentials from environment)
 3. Reload VS Code and enable the Elephant server in the MCP panel.
 
 ### Claude Code
 
-macOS/Linux:
+macOS/Linux with OpenAI:
 
 ```bash
 claude mcp add elephant --env OPENAI_API_KEY=sk-your-openai-key -- npx -y @elephant-xyz/mcp@latest
 ```
 
-Restart Claude Code after adding the server so the tools appear in the `@tools` palette. Replace the URL and API key placeholders with your deployment details if you expose the server remotely.
+macOS/Linux with AWS Bedrock (uses IAM credentials):
+
+```bash
+claude mcp add elephant -- npx -y @elephant-xyz/mcp@latest
+```
+
+Restart Claude Code after adding the server so the tools appear in the `@tools` palette.
 
 ### OpenAI Codex
 
 - **CLI setup**
 
+  With OpenAI:
   ```bash
-   codex mcp add elephant --env OPENAI_API_KEY=sk-your-openai-key -- npx -y @elephant-xyz/mcp@latest
+  codex mcp add elephant --env OPENAI_API_KEY=sk-your-openai-key -- npx -y @elephant-xyz/mcp@latest
+  ```
+
+  With AWS Bedrock:
+  ```bash
+  codex mcp add elephant -- npx -y @elephant-xyz/mcp@latest
   ```
 
   You can explore additional options with `codex mcp --help`. Inside the Codex TUI, run `/mcp` to view currently connected servers.
 
 - **config.toml setup**
   Edit `~/.codex/config.toml` (or open _MCP settings → Open config.toml_ from the IDE extension) and add:
+
+  For OpenAI:
   ```toml
   [mcp.elephant]
   command = "npx"
   args = ["-y", "@elephant-xyz/mcp@latest"]
   env = { OPENAI_API_KEY = "sk-your-openai-key" }
+  ```
+
+  For AWS Bedrock:
+  ```toml
+  [mcp.elephant]
+  command = "npx"
+  args = ["-y", "@elephant-xyz/mcp@latest"]
+  # Uses IAM credentials from environment; optionally set AWS_REGION
   ```
   Save the file and restart Codex to load the new server.
 
@@ -98,6 +128,7 @@ Restart Claude Code after adding the server so the tools appear in the `@tools` 
 
 Create (or edit) `.gemini/settings.json` in your project and add:
 
+With OpenAI:
 ```jsonc
 {
   "mcpServers": {
@@ -112,13 +143,54 @@ Create (or edit) `.gemini/settings.json` in your project and add:
 }
 ```
 
+With AWS Bedrock:
+```jsonc
+{
+  "mcpServers": {
+    "elephant": {
+      "command": "npx",
+      "args": ["-y", "@elephant-xyz/mcp@latest"],
+      // Uses IAM credentials from environment
+    },
+  },
+}
+```
+
 Restart Gemini CLI or run `gemini tools sync` to pick up the new server.
 
 ## Configuration
 
-The stdio transport means no port or server identity flags are required. Optional environment variables handled by `src/config.ts`:
+The stdio transport means no port or server identity flags are required. Environment variables handled by `src/config.ts`:
 
-- `LOG_LEVEL` – Pino log level (`error`, `warn`, `info`, `debug`; defaults to `info`).
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `OPENAI_API_KEY` | OpenAI API key for embeddings. When set, OpenAI is used; otherwise falls back to AWS Bedrock. | _(optional)_ |
+| `AWS_REGION` | AWS region for Bedrock API calls. | `us-east-1` |
+| `LOG_LEVEL` | Pino log level (`error`, `warn`, `info`, `debug`). | `info` |
+
+### AWS Bedrock Authentication
+
+When using AWS Bedrock (no `OPENAI_API_KEY` set), the server authenticates using the standard AWS credential chain:
+1. Environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`)
+2. Shared credentials file (`~/.aws/credentials`)
+3. ECS/Lambda container credentials (`AWS_CONTAINER_CREDENTIALS_*`)
+4. IAM instance role (when running on EC2/ECS/Lambda)
+
+Ensure your IAM role or user has the `bedrock:InvokeModel` permission and access to the `amazon.titan-embed-text-v2:0` embedding model in the configured `AWS_REGION`. In some regions, you must explicitly request access to this model in the AWS Bedrock Console before it can be invoked.
+
+**Important:** At least one embedding provider must be configured. If neither `OPENAI_API_KEY` nor AWS credentials are available, the `getVerifiedScriptExamples` tool will return an error prompting you to configure credentials.
+
+### Credential Verification
+
+At startup, the server verifies embedding provider credentials:
+- For **OpenAI**: Checks that `OPENAI_API_KEY` is set
+- For **AWS Bedrock**: Resolves credentials through the full AWS credential provider chain and logs the detected source
+
+The verification result is logged and included in the MCP startup message for debugging.
+
+### Database Compatibility
+
+The embedding database is automatically rebuilt when switching between embedding models with different vector dimensions (e.g., switching from a 1536-dimension model to a 1024-dimension model). This ensures the `getVerifiedScriptExamples` tool works correctly after model changes. The server will re-index all verified scripts after a rebuild.
 
 Zod compatibility note: this server and its dependencies require **zod v3**. Installs will fail if a v4 copy is hoisted into `node_modules`; the `postinstall` script enforces the v3 constraint to avoid runtime errors such as `keyValidator._parse is not a function`.
 

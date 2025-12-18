@@ -30,8 +30,16 @@ Run these before you open a PR; CI expects them to pass.
 
 ## Configuration
 Environment variables are validated in `src/config.ts`. Current options:
-- `LOG_LEVEL` (`error`, `warn`, `info`, `debug`; defaults to `info`).
-- `NODE_ENV` affects logger metadata and defaults to `development`.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `OPENAI_API_KEY` | OpenAI API key for embeddings (preferred provider) | _(optional)_ |
+| `AWS_REGION` | AWS region for Bedrock API calls | `us-east-1` |
+| `AWS_ACCESS_KEY_ID` | AWS access key (optional if using IAM roles) | _(optional)_ |
+| `AWS_SECRET_ACCESS_KEY` | AWS secret key (optional if using IAM roles) | _(optional)_ |
+| `AWS_PROFILE` | AWS credentials profile name | _(optional)_ |
+| `LOG_LEVEL` | Pino log level (`error`, `warn`, `info`, `debug`) | `info` |
+| `NODE_ENV` | Environment mode (`development`, `production`, `test`) | `production` |
 
 Add new variables in `src/config.ts` so they inherit validation and documentation.
 

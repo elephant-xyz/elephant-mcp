@@ -69,7 +69,7 @@
                 },
                 "vector": {
                     "name": "vector",
-                    "type": "F32_BLOB(1536)",
+                    "type": "F32_BLOB(1024)",
                     "primaryKey": false,
                     "autoincrement": false,
                     "notNull": true

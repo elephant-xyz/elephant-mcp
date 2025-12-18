@@ -33,7 +33,7 @@ export const functionEmbeddingsTable = sqliteTable(
     id: integer("id").primaryKey(),
     functionId: integer("functionId").notNull(),
     chunkIndex: integer("chunkIndex").notNull(),
-    embedding: float32Array("vector", { dimensions: 1536 }).notNull(),
+    embedding: float32Array("vector", { dimensions: 1024 }).notNull(),
   },
   (table) => ({
     vectorIdx: index("function_embeddings_vector_idx").on(
