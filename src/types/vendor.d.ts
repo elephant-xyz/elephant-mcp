@@ -5,7 +5,10 @@ declare module "ipfs-only-hash" {
   }
 
   const Hash: {
-    of(content: Buffer | Uint8Array | string, options?: HashOptions): Promise<string>;
+    of(
+      content: Buffer | Uint8Array | string,
+      options?: HashOptions,
+    ): Promise<string>;
   };
 
   export default Hash;
