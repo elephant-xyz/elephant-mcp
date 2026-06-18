@@ -7,6 +7,7 @@ import { identity } from "multiformats/hashes/identity";
 import { base32 } from "multiformats/bases/base32";
 import { equals as u8eq } from "uint8arrays/equals";
 import { logger } from "../logger.ts";
+import Hash from "ipfs-only-hash";
 
 interface VerificationResult {
   valid: boolean;
@@ -94,31 +95,55 @@ export async function fetchFromIpfs(cid: string): Promise<string> {
   throw new Error(`Failed to fetch from any IPFS gateway: ${cid}`);
 }
 
-async function verifyFetchedContent(
+// Codec code for raw bytes (used by lexicon/schema CIDs).
+const RAW_CODEC = 0x55;
+
+export async function verifyFetchedContent(
   cidStr: string,
   content: Uint8Array,
 ): Promise<VerificationResult> {
   const cid = CID.parse(cidStr);
 
-  let hasher;
-  switch (cid.multihash.code) {
-    case sha256.code:
-      hasher = sha256;
-      break;
-    case sha512.code:
-      hasher = sha512;
-      break;
-    case identity.code:
-      hasher = identity;
-      break;
-    default:
-      throw new Error(`Unsupported hasher code ${cid.multihash.code}`);
+  // For RAW-codec CIDs the gateway serves the raw bytes and the multihash
+  // is directly over those bytes — use the fast path.
+  if (cid.code === RAW_CODEC) {
+    let hasher;
+    switch (cid.multihash.code) {
+      case sha256.code:
+        hasher = sha256;
+        break;
+      case sha512.code:
+        hasher = sha512;
+        break;
+      case identity.code:
+        hasher = identity;
+        break;
+      default:
+        throw new Error(`Unsupported hasher code ${cid.multihash.code}`);
+    }
+
+    const mh = await hasher.digest(content);
+    return {
+      valid: u8eq(mh.bytes, cid.multihash.bytes),
+      expectedHash: base32.encode(cid.multihash.bytes),
+      actualHash: base32.encode(mh.bytes),
+    };
   }
 
-  const mh = await hasher.digest(content);
+  // For dag-pb / UnixFS CIDs (codec 0x70, all Qm... CIDv0) the gateway
+  // serves the raw file bytes, NOT the dag-pb block bytes, so
+  // sha256(rawContent) !== cid.multihash.  Recompute the CID from the
+  // content using ipfs-only-hash — the same library used to produce these
+  // CIDs — and compare structurally.
+  const recomputedCidStr = await Hash.of(Buffer.from(content), {
+    cidVersion: cid.version,
+  });
+  const recomputedCid = CID.parse(recomputedCidStr);
+  const valid = recomputedCid.equals(cid);
+
   return {
-    valid: u8eq(mh.bytes, cid.multihash.bytes),
-    expectedHash: base32.encode(cid.multihash.bytes),
-    actualHash: base32.encode(mh.bytes),
+    valid,
+    expectedHash: cidStr,
+    actualHash: recomputedCidStr,
   };
 }
