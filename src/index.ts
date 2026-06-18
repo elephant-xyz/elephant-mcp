@@ -17,6 +17,11 @@ import { setDbInstance } from "./db/connectionRef.ts";
 import { transformExamplesHandler } from "./tools/transformExamples.ts";
 import { indexVerifiedScripts } from "./lib/verifiedIndexer.ts";
 import { verifyEmbeddingProvider } from "./config.ts";
+import {
+  listOraclePropertiesHandler,
+  getOraclePropertyHandler,
+  getOracleDatasetInfoHandler,
+} from "./tools/oracleOpenData.ts";
 
 const SERVER_NAME =
   typeof packageJson.name === "string" ? packageJson.name : "@elephant-xyz/mcp";
@@ -122,6 +127,86 @@ const getServer = () => {
     },
     async (args: { query: string; topK?: number }) => {
       return transformExamplesHandler(args.query, args.topK);
+    },
+  );
+
+  server.registerTool(
+    "listOracleProperties",
+    {
+      title: "List Oracle open-data properties",
+      description:
+        "Paginated discovery of properties in the Oracle open-data manifest. Returns slim entries (propertyId, parcelIdentifier, cid, county, fileSizeBytes). Use getOracleProperty to fetch full consolidated data for a specific entry.",
+      inputSchema: {
+        county: z
+          .string()
+          .optional()
+          .describe("Filter by county name (case-insensitive)"),
+        limit: z
+          .number()
+          .int()
+          .positive()
+          .max(500)
+          .optional()
+          .default(50)
+          .describe("Number of results to return (default 50, max 500)"),
+        offset: z
+          .number()
+          .int()
+          .min(0)
+          .optional()
+          .default(0)
+          .describe("Zero-based offset for pagination (default 0)"),
+      },
+    },
+    async (args: { county?: string; limit?: number; offset?: number }) => {
+      return listOraclePropertiesHandler(args);
+    },
+  );
+
+  server.registerTool(
+    "getOracleProperty",
+    {
+      title: "Get Oracle open-data property",
+      description:
+        "Fetch the full consolidated property JSON (appraisal, permits, Sunbiz, BBB) from IPFS. Provide exactly one of parcelIdentifier, propertyId, or cid.",
+      inputSchema: {
+        parcelIdentifier: z
+          .string()
+          .optional()
+          .describe(
+            "The property parcel identifier (digits) — looked up in the manifest to resolve its IPFS CID",
+          ),
+        propertyId: z
+          .string()
+          .optional()
+          .describe(
+            "The property UUID — looked up in the manifest to resolve its IPFS CID",
+          ),
+        cid: z
+          .string()
+          .optional()
+          .describe("IPFS CID for the consolidated property JSON"),
+      },
+    },
+    async (args: {
+      parcelIdentifier?: string;
+      propertyId?: string;
+      cid?: string;
+    }) => {
+      return getOraclePropertyHandler(args);
+    },
+  );
+
+  server.registerTool(
+    "getOracleDatasetInfo",
+    {
+      title: "Get Oracle open-data dataset info",
+      description:
+        "Returns dataset-level provenance and freshness metadata: county, propertyCount, exportedAt, schemaVersion, totalBytes, and the manifest CID.",
+      inputSchema: {},
+    },
+    async () => {
+      return getOracleDatasetInfoHandler();
     },
   );
 

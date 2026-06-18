@@ -72,6 +72,7 @@
     "ai": "^5.0.76",
     "drizzle-orm": "^0.44.6",
     "helia": "^5.0.0",
+    "ipfs-only-hash": "^4.0.0",
     "js-tiktoken": "1.0.21",
     "multiformats": "^13.0.0",
     "pino": "^9.0.0",
