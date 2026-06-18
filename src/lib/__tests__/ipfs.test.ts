@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import { verifyFetchedContent } from "../ipfs.ts";
 
 // ipfs-only-hash is a CJS module with real async computation — let it run
