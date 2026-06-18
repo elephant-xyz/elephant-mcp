@@ -1,12 +1,12 @@
 import { z } from "zod";
 
 export const OracleManifestEntrySchema = z.object({
-  parcelId: z.string(),
+  propertyId: z.string(),
+  parcelIdentifier: z.string(),
   filePath: z.string(),
   fileSizeBytes: z.number(),
   sha256: z.string(),
   cid: z.string(),
-  collectedAt: z.string(),
 });
 
 export type OracleManifestEntry = z.infer<typeof OracleManifestEntrySchema>;
@@ -24,10 +24,10 @@ export const OracleManifestSchema = z.object({
 export type OracleManifest = z.infer<typeof OracleManifestSchema>;
 
 export interface SlimPropertyEntry {
-  parcelId: string;
+  propertyId: string;
+  parcelIdentifier: string;
   cid: string;
   county: string;
-  collectedAt: string;
   fileSizeBytes: number;
 }
 

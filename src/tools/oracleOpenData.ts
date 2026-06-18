@@ -24,21 +24,19 @@ export async function listOraclePropertiesHandler(args: {
 
     const manifest = await fetchOracleManifest();
 
-    const filtered = args.county
-      ? manifest.entries.filter(
-          (e) => e.parcelId.toLowerCase().includes(args.county!.toLowerCase()) ||
-            manifest.county.toLowerCase() === args.county!.toLowerCase(),
-        )
-      : manifest.entries;
+    const countyMatches =
+      !args.county ||
+      manifest.county.toLowerCase() === args.county.toLowerCase();
 
+    const filtered = countyMatches ? manifest.entries : [];
     const total = filtered.length;
     const page = filtered.slice(offset, offset + limit);
 
     const properties: SlimPropertyEntry[] = page.map((e) => ({
-      parcelId: e.parcelId,
+      propertyId: e.propertyId,
+      parcelIdentifier: e.parcelIdentifier,
       cid: e.cid,
       county: manifest.county,
-      collectedAt: e.collectedAt,
       fileSizeBytes: e.fileSizeBytes,
     }));
 
@@ -66,22 +64,32 @@ export async function listOraclePropertiesHandler(args: {
 }
 
 export async function getOraclePropertyHandler(args: {
-  parcelId?: string;
+  parcelIdentifier?: string;
+  propertyId?: string;
   cid?: string;
 }) {
   const hasCid = typeof args.cid === "string" && args.cid.length > 0;
-  const hasParcelId =
-    typeof args.parcelId === "string" && args.parcelId.length > 0;
+  const hasParcelIdentifier =
+    typeof args.parcelIdentifier === "string" &&
+    args.parcelIdentifier.length > 0;
+  const hasPropertyId =
+    typeof args.propertyId === "string" && args.propertyId.length > 0;
 
-  if (hasCid && hasParcelId) {
+  const providedCount =
+    (hasCid ? 1 : 0) +
+    (hasParcelIdentifier ? 1 : 0) +
+    (hasPropertyId ? 1 : 0);
+
+  if (providedCount > 1) {
     return createTextResult({
-      error: "Provide exactly one of parcelId or cid, not both.",
+      error:
+        "Provide exactly one of parcelIdentifier, propertyId, or cid — not multiple.",
     });
   }
 
-  if (!hasCid && !hasParcelId) {
+  if (providedCount === 0) {
     return createTextResult({
-      error: "Provide exactly one of parcelId or cid.",
+      error: "Provide exactly one of parcelIdentifier, propertyId, or cid.",
     });
   }
 
@@ -92,11 +100,19 @@ export async function getOraclePropertyHandler(args: {
       resolvedCid = args.cid!;
     } else {
       const manifest = await fetchOracleManifest();
-      const entry = manifest.entries.find((e) => e.parcelId === args.parcelId);
+
+      const entry = hasParcelIdentifier
+        ? manifest.entries.find(
+            (e) => e.parcelIdentifier === args.parcelIdentifier,
+          )
+        : manifest.entries.find((e) => e.propertyId === args.propertyId);
 
       if (!entry) {
+        const lookupKey = hasParcelIdentifier
+          ? `parcelIdentifier '${args.parcelIdentifier}'`
+          : `propertyId '${args.propertyId}'`;
         return createTextResult({
-          error: `Property with parcelId '${args.parcelId}' not found in the oracle manifest.`,
+          error: `Property with ${lookupKey} not found in the oracle manifest.`,
         });
       }
 

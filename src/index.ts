@@ -135,7 +135,7 @@ const getServer = () => {
     {
       title: "List Oracle open-data properties",
       description:
-        "Paginated discovery of properties in the Oracle open-data manifest. Returns slim entries (parcelId, cid, county, collectedAt, fileSizeBytes). Use getOracleProperty to fetch full consolidated data for a specific entry.",
+        "Paginated discovery of properties in the Oracle open-data manifest. Returns slim entries (propertyId, parcelIdentifier, cid, county, fileSizeBytes). Use getOracleProperty to fetch full consolidated data for a specific entry.",
       inputSchema: {
         county: z
           .string()
@@ -168,13 +168,19 @@ const getServer = () => {
     {
       title: "Get Oracle open-data property",
       description:
-        "Fetch the full consolidated property JSON (appraisal, permits, Sunbiz, BBB) from IPFS. Provide exactly one of parcelId or cid.",
+        "Fetch the full consolidated property JSON (appraisal, permits, Sunbiz, BBB) from IPFS. Provide exactly one of parcelIdentifier, propertyId, or cid.",
       inputSchema: {
-        parcelId: z
+        parcelIdentifier: z
           .string()
           .optional()
           .describe(
-            "The property parcel ID — looked up in the manifest to resolve its IPFS CID",
+            "The property parcel identifier (digits) — looked up in the manifest to resolve its IPFS CID",
+          ),
+        propertyId: z
+          .string()
+          .optional()
+          .describe(
+            "The property UUID — looked up in the manifest to resolve its IPFS CID",
           ),
         cid: z
           .string()
@@ -182,7 +188,11 @@ const getServer = () => {
           .describe("IPFS CID for the consolidated property JSON"),
       },
     },
-    async (args: { parcelId?: string; cid?: string }) => {
+    async (args: {
+      parcelIdentifier?: string;
+      propertyId?: string;
+      cid?: string;
+    }) => {
       return getOraclePropertyHandler(args);
     },
   );

@@ -24,22 +24,21 @@ const mockFetchOracleManifest = vi.mocked(fetchOracleManifest);
 const mockGetManifestCid = vi.mocked(getManifestCid);
 
 const buildEntry = (
-  parcelId: string,
+  propertyId: string,
+  parcelIdentifier: string,
   cid: string,
   overrides: Partial<{
     filePath: string;
     fileSizeBytes: number;
     sha256: string;
-    collectedAt: string;
   }> = {},
 ) => ({
-  parcelId,
-  filePath: `data/${parcelId}.json`,
+  propertyId,
+  parcelIdentifier,
+  filePath: overrides.filePath ?? `data/${propertyId}.json`,
   fileSizeBytes: overrides.fileSizeBytes ?? 1024,
-  sha256: "abc123",
+  sha256: overrides.sha256 ?? "abc123def456",
   cid,
-  collectedAt: overrides.collectedAt ?? "2024-01-01T00:00:00Z",
-  ...overrides,
 });
 
 const buildManifest = (entries: ReturnType<typeof buildEntry>[]) => ({
@@ -58,9 +57,9 @@ describe("listOraclePropertiesHandler", () => {
 
   it("returns all entries when no filter is applied", async () => {
     const entries = [
-      buildEntry("P001", "cid-001"),
-      buildEntry("P002", "cid-002"),
-      buildEntry("P003", "cid-003"),
+      buildEntry("uuid-001", "1234567890", "cid-001"),
+      buildEntry("uuid-002", "2345678901", "cid-002"),
+      buildEntry("uuid-003", "3456789012", "cid-003"),
     ];
     mockFetchOracleManifest.mockResolvedValue(buildManifest(entries));
 
@@ -72,7 +71,8 @@ describe("listOraclePropertiesHandler", () => {
     expect(parsed.limit).toBe(50);
     expect(parsed.properties).toHaveLength(3);
     expect(parsed.properties[0]).toMatchObject({
-      parcelId: "P001",
+      propertyId: "uuid-001",
+      parcelIdentifier: "1234567890",
       cid: "cid-001",
       county: "Lee",
     });
@@ -80,7 +80,7 @@ describe("listOraclePropertiesHandler", () => {
 
   it("paginates correctly", async () => {
     const entries = Array.from({ length: 10 }, (_, i) =>
-      buildEntry(`P${String(i).padStart(3, "0")}`, `cid-${i}`),
+      buildEntry(`uuid-${i}`, String(1000000000 + i), `cid-${i}`),
     );
     mockFetchOracleManifest.mockResolvedValue(buildManifest(entries));
 
@@ -91,12 +91,12 @@ describe("listOraclePropertiesHandler", () => {
     expect(parsed.offset).toBe(5);
     expect(parsed.limit).toBe(3);
     expect(parsed.properties).toHaveLength(3);
-    expect(parsed.properties[0].parcelId).toBe("P005");
+    expect(parsed.properties[0].propertyId).toBe("uuid-5");
   });
 
   it("clamps limit to 500", async () => {
     const entries = Array.from({ length: 5 }, (_, i) =>
-      buildEntry(`P${i}`, `cid-${i}`),
+      buildEntry(`uuid-${i}`, String(i), `cid-${i}`),
     );
     mockFetchOracleManifest.mockResolvedValue(buildManifest(entries));
 
@@ -106,10 +106,10 @@ describe("listOraclePropertiesHandler", () => {
     expect(parsed.limit).toBe(500);
   });
 
-  it("filters by county name (manifest-level match)", async () => {
+  it("filters by county name (manifest-level equality match)", async () => {
     const entries = [
-      buildEntry("P001", "cid-001"),
-      buildEntry("P002", "cid-002"),
+      buildEntry("uuid-001", "1234567890", "cid-001"),
+      buildEntry("uuid-002", "2345678901", "cid-002"),
     ];
     mockFetchOracleManifest.mockResolvedValue(buildManifest(entries));
 
@@ -120,8 +120,18 @@ describe("listOraclePropertiesHandler", () => {
     expect(parsed.properties).toHaveLength(2);
   });
 
+  it("county filter is case-insensitive", async () => {
+    const entries = [buildEntry("uuid-001", "1234567890", "cid-001")];
+    mockFetchOracleManifest.mockResolvedValue(buildManifest(entries));
+
+    const result = await listOraclePropertiesHandler({ county: "lee" });
+    const parsed = JSON.parse(result.content[0].text);
+
+    expect(parsed.total).toBe(1);
+  });
+
   it("returns empty list when county does not match", async () => {
-    const entries = [buildEntry("P001", "cid-001")];
+    const entries = [buildEntry("uuid-001", "1234567890", "cid-001")];
     mockFetchOracleManifest.mockResolvedValue(buildManifest(entries));
 
     const result = await listOraclePropertiesHandler({ county: "Miami-Dade" });
@@ -143,10 +153,7 @@ describe("listOraclePropertiesHandler", () => {
 
   it("includes correct slim fields in each property entry", async () => {
     const entries = [
-      buildEntry("PARCEL-001", "cid-abc", {
-        fileSizeBytes: 4096,
-        collectedAt: "2024-03-15T12:00:00Z",
-      }),
+      buildEntry("uuid-abc", "9876543210", "cid-abc", { fileSizeBytes: 4096 }),
     ];
     mockFetchOracleManifest.mockResolvedValue(buildManifest(entries));
 
@@ -154,11 +161,12 @@ describe("listOraclePropertiesHandler", () => {
     const parsed = JSON.parse(result.content[0].text);
     const prop = parsed.properties[0];
 
-    expect(prop.parcelId).toBe("PARCEL-001");
+    expect(prop.propertyId).toBe("uuid-abc");
+    expect(prop.parcelIdentifier).toBe("9876543210");
     expect(prop.cid).toBe("cid-abc");
     expect(prop.county).toBe("Lee");
-    expect(prop.collectedAt).toBe("2024-03-15T12:00:00Z");
     expect(prop.fileSizeBytes).toBe(4096);
+    expect(prop.collectedAt).toBeUndefined();
   });
 });
 
@@ -179,34 +187,65 @@ describe("getOraclePropertyHandler", () => {
     expect(parsed.appraisal.value).toBe(123000);
   });
 
-  it("resolves parcelId via manifest to get cid then fetches", async () => {
-    const entries = [buildEntry("P001", "cid-for-p001")];
+  it("resolves parcelIdentifier via manifest then fetches", async () => {
+    const entries = [buildEntry("uuid-001", "1234567890", "cid-for-parcel")];
     mockFetchOracleManifest.mockResolvedValue(buildManifest(entries));
     const propertyData = { appraisal: { value: 250000 } };
     mockGetJsonByCid.mockResolvedValue(propertyData);
 
-    const result = await getOraclePropertyHandler({ parcelId: "P001" });
+    const result = await getOraclePropertyHandler({
+      parcelIdentifier: "1234567890",
+    });
     const parsed = JSON.parse(result.content[0].text);
 
     expect(mockFetchOracleManifest).toHaveBeenCalledOnce();
-    expect(mockGetJsonByCid).toHaveBeenCalledWith("cid-for-p001");
+    expect(mockGetJsonByCid).toHaveBeenCalledWith("cid-for-parcel");
     expect(parsed.appraisal.value).toBe(250000);
   });
 
-  it("returns error when parcelId not found in manifest", async () => {
-    const entries = [buildEntry("P001", "cid-001")];
+  it("resolves propertyId via manifest then fetches", async () => {
+    const entries = [buildEntry("uuid-001", "1234567890", "cid-for-uuid")];
     mockFetchOracleManifest.mockResolvedValue(buildManifest(entries));
+    const propertyData = { appraisal: { value: 375000 } };
+    mockGetJsonByCid.mockResolvedValue(propertyData);
 
-    const result = await getOraclePropertyHandler({ parcelId: "UNKNOWN" });
+    const result = await getOraclePropertyHandler({ propertyId: "uuid-001" });
     const parsed = JSON.parse(result.content[0].text);
 
-    expect(parsed.error).toContain("UNKNOWN");
+    expect(mockFetchOracleManifest).toHaveBeenCalledOnce();
+    expect(mockGetJsonByCid).toHaveBeenCalledWith("cid-for-uuid");
+    expect(parsed.appraisal.value).toBe(375000);
+  });
+
+  it("returns error when parcelIdentifier not found in manifest", async () => {
+    const entries = [buildEntry("uuid-001", "1234567890", "cid-001")];
+    mockFetchOracleManifest.mockResolvedValue(buildManifest(entries));
+
+    const result = await getOraclePropertyHandler({
+      parcelIdentifier: "9999999999",
+    });
+    const parsed = JSON.parse(result.content[0].text);
+
+    expect(parsed.error).toContain("9999999999");
     expect(mockGetJsonByCid).not.toHaveBeenCalled();
   });
 
-  it("returns error when both parcelId and cid are provided", async () => {
+  it("returns error when propertyId not found in manifest", async () => {
+    const entries = [buildEntry("uuid-001", "1234567890", "cid-001")];
+    mockFetchOracleManifest.mockResolvedValue(buildManifest(entries));
+
     const result = await getOraclePropertyHandler({
-      parcelId: "P001",
+      propertyId: "uuid-unknown",
+    });
+    const parsed = JSON.parse(result.content[0].text);
+
+    expect(parsed.error).toContain("uuid-unknown");
+    expect(mockGetJsonByCid).not.toHaveBeenCalled();
+  });
+
+  it("returns error when multiple lookup keys are provided", async () => {
+    const result = await getOraclePropertyHandler({
+      parcelIdentifier: "1234567890",
       cid: "cid-001",
     });
     const parsed = JSON.parse(result.content[0].text);
@@ -216,7 +255,18 @@ describe("getOraclePropertyHandler", () => {
     expect(mockGetJsonByCid).not.toHaveBeenCalled();
   });
 
-  it("returns error when neither parcelId nor cid is provided", async () => {
+  it("returns error when all three lookup keys are provided", async () => {
+    const result = await getOraclePropertyHandler({
+      parcelIdentifier: "1234567890",
+      propertyId: "uuid-001",
+      cid: "cid-001",
+    });
+    const parsed = JSON.parse(result.content[0].text);
+
+    expect(parsed.error).toContain("exactly one");
+  });
+
+  it("returns error when no lookup key is provided", async () => {
     const result = await getOraclePropertyHandler({});
     const parsed = JSON.parse(result.content[0].text);
 
@@ -235,8 +285,12 @@ describe("getOraclePropertyHandler", () => {
     expect(parsed.details).toContain("gateway unreachable");
   });
 
-  it("treats empty string cid as missing", async () => {
-    const result = await getOraclePropertyHandler({ cid: "", parcelId: "" });
+  it("treats empty string values as missing", async () => {
+    const result = await getOraclePropertyHandler({
+      cid: "",
+      parcelIdentifier: "",
+      propertyId: "",
+    });
     const parsed = JSON.parse(result.content[0].text);
 
     expect(parsed.error).toContain("exactly one");
@@ -249,7 +303,10 @@ describe("getOracleDatasetInfoHandler", () => {
   });
 
   it("returns dataset summary from manifest", async () => {
-    const entries = [buildEntry("P001", "cid-001"), buildEntry("P002", "cid-002")];
+    const entries = [
+      buildEntry("uuid-001", "1234567890", "cid-001"),
+      buildEntry("uuid-002", "2345678901", "cid-002"),
+    ];
     mockFetchOracleManifest.mockResolvedValue(buildManifest(entries));
     mockGetManifestCid.mockReturnValue(
       "QmQ6pdjzm4w7ddEjKDekqukqfdBbvDhgphVXqdTsssqK4d",
@@ -273,7 +330,7 @@ describe("getOracleDatasetInfoHandler", () => {
       propertyCount: 1,
       totalBytes: 512,
       completedAt: "2024-05-01T00:00:00Z",
-      entries: [buildEntry("P001", "cid-001")],
+      entries: [buildEntry("uuid-001", "1234567890", "cid-001")],
     });
     mockGetManifestCid.mockReturnValue("QmSomeCid");
 
