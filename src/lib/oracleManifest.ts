@@ -5,8 +5,7 @@ import {
   type OracleManifest,
 } from "../types/oracleOpenData.ts";
 
-const DEFAULT_MANIFEST_CID =
-  "QmQ6pdjzm4w7ddEjKDekqukqfdBbvDhgphVXqdTsssqK4d";
+const DEFAULT_MANIFEST_CID = "QmQ6pdjzm4w7ddEjKDekqukqfdBbvDhgphVXqdTsssqK4d";
 
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 

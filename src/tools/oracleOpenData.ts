@@ -1,10 +1,7 @@
 import { createTextResult } from "../lib/utils.ts";
 import { logger } from "../logger.ts";
 import { getJsonByCid } from "../lib/ipfs.ts";
-import {
-  fetchOracleManifest,
-  getManifestCid,
-} from "../lib/oracleManifest.ts";
+import { fetchOracleManifest, getManifestCid } from "../lib/oracleManifest.ts";
 import type {
   SlimPropertyEntry,
   ListOraclePropertiesResult,
@@ -76,9 +73,7 @@ export async function getOraclePropertyHandler(args: {
     typeof args.propertyId === "string" && args.propertyId.length > 0;
 
   const providedCount =
-    (hasCid ? 1 : 0) +
-    (hasParcelIdentifier ? 1 : 0) +
-    (hasPropertyId ? 1 : 0);
+    (hasCid ? 1 : 0) + (hasParcelIdentifier ? 1 : 0) + (hasPropertyId ? 1 : 0);
 
   if (providedCount > 1) {
     return createTextResult({
