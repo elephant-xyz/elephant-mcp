@@ -1,27 +1,16 @@
 #!/usr/bin/env node
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { z } from "zod";
 import packageJson from "../package.json";
 import { logger } from "./logger.ts";
-import { listClassesByDataGroupHandler } from "./tools/dataGroups.ts";
-import {
-  listPropertiesByClassNameHandler,
-  getPropertySchemaByClassNameHandler,
-} from "./tools/classes.ts";
 import { setServerInstance } from "./lib/serverRef.ts";
 import path from "path";
 import { getDefaultDataDir } from "./lib/paths.ts";
 import { initializeDatabase } from "./db/index.ts";
 import { setDbInstance } from "./db/connectionRef.ts";
-import { transformExamplesHandler } from "./tools/transformExamples.ts";
 import { indexVerifiedScripts } from "./lib/verifiedIndexer.ts";
 import { verifyEmbeddingProvider } from "./config.ts";
-import {
-  listOraclePropertiesHandler,
-  getOraclePropertyHandler,
-  getOracleDatasetInfoHandler,
-} from "./tools/oracleOpenData.ts";
+import { registerAllTools } from "./tools/registry.ts";
 
 const SERVER_NAME =
   typeof packageJson.name === "string" ? packageJson.name : "@elephant-xyz/mcp";
@@ -42,173 +31,7 @@ const getServer = () => {
     },
   );
 
-  server.registerTool(
-    "listClassesByDataGroup",
-    {
-      title: "List classes by data group",
-      description:
-        "List classes for an Elephant data group with names and descriptions",
-      inputSchema: {
-        groupName: z
-          .string()
-          .min(1, "groupName is required")
-          .describe("The data group name, case-insensitive"),
-      },
-    },
-    async (args: { groupName: string }) => {
-      return listClassesByDataGroupHandler(args.groupName);
-    },
-  );
-
-  server.registerTool(
-    "listPropertiesByClassName",
-    {
-      title: "List properties by class name",
-      description:
-        "Lists JSON Schema property names for an Elephant class (excludes source_http_request)",
-      inputSchema: {
-        className: z
-          .string()
-          .min(1, "className is required")
-          .describe("The class name, case-insensitive"),
-      },
-    },
-    async (args: { className: string }) => {
-      return listPropertiesByClassNameHandler(args.className);
-    },
-  );
-
-  server.registerTool(
-    "getPropertySchema",
-    {
-      title: "Get property schema by class and property",
-      description: "Returns the full JSON Schema object for a class property",
-      inputSchema: {
-        className: z
-          .string()
-          .min(1, "className is required")
-          .describe("Class name, case-insensitive"),
-        propertyName: z
-          .string()
-          .min(1, "propertyName is required")
-          .describe("Property name, case-insensitive"),
-      },
-    },
-    async (args: { className: string; propertyName: string }) => {
-      return getPropertySchemaByClassNameHandler(
-        args.className,
-        args.propertyName,
-      );
-    },
-  );
-
-  server.registerTool(
-    "getVerifiedScriptExamples",
-    {
-      title: "Get verified script examples",
-      description:
-        "Get most relevant working examples of the code, that maps data to the Elephant schema",
-      inputSchema: {
-        query: z
-          .string()
-          .min(1, "text is required")
-          .describe(
-            "Description of the example meaning. Wll be used to search for similar examples.",
-          ),
-        topK: z
-          .number()
-          .int()
-          .positive()
-          .max(50)
-          .optional()
-          .default(5)
-          .describe("Number of results (default 5)"),
-      },
-    },
-    async (args: { query: string; topK?: number }) => {
-      return transformExamplesHandler(args.query, args.topK);
-    },
-  );
-
-  server.registerTool(
-    "listOracleProperties",
-    {
-      title: "List Oracle open-data properties",
-      description:
-        "Paginated discovery of properties in the Oracle open-data manifest. Returns slim entries (propertyId, parcelIdentifier, cid, county, fileSizeBytes). Use getOracleProperty to fetch full consolidated data for a specific entry.",
-      inputSchema: {
-        county: z
-          .string()
-          .optional()
-          .describe("Filter by county name (case-insensitive)"),
-        limit: z
-          .number()
-          .int()
-          .positive()
-          .max(500)
-          .optional()
-          .default(50)
-          .describe("Number of results to return (default 50, max 500)"),
-        offset: z
-          .number()
-          .int()
-          .min(0)
-          .optional()
-          .default(0)
-          .describe("Zero-based offset for pagination (default 0)"),
-      },
-    },
-    async (args: { county?: string; limit?: number; offset?: number }) => {
-      return listOraclePropertiesHandler(args);
-    },
-  );
-
-  server.registerTool(
-    "getOracleProperty",
-    {
-      title: "Get Oracle open-data property",
-      description:
-        "Fetch the full consolidated property JSON (appraisal, permits, Sunbiz, BBB) from IPFS. Provide exactly one of parcelIdentifier, propertyId, or cid.",
-      inputSchema: {
-        parcelIdentifier: z
-          .string()
-          .optional()
-          .describe(
-            "The property parcel identifier (digits) — looked up in the manifest to resolve its IPFS CID",
-          ),
-        propertyId: z
-          .string()
-          .optional()
-          .describe(
-            "The property UUID — looked up in the manifest to resolve its IPFS CID",
-          ),
-        cid: z
-          .string()
-          .optional()
-          .describe("IPFS CID for the consolidated property JSON"),
-      },
-    },
-    async (args: {
-      parcelIdentifier?: string;
-      propertyId?: string;
-      cid?: string;
-    }) => {
-      return getOraclePropertyHandler(args);
-    },
-  );
-
-  server.registerTool(
-    "getOracleDatasetInfo",
-    {
-      title: "Get Oracle open-data dataset info",
-      description:
-        "Returns dataset-level provenance and freshness metadata: county, propertyCount, exportedAt, schemaVersion, totalBytes, and the manifest CID.",
-      inputSchema: {},
-    },
-    async () => {
-      return getOracleDatasetInfoHandler();
-    },
-  );
+  registerAllTools(server);
 
   return server;
 };
