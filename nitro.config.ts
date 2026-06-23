@@ -12,6 +12,9 @@ import { defineNitroConfig } from "nitropack/config";
  * The MCP server is stateless (no sessions), so all presets work correctly.
  */
 export default defineNitroConfig({
+  // Pin compatibility date for deterministic preset builds.
+  compatibilityDate: "2026-06-23",
+
   // Default preset — override with NITRO_PRESET env var or --preset flag
   preset: (process.env.NITRO_PRESET as string | undefined) ?? "node-server",
 
@@ -67,8 +70,19 @@ export default defineNitroConfig({
     ],
   },
 
-  // Output directory for Nitro build artifacts
-  output: {
-    dir: ".nitro",
-  },
+  // NOTE: @noble/hashes@1.8.0 ships a malformed package.json (duplicate
+  // "./crypto" exports key) that makes "@noble/hashes/crypto" unresolvable in the
+  // flattened Nitro bundle (ERR_PACKAGE_PATH_NOT_EXPORTED → 500 at runtime). The
+  // post-build `scripts/patch-nitro-noble.mjs` step (npm run build:vercel) repairs
+  // the bundle by writing the missing crypto.js shim.
+
+  // Output directory for Nitro build artifacts.
+  // The Vercel preset must write to `.vercel/output` (Build Output API v3) so
+  // `vercel deploy --prebuilt` can pick it up; other presets use `.nitro`.
+  output:
+    (process.env.NITRO_PRESET as string | undefined) === "vercel"
+      ? undefined
+      : {
+          dir: ".nitro",
+        },
 });

@@ -13,6 +13,7 @@
   },
   "scripts": {
     "build": "vite build",
+    "build:vercel": "NITRO_PRESET=vercel nitropack build && node ./scripts/patch-nitro-noble.mjs",
     "dev": "node --watch src/index.ts",
     "dev:http": "node --watch src/server/http.ts",
     "start": "node dist/index.js",
