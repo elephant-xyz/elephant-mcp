@@ -8,6 +8,7 @@ import { base32 } from "multiformats/bases/base32";
 import { equals as u8eq } from "uint8arrays/equals";
 import { logger } from "../logger.ts";
 import Hash from "ipfs-only-hash";
+import { ShardFileSchema, type ShardFile } from "../types/oracleOpenData.ts";
 
 interface VerificationResult {
   valid: boolean;
@@ -146,4 +147,9 @@ export async function verifyFetchedContent(
     expectedHash: cidStr,
     actualHash: recomputedCidStr,
   };
+}
+
+export async function fetchShardByCid(shardCid: string): Promise<ShardFile> {
+  const raw = await getJsonByCid<unknown>(shardCid);
+  return ShardFileSchema.parse(raw);
 }

@@ -26,7 +26,7 @@ export type OracleManifest = z.infer<typeof OracleManifestSchema>;
 export interface SlimPropertyEntry {
   propertyId: string;
   parcelIdentifier: string;
-  cid: string;
+  cid: string | null;
   county: string;
   fileSizeBytes: number;
 }
@@ -37,3 +37,46 @@ export interface ListOraclePropertiesResult {
   limit: number;
   properties: SlimPropertyEntry[];
 }
+
+// A single entry inside a shard file (compact — no filePath or sha256)
+export const ShardEntrySchema = z.object({
+  propertyId: z.string(),
+  parcelIdentifier: z.string(),
+  cid: z.string().nullable(),
+  fileSizeBytes: z.number(),
+});
+export type ShardEntry = z.infer<typeof ShardEntrySchema>;
+
+// A shard file (shards/shard-NNNN.json)
+export const ShardFileSchema = z.object({
+  schemaVersion: z.literal("1"),
+  shardIndex: z.number().int().nonnegative(),
+  fromParcel: z.string(),
+  toParcel: z.string(),
+  count: z.number().int().positive(),
+  entries: z.array(ShardEntrySchema),
+});
+export type ShardFile = z.infer<typeof ShardFileSchema>;
+
+// A reference to one shard, stored in index.json's shards array
+export const ShardRefSchema = z.object({
+  shardIndex: z.number().int().nonnegative(),
+  fromParcel: z.string(),
+  toParcel: z.string(),
+  count: z.number().int().nonnegative(),
+  shardCid: z.string().nullable(),
+});
+export type ShardRef = z.infer<typeof ShardRefSchema>;
+
+// The top-level index file (index.json)
+export const OracleIndexSchema = z.object({
+  schemaVersion: z.literal("1"),
+  county: z.string(),
+  exportedAt: z.string(),
+  completedAt: z.string(),
+  propertyCount: z.number().int().nonnegative(),
+  shardSize: z.number().int().positive(),
+  totalBytes: z.number().nonnegative(),
+  shards: z.array(ShardRefSchema),
+});
+export type OracleIndex = z.infer<typeof OracleIndexSchema>;
