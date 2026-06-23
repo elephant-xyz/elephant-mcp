@@ -31,6 +31,20 @@ export function clearManifestCache(): void {
   manifestCache = null;
 }
 
+/**
+ * Resolve the CID the manifest read path should use. When ORACLE_OPEN_DATA_IPNS
+ * is set, the IPNS-resolved CID wins so that the manifest is served via the IPNS
+ * name (which may point at either a sharded index or a flat manifest — see
+ * fetchOracleIndex for the auto-detect). Falls back to the fixed env/default CID.
+ */
+async function resolveManifestCid(): Promise<string> {
+  const ipnsCid = await resolveIpnsToCid();
+  if (ipnsCid) {
+    return ipnsCid;
+  }
+  return getManifestCid();
+}
+
 export async function fetchOracleManifest(): Promise<OracleManifest> {
   const now = Date.now();
 
@@ -39,7 +53,7 @@ export async function fetchOracleManifest(): Promise<OracleManifest> {
     return manifestCache.manifest;
   }
 
-  const cid = getManifestCid();
+  const cid = await resolveManifestCid();
   logger.info({ cid }, "Fetching Oracle open-data manifest");
 
   const raw = await getJsonByCid<unknown>(cid);
@@ -62,20 +76,29 @@ export function clearIndexCache(): void {
   indexCache = null;
 }
 
-export async function resolveIpnsToIndexCid(): Promise<string | null> {
+/**
+ * Resolve an IPNS name (k51…) to its current CID using public IPFS gateways.
+ *
+ * The Kubo RPC `/api/v0/name/resolve` endpoint is NO LONGER exposed by the
+ * public gateways (ipfs.io / gateway.ipfs.io return "Kubo RPC is not here").
+ * Modern path-and-subdomain gateways instead expose the resolved root CID in
+ * the `x-ipfs-roots` response header. We issue a HEAD request and read that
+ * header — works for both flat-manifest and sharded-index targets.
+ */
+export async function resolveIpnsToCid(): Promise<string | null> {
   const ipnsName = process.env.ORACLE_OPEN_DATA_IPNS;
   if (!ipnsName) {
     return null;
   }
 
   const endpoints = [
-    `https://gateway.ipfs.io/api/v0/name/resolve?arg=${encodeURIComponent(ipnsName)}`,
-    `https://ipfs.io/api/v0/name/resolve?arg=${encodeURIComponent(ipnsName)}`,
+    `https://${ipnsName}.ipns.dweb.link/`,
+    `https://ipfs.filebase.io/ipns/${encodeURIComponent(ipnsName)}`,
   ];
 
   for (const url of endpoints) {
     try {
-      const response = await fetch(url, { redirect: "follow" });
+      const response = await fetch(url, { method: "HEAD", redirect: "follow" });
       if (!response.ok) {
         logger.warn(
           { url, status: response.status },
@@ -83,12 +106,13 @@ export async function resolveIpnsToIndexCid(): Promise<string | null> {
         );
         continue;
       }
-      const data = (await response.json()) as { Path?: string };
-      if (typeof data.Path === "string") {
-        // Path is like "/ipfs/QmXxx..." — extract the CID
-        const match = /^\/ipfs\/(.+)$/.exec(data.Path);
-        if (match) {
-          return match[1];
+      // `x-ipfs-roots` is the resolved root CID(s); take the last one (the
+      // leaf the IPNS path points at). `x-ipfs-path` carries /ipns/<name>.
+      const roots = response.headers.get("x-ipfs-roots");
+      if (roots) {
+        const cid = roots.split(",").map((s) => s.trim()).filter(Boolean).pop();
+        if (cid) {
+          return cid;
         }
       }
     } catch (err) {
@@ -113,7 +137,7 @@ export async function fetchOracleIndex(): Promise<OracleIndex | null> {
 
   try {
     // Try IPNS resolution first
-    let cid = await resolveIpnsToIndexCid();
+    let cid = await resolveIpnsToCid();
 
     // Fall back to fixed env-var CID
     if (!cid) {
@@ -127,7 +151,20 @@ export async function fetchOracleIndex(): Promise<OracleIndex | null> {
     logger.info({ cid }, "Fetching Oracle sharded index");
 
     const raw = await getJsonByCid<unknown>(cid);
-    const index = OracleIndexSchema.parse(raw);
+
+    // Auto-detect: the IPNS name (or fixed CID) may point at a SHARDED index
+    // OR a FLAT manifest (the old 4,664 format). Try the index schema first;
+    // if the content is actually a flat manifest, return null so the caller
+    // falls back to fetchOracleManifest, which reads the same IPNS-resolved CID.
+    const parsed = OracleIndexSchema.safeParse(raw);
+    if (!parsed.success) {
+      logger.info(
+        { cid },
+        "IPNS/CID content is not a sharded index — falling back to flat manifest read path",
+      );
+      return null;
+    }
+    const index = parsed.data;
 
     indexCache = { index, fetchedAt: now };
     logger.info(
