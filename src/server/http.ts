@@ -13,7 +13,11 @@
  * is independent — no server-side session state is required. This lets
  * the server run as a serverless function with no persistent process.
  */
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import {
+  createServer,
+  type IncomingMessage,
+  type ServerResponse,
+} from "node:http";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import packageJson from "../../package.json";
@@ -63,7 +67,13 @@ async function handleMcpRequest(
 
 function handleHealthCheck(_req: IncomingMessage, res: ServerResponse): void {
   res.writeHead(200, { "Content-Type": "application/json" });
-  res.end(JSON.stringify({ status: "ok", server: SERVER_NAME, version: SERVER_VERSION }));
+  res.end(
+    JSON.stringify({
+      status: "ok",
+      server: SERVER_NAME,
+      version: SERVER_VERSION,
+    }),
+  );
 }
 
 async function routeRequest(

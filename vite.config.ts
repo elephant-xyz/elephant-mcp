@@ -14,6 +14,11 @@ const sharedExternals = [
   "helia",
   "@helia/json",
   "multiformats",
+  // Optional native (node-gyp) addons — lazy-loaded at runtime by the code
+  // indexer. Keep external so the bundle never hard-requires them and the build
+  // succeeds even when the native module is not installed/buildable.
+  "tree-sitter",
+  "tree-sitter-javascript",
   "zod",
   "node:crypto",
   "node:http",

@@ -48,7 +48,9 @@ function getPermitQueueUrl(): string {
 }
 
 function getPermitOutputPrefix(): string {
-  return process.env.PERMIT_HARVEST_OUTPUT_PREFIX ?? DEFAULT_PERMIT_OUTPUT_PREFIX;
+  return (
+    process.env.PERMIT_HARVEST_OUTPUT_PREFIX ?? DEFAULT_PERMIT_OUTPUT_PREFIX
+  );
 }
 
 function getPermitCacheManifestCid(): string | undefined {
@@ -76,7 +78,9 @@ let sqsClient: SQSClient | null = null;
 
 function getSqsClient(): SQSClient {
   if (!sqsClient) {
-    sqsClient = new SQSClient({ region: process.env.AWS_REGION ?? "us-east-1" });
+    sqsClient = new SQSClient({
+      region: process.env.AWS_REGION ?? "us-east-1",
+    });
   }
   return sqsClient;
 }
@@ -119,7 +123,10 @@ async function lookupPermitsFromIpfs(
     };
   } catch (error) {
     logger.debug(
-      { parcelId, error: error instanceof Error ? error.message : String(error) },
+      {
+        parcelId,
+        error: error instanceof Error ? error.message : String(error),
+      },
       "IPFS permit cache lookup failed — will enqueue harvest",
     );
     return null;
@@ -204,7 +211,10 @@ export async function getPropertyPermitsHandler(args: {
     }
   } catch (error) {
     logger.warn(
-      { parcelId, error: error instanceof Error ? error.message : String(error) },
+      {
+        parcelId,
+        error: error instanceof Error ? error.message : String(error),
+      },
       "IPFS permit lookup failed — proceeding to enqueue",
     );
   }

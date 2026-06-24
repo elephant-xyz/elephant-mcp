@@ -3,6 +3,21 @@ import { promises as fs } from "fs";
 import path from "path";
 import { extractFunctions } from "../parser.js";
 
+// tree-sitter / tree-sitter-javascript are optional native deps. When they are
+// not installed/buildable in this environment, the code indexer is unavailable
+// and these tests cannot exercise the parser — skip the suite instead of failing.
+const treeSitterAvailable = await (async (): Promise<boolean> => {
+  try {
+    await import("tree-sitter");
+    await import("tree-sitter-javascript");
+    return true;
+  } catch {
+    return false;
+  }
+})();
+
+const describeWithTreeSitter = treeSitterAvailable ? describe : describe.skip;
+
 const TEST_DIR = path.join(process.cwd(), "test-fixtures", "parser");
 
 beforeEach(async () => {
@@ -24,7 +39,7 @@ async function createTestFile(
   return filePath;
 }
 
-describe("extractFunctions", () => {
+describeWithTreeSitter("extractFunctions", () => {
   describe("valid inputs", () => {
     it("extracts single named function declaration", async () => {
       const filePath = await createTestFile(

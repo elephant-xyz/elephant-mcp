@@ -225,22 +225,13 @@ describe("listOraclePropertiesHandler", () => {
     ];
     mockFetchOracleIndex.mockResolvedValue(buildIndex(shards));
 
-    const shard0 = buildShardFile(0, [
-      { propertyId: "p-0", parcelIdentifier: "1000", cid: "cid-1000" },
-      { propertyId: "p-1", parcelIdentifier: "1001", cid: "cid-1001" },
-    ]);
     const shard1 = buildShardFile(1, [
       { propertyId: "p-2", parcelIdentifier: "2000", cid: "cid-2000" },
       { propertyId: "p-3", parcelIdentifier: "2001", cid: "cid-2001" },
     ]);
-    const shard2 = buildShardFile(2, [
-      { propertyId: "p-4", parcelIdentifier: "3000", cid: "cid-3000" },
-      { propertyId: "p-5", parcelIdentifier: "3001", cid: "cid-3001" },
-    ]);
 
-    // offset=2, limit=2 → should only need shard 1
-    mockFetchShardByCid
-      .mockResolvedValueOnce(shard1);
+    // offset=2, limit=2 → should only need shard 1 (shards 0 and 2 must NOT be fetched)
+    mockFetchShardByCid.mockResolvedValueOnce(shard1);
 
     const result = await listOraclePropertiesHandler({ offset: 2, limit: 2 });
     const parsed = JSON.parse(result.content[0].text);
@@ -462,9 +453,7 @@ describe("getOraclePropertyHandler", () => {
   });
 
   it("[shard path] returns not-found error when parcel not in any shard range", async () => {
-    const shards = [
-      buildShardRef(0, "1000", "1999", 2, "shard-cid-0"),
-    ];
+    const shards = [buildShardRef(0, "1000", "1999", 2, "shard-cid-0")];
     mockFetchOracleIndex.mockResolvedValue(buildIndex(shards));
 
     const result = await getOraclePropertyHandler({

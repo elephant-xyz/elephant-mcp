@@ -110,7 +110,11 @@ export async function resolveIpnsToCid(): Promise<string | null> {
       // leaf the IPNS path points at). `x-ipfs-path` carries /ipns/<name>.
       const roots = response.headers.get("x-ipfs-roots");
       if (roots) {
-        const cid = roots.split(",").map((s) => s.trim()).filter(Boolean).pop();
+        const cid = roots
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .pop();
         if (cid) {
           return cid;
         }

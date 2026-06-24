@@ -82,13 +82,21 @@ class NodeLikeResponse extends EventEmitter {
 
   private readonly responseHeaders: Record<string, string | string[]> = {};
   private readonly chunks: Buffer[] = [];
-  private resolveEnd!: (value: { status: number; headers: Record<string, string | string[]>; body: Buffer }) => void;
+  private resolveEnd!: (value: {
+    status: number;
+    headers: Record<string, string | string[]>;
+    body: Buffer;
+  }) => void;
   private rejectEnd!: (reason: unknown) => void;
   /** Guards against double-settling the promise (resolve OR reject, once). */
   private isSettled = false;
 
   /** Promise that resolves when res.end() is called (or rejects on failure). */
-  readonly settled: Promise<{ status: number; headers: Record<string, string | string[]>; body: Buffer }>;
+  readonly settled: Promise<{
+    status: number;
+    headers: Record<string, string | string[]>;
+    body: Buffer;
+  }>;
 
   constructor() {
     super();
@@ -173,7 +181,11 @@ function toBuffer(chunk: string | Buffer | Uint8Array): Buffer {
 
 export function buildHealthResponse(): Response {
   return new Response(
-    JSON.stringify({ status: "ok", server: SERVER_NAME, version: SERVER_VERSION }),
+    JSON.stringify({
+      status: "ok",
+      server: SERVER_NAME,
+      version: SERVER_VERSION,
+    }),
     { status: 200, headers: { "content-type": "application/json" } },
   );
 }
@@ -297,10 +309,10 @@ export async function handleWebMcpRequest(
         { error: error instanceof Error ? error.message : String(error) },
         "Web MCP response never settled cleanly — returning 500",
       );
-      return new Response(
-        JSON.stringify({ error: "Internal server error" }),
-        { status: 500, headers: { "content-type": "application/json" } },
-      );
+      return new Response(JSON.stringify({ error: "Internal server error" }), {
+        status: 500,
+        headers: { "content-type": "application/json" },
+      });
     }
 
     // Build the web Response headers.

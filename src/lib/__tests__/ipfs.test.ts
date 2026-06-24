@@ -23,7 +23,9 @@ describe("verifyFetchedContent", () => {
     });
 
     it("returns valid=false when content is tampered", async () => {
-      const tampered = new Uint8Array(Buffer.from('{"test":false,"tampered":true}'));
+      const tampered = new Uint8Array(
+        Buffer.from('{"test":false,"tampered":true}'),
+      );
       const result = await verifyFetchedContent(KNOWN_CID, tampered);
 
       expect(result.valid).toBe(false);
@@ -77,10 +79,6 @@ describe("verifyFetchedContent", () => {
 
 describe("fetchShardByCid", () => {
   it("parses a valid shard file via getJsonByCid", async () => {
-    const { getJsonByCid } = await import("../ipfs.ts");
-    const { fetchShardByCid } = await import("../ipfs.ts");
-    const { vi } = await import("vitest");
-
     // We need to test fetchShardByCid in isolation — use dynamic mock approach
     const validShard = {
       schemaVersion: "1" as const,
@@ -132,4 +130,3 @@ describe("fetchShardByCid", () => {
     expect(() => ShardFileSchema.parse(invalid)).toThrow();
   });
 });
-

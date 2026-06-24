@@ -147,7 +147,10 @@ export default defineEventHandler(async (event) => {
           return new Response(
             JSON.stringify({
               jsonrpc: "2.0",
-              error: { code: -32700, message: "Parse error: request body must be JSON" },
+              error: {
+                code: -32700,
+                message: "Parse error: request body must be JSON",
+              },
               id: null,
             }),
             { status: 400, headers: { "content-type": "application/json" } },
@@ -168,8 +171,8 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  return new Response(
-    JSON.stringify({ error: "Not found", path: pathname }),
-    { status: 404, headers: { "content-type": "application/json" } },
-  );
+  return new Response(JSON.stringify({ error: "Not found", path: pathname }), {
+    status: 404,
+    headers: { "content-type": "application/json" },
+  });
 });
