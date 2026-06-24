@@ -11,14 +11,40 @@ import {
 // Configuration — all overridable via environment variables
 // ---------------------------------------------------------------------------
 
-const DEFAULT_PERMIT_QUEUE_URL =
-  "https://sqs.us-east-1.amazonaws.com/848665034107/elephant-oracle-node-property-first-permit-queue";
-
 const DEFAULT_PERMIT_OUTPUT_PREFIX =
   "s3://elephant-oracle-node-permit-harvest/permit-harvest/mcp-on-demand";
 
+/**
+ * Thrown when the permit harvest queue URL is not configured. Surfaced to the
+ * caller as a clear "permit queue not configured" status rather than a 500.
+ */
+export class PermitQueueNotConfiguredError extends Error {
+  constructor() {
+    super(
+      "Permit queue not configured: set PERMIT_HARVEST_QUEUE_URL to the " +
+        "elephant-oracle-node property-first permit queue URL.",
+    );
+    this.name = "PermitQueueNotConfiguredError";
+  }
+}
+
+/**
+ * Resolves the property-first permit queue URL from the environment.
+ *
+ * No hardcoded account-id default: the queue URL embeds the AWS account id,
+ * which must never be a literal in source. The queue
+ * (`elephant-oracle-node-property-first-permit-queue`) is a STANDARD queue
+ * (no `.fifo` suffix; the CloudFormation `AWS::SQS::Queue` has no `FifoQueue`
+ * property), so sends must NOT include `MessageGroupId` /
+ * `MessageDeduplicationId` — those are FIFO-only and AWS rejects them on a
+ * standard queue with `InvalidParameterValue`.
+ */
 function getPermitQueueUrl(): string {
-  return process.env.PERMIT_HARVEST_QUEUE_URL ?? DEFAULT_PERMIT_QUEUE_URL;
+  const url = process.env.PERMIT_HARVEST_QUEUE_URL;
+  if (!url || url.trim() === "") {
+    throw new PermitQueueNotConfiguredError();
+  }
+  return url;
 }
 
 function getPermitOutputPrefix(): string {
@@ -118,10 +144,12 @@ async function enqueuePermitHarvest(
     outputPrefix: getPermitOutputPrefix(),
   };
 
+  // STANDARD queue: send only QueueUrl + MessageBody. MessageGroupId /
+  // MessageDeduplicationId are FIFO-only and would be rejected with
+  // InvalidParameterValue on this queue.
   const command = new SendMessageCommand({
     QueueUrl: getPermitQueueUrl(),
     MessageBody: JSON.stringify(message),
-    MessageGroupId: parcelId,
   });
 
   const sqs = getSqsClient();
@@ -195,6 +223,21 @@ export async function getPropertyPermitsHandler(args: {
     };
     return createTextResult(result);
   } catch (error) {
+    if (error instanceof PermitQueueNotConfiguredError) {
+      logger.error(
+        { parcelId, countyFips },
+        "Permit queue not configured — cannot enqueue harvest",
+      );
+
+      const result: GetPropertyPermitsResult = {
+        status: "error",
+        parcelId,
+        countyFips,
+        message: error.message,
+      };
+      return createTextResult(result);
+    }
+
     logger.error(
       {
         parcelId,

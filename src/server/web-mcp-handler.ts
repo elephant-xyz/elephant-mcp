@@ -84,8 +84,10 @@ class NodeLikeResponse extends EventEmitter {
   private readonly chunks: Buffer[] = [];
   private resolveEnd!: (value: { status: number; headers: Record<string, string | string[]>; body: Buffer }) => void;
   private rejectEnd!: (reason: unknown) => void;
+  /** Guards against double-settling the promise (resolve OR reject, once). */
+  private isSettled = false;
 
-  /** Promise that resolves when res.end() is called. */
+  /** Promise that resolves when res.end() is called (or rejects on failure). */
   readonly settled: Promise<{ status: number; headers: Record<string, string | string[]>; body: Buffer }>;
 
   constructor() {
@@ -94,6 +96,16 @@ class NodeLikeResponse extends EventEmitter {
       this.resolveEnd = resolve;
       this.rejectEnd = reject;
     });
+  }
+
+  /**
+   * Rejects the settled promise exactly once. Safe to call from a catch block
+   * or a safety timeout even if end() already ran — the first settle wins.
+   */
+  fail(reason: unknown): void {
+    if (this.isSettled) return;
+    this.isSettled = true;
+    this.rejectEnd(reason);
   }
 
   /** Called by the transport with (status) or (status, headers). Returns `this` for chaining. */
@@ -136,6 +148,8 @@ class NodeLikeResponse extends EventEmitter {
     if (chunk !== undefined && chunk !== null && chunk !== "") {
       this.chunks.push(toBuffer(chunk));
     }
+    if (this.isSettled) return;
+    this.isSettled = true;
     const body = Buffer.concat(this.chunks);
     this.resolveEnd({
       status: this.statusCode,
@@ -230,43 +244,82 @@ export async function handleWebMcpRequest(
     sessionIdGenerator: undefined,
   });
 
+  // Safety timeout: if the transport never calls res.end() AND never throws
+  // (e.g. it writes headers then hangs), force-settle so the request can never
+  // hang forever. Buffered MCP responses complete in well under this window.
+  const SETTLE_TIMEOUT_MS = 30_000;
+  const timeout = setTimeout(() => {
+    nodeRes.fail(
+      new Error(
+        `Web MCP handler timed out after ${SETTLE_TIMEOUT_MS}ms without a response`,
+      ),
+    );
+  }, SETTLE_TIMEOUT_MS);
+  // Don't keep the process/event loop alive solely for this timer.
+  if (typeof timeout.unref === "function") timeout.unref();
+
   try {
-    await server.connect(transport);
-    await transport.handleRequest(
-      nodeReq,
-      nodeRes as unknown as ServerResponse,
-      parsedBody,
-    );
-  } catch (error) {
-    logger.error(
-      { error: error instanceof Error ? error.message : String(error) },
-      "Unhandled error in web MCP handler",
-    );
-    if (!nodeRes.headersSent) {
+    // Drive the transport. ANY throw here — including a throw AFTER headers
+    // were written but before res.end() — must reject the settled promise so
+    // the `await nodeRes.settled` below can never hang.
+    try {
+      await server.connect(transport);
+      await transport.handleRequest(
+        nodeReq,
+        nodeRes as unknown as ServerResponse,
+        parsedBody,
+      );
+    } catch (error) {
+      logger.error(
+        { error: error instanceof Error ? error.message : String(error) },
+        "Unhandled error in web MCP handler",
+      );
+      // If nothing was written yet, return a clean 500 directly. Otherwise the
+      // response was partially written/aborted — reject settled so we surface a
+      // 500 below instead of hanging.
+      if (!nodeRes.headersSent) {
+        return new Response(
+          JSON.stringify({ error: "Internal server error" }),
+          { status: 500, headers: { "content-type": "application/json" } },
+        );
+      }
+      nodeRes.fail(error);
+    }
+
+    // Wait for the transport to finish writing (res.end() resolves, fail() rejects).
+    let status: number;
+    let rawHeaders: Record<string, string | string[]>;
+    let body: Buffer;
+    try {
+      ({ status, headers: rawHeaders, body } = await nodeRes.settled);
+    } catch (error) {
+      logger.error(
+        { error: error instanceof Error ? error.message : String(error) },
+        "Web MCP response never settled cleanly — returning 500",
+      );
       return new Response(
         JSON.stringify({ error: "Internal server error" }),
         { status: 500, headers: { "content-type": "application/json" } },
       );
     }
-  }
 
-  // Wait for the transport to finish writing (res.end() resolves the promise).
-  const { status, headers: rawHeaders, body } = await nodeRes.settled;
-
-  // Build the web Response headers.
-  const responseHeaders = new Headers();
-  for (const [key, value] of Object.entries(rawHeaders)) {
-    if (Array.isArray(value)) {
-      for (const v of value) {
-        responseHeaders.append(key, v);
+    // Build the web Response headers.
+    const responseHeaders = new Headers();
+    for (const [key, value] of Object.entries(rawHeaders)) {
+      if (Array.isArray(value)) {
+        for (const v of value) {
+          responseHeaders.append(key, v);
+        }
+      } else {
+        responseHeaders.set(key, value);
       }
-    } else {
-      responseHeaders.set(key, value);
     }
-  }
 
-  return new Response(body.length > 0 ? body : null, {
-    status,
-    headers: responseHeaders,
-  });
+    return new Response(body.length > 0 ? body : null, {
+      status,
+      headers: responseHeaders,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
 }
