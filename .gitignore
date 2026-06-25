@@ -144,3 +144,8 @@ vite.config.ts.timestamp-*
 # Claude Code local settings
 .claude/
 test-results.json
+
+# Nitro / Vercel build output
+.nitro/
+.vercel/
+.vercel

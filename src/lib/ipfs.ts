@@ -1,5 +1,4 @@
-import { createHelia, type Helia } from "helia";
-import { json as createJsonClient } from "@helia/json";
+import type { Helia } from "helia";
 import type { JSON as Json } from "@helia/json";
 import { CID } from "multiformats/cid";
 import { sha256, sha512 } from "multiformats/hashes/sha2";
@@ -8,6 +7,7 @@ import { base32 } from "multiformats/bases/base32";
 import { equals as u8eq } from "uint8arrays/equals";
 import { logger } from "../logger.ts";
 import Hash from "ipfs-only-hash";
+import { ShardFileSchema, type ShardFile } from "../types/oracleOpenData.ts";
 
 interface VerificationResult {
   valid: boolean;
@@ -21,6 +21,12 @@ let jsonClient: Json | null = null;
 async function getHelia(): Promise<Helia> {
   if (!heliaInstance) {
     logger.info("Initializing Helia instance");
+    // Dynamic import: Helia pulls in the full libp2p/WebRTC stack (incl. native
+    // .node binaries like @ipshipyard/node-datachannel) which cannot be bundled
+    // for or run on serverless platforms (e.g. Vercel). It is only ever used as a
+    // fallback when all HTTP gateways fail, so we keep it out of the static import
+    // graph and load it lazily. On serverless the gateway path always wins first.
+    const { createHelia } = await import("helia");
     heliaInstance = await createHelia();
   }
   return heliaInstance;
@@ -28,6 +34,7 @@ async function getHelia(): Promise<Helia> {
 
 async function getJsonClient(): Promise<Json> {
   if (!jsonClient) {
+    const { json: createJsonClient } = await import("@helia/json");
     const helia = await getHelia();
     jsonClient = createJsonClient(helia);
   }
@@ -146,4 +153,9 @@ export async function verifyFetchedContent(
     expectedHash: cidStr,
     actualHash: recomputedCidStr,
   };
+}
+
+export async function fetchShardByCid(shardCid: string): Promise<ShardFile> {
+  const raw = await getJsonByCid<unknown>(shardCid);
+  return ShardFileSchema.parse(raw);
 }

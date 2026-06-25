@@ -39,7 +39,8 @@ describe("config", () => {
   describe("hasAwsCredentials", () => {
     it("should return true when AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are set", async () => {
       process.env.AWS_ACCESS_KEY_ID = "AKIAIOSFODNN7EXAMPLE";
-      process.env.AWS_SECRET_ACCESS_KEY = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+      process.env.AWS_SECRET_ACCESS_KEY =
+        "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
       vi.mocked(existsSync).mockReturnValue(false);
 
       const { hasAwsCredentials } = await resetConfigModule();
@@ -127,7 +128,8 @@ describe("config", () => {
 
     it("should return true when AWS credentials are available", async () => {
       process.env.AWS_ACCESS_KEY_ID = "AKIAIOSFODNN7EXAMPLE";
-      process.env.AWS_SECRET_ACCESS_KEY = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+      process.env.AWS_SECRET_ACCESS_KEY =
+        "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
       vi.mocked(existsSync).mockReturnValue(false);
 
       const { hasEmbeddingProvider } = await resetConfigModule();
@@ -146,7 +148,8 @@ describe("config", () => {
     it("should prefer OpenAI when both are available", async () => {
       process.env.OPENAI_API_KEY = "sk-test-key";
       process.env.AWS_ACCESS_KEY_ID = "AKIAIOSFODNN7EXAMPLE";
-      process.env.AWS_SECRET_ACCESS_KEY = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+      process.env.AWS_SECRET_ACCESS_KEY =
+        "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
 
       const { hasEmbeddingProvider, getEmbeddingProvider } =
         await resetConfigModule();
@@ -185,7 +188,8 @@ describe("config", () => {
 
     it("should describe AWS environment credentials", async () => {
       process.env.AWS_ACCESS_KEY_ID = "AKIAIOSFODNN7EXAMPLE";
-      process.env.AWS_SECRET_ACCESS_KEY = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+      process.env.AWS_SECRET_ACCESS_KEY =
+        "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
       vi.mocked(existsSync).mockReturnValue(false);
 
       const { getEmbeddingProviderDescription } = await resetConfigModule();
@@ -240,7 +244,8 @@ describe("config", () => {
   describe("verifyAwsCredentials", () => {
     it("should return valid with source when credentials resolve successfully", async () => {
       process.env.AWS_ACCESS_KEY_ID = "AKIAIOSFODNN7EXAMPLE";
-      process.env.AWS_SECRET_ACCESS_KEY = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+      process.env.AWS_SECRET_ACCESS_KEY =
+        "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
       mockCredentialProvider.mockResolvedValue({
         accessKeyId: "AKIAIOSFODNN7EXAMPLE",
         secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",

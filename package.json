@@ -5,15 +5,19 @@
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "mcp": "dist/index.js"
+    "mcp": "dist/index.js",
+    "mcp-http": "dist/server-http.js"
   },
   "repository": {
     "url": "https://github.com/elephant-xyz/elephant-mcp"
   },
   "scripts": {
     "build": "vite build",
+    "build:vercel": "NITRO_PRESET=vercel nitropack build && node ./scripts/patch-nitro-noble.mjs",
     "dev": "node --watch src/index.ts",
+    "dev:http": "node --watch src/server/http.ts",
     "start": "node dist/index.js",
+    "start:http": "node dist/server-http.js",
     "postinstall": "node ./scripts/ensure-zod3.mjs",
     "prepare": "npm run build",
     "test": "vitest",
@@ -65,24 +69,29 @@
   "dependencies": {
     "@ai-sdk/amazon-bedrock": "^3.0.67",
     "@ai-sdk/openai": "^2.0.53",
+    "@aws-sdk/client-sqs": "^3.1074.0",
     "@aws-sdk/credential-providers": "^3.0.0",
     "@helia/json": "^4.0.0",
     "@libsql/client": "^0.15.15",
     "@modelcontextprotocol/sdk": "^1.20.0",
     "ai": "^5.0.76",
     "drizzle-orm": "^0.44.6",
+    "h3": "^2.0.1-rc.22",
     "helia": "^5.0.0",
     "ipfs-only-hash": "^4.0.0",
     "js-tiktoken": "1.0.21",
     "multiformats": "^13.0.0",
+    "nitropack": "^2.13.4",
     "pino": "^9.0.0",
     "pino-pretty": "^13.1.1",
     "simple-git": "^3.28.0",
     "terser": "^5.44.0",
-    "tree-sitter": "^0.25.0",
-    "tree-sitter-javascript": "^0.25.0",
     "zod": "^3.25.76",
     "zod-to-json-schema": "^3.22.3"
+  },
+  "optionalDependencies": {
+    "tree-sitter": "^0.25.0",
+    "tree-sitter-javascript": "^0.25.0"
   },
   "overrides": {
     "zod": "^3.25.76",
