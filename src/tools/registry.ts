@@ -12,6 +12,10 @@ import {
   getOracleDatasetInfoHandler,
 } from "./oracleOpenData.ts";
 import { getPropertyPermitsHandler } from "./permits.ts";
+import {
+  findPropertiesInAreaHandler,
+  sumPropertyValueInAreaHandler,
+} from "./oracleGeo.ts";
 
 /**
  * Registers all MCP tools onto the given server instance.
@@ -211,6 +215,63 @@ export function registerAllTools(server: McpServer): void {
     },
     async (args: { parcelId: string; countyFips?: string }) => {
       return getPropertyPermitsHandler(args);
+    },
+  );
+
+  const bboxSchema = z
+    .object({
+      minLat: z.number().describe("Minimum latitude (south edge)"),
+      minLng: z.number().describe("Minimum longitude (west edge)"),
+      maxLat: z.number().describe("Maximum latitude (north edge)"),
+      maxLng: z.number().describe("Maximum longitude (east edge)"),
+    })
+    .describe("User-supplied bounding box of coordinates");
+
+  const polygonSchema = z
+    .array(
+      z.object({
+        lat: z.number().describe("Vertex latitude"),
+        lng: z.number().describe("Vertex longitude"),
+      }),
+    )
+    .min(3, "A polygon needs at least 3 vertices")
+    .describe("User-supplied polygon ring of coordinates");
+
+  server.registerTool(
+    "findPropertiesInArea",
+    {
+      title: "Find properties in an area",
+      description:
+        "Returns the set of properties whose centroid (latitude/longitude) falls inside a user-supplied bounding box or polygon. Provide exactly one of bbox or polygon. Reads the derived geo index; no NOAA/FEMA geometry is used.",
+      inputSchema: {
+        bbox: bboxSchema.optional(),
+        polygon: polygonSchema.optional(),
+      },
+    },
+    async (args: {
+      bbox?: { minLat: number; minLng: number; maxLat: number; maxLng: number };
+      polygon?: Array<{ lat: number; lng: number }>;
+    }) => {
+      return findPropertiesInAreaHandler(args);
+    },
+  );
+
+  server.registerTool(
+    "sumPropertyValueInArea",
+    {
+      title: "Sum property value in an area",
+      description:
+        "Returns the exact sum of current_avm_value over the properties whose centroid falls inside a user-supplied bounding box or polygon, plus the in-area count. Null valuations are treated as 0. Provide exactly one of bbox or polygon.",
+      inputSchema: {
+        bbox: bboxSchema.optional(),
+        polygon: polygonSchema.optional(),
+      },
+    },
+    async (args: {
+      bbox?: { minLat: number; minLng: number; maxLat: number; maxLng: number };
+      polygon?: Array<{ lat: number; lng: number }>;
+    }) => {
+      return sumPropertyValueInAreaHandler(args);
     },
   );
 }
