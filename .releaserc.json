@@ -35,7 +35,8 @@
     [
       "@semantic-release/npm",
       {
-        "pkgRoot": "."
+        "pkgRoot": ".",
+        "npmPublish": false
       }
     ],
     [
