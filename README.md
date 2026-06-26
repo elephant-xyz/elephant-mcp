@@ -37,6 +37,21 @@ This helps the AI understand which data context to use and ensures it leverages 
 - `listPropertiesByClassName` – Returns schema property keys for a class (excluding transport-only fields).
 - `getPropertySchema` – Fetches the full JSON Schema for a specific property and class combination.
 - `getVerifiedScriptExamples` – Returns a list of working examples of the code, that maps data to the Elephant schema.
+- `findPropertiesInArea` – Returns properties whose centroid falls inside a user-supplied bounding box or polygon, sourced from the derived geo index.
+- `sumPropertyValueInArea` – Sums the current AVM value of properties whose centroid falls inside a bounding box or polygon.
+
+### Geo tools and data sources
+
+These geo tools read two independent IPFS-published datasets, each resolved at
+the doc level by its own IPNS name (no central hosted endpoint — every consumer
+runs the server locally via `npx`, see below):
+
+- **Lee property data** — stable IPNS `oracle-open-data-lee`.
+- **Derived geo/value index** — separate dataset configured via
+  `ORACLE_GEO_INDEX_IPNS` (e.g. `oracle-geo-index-lee`), or a fixed
+  `ORACLE_GEO_INDEX_CID`. This index is independent from the property
+  open-data vars and is what `findPropertiesInArea` / `sumPropertyValueInArea`
+  query.
 
 ## Supported MCP Clients
 
@@ -55,10 +70,12 @@ This helps the AI understand which data context to use and ensures it leverages 
        "OPENAI_API_KEY": "sk-your-openai-key",
        // Option 2: Use AWS Bedrock (omit OPENAI_API_KEY)
        // "AWS_REGION": "us-east-1"  // optional, defaults to us-east-1
+       // Required for the geo tools (findPropertiesInArea / sumPropertyValueInArea):
+       "ORACLE_GEO_INDEX_IPNS": "k51qzi5uqu5djo3756w73x3swtt63g9y7igj7tvv1gs4skjk3haj3fuk7qosdi",
      },
    }
    ```
-   For OpenAI, replace the placeholder with your actual key. For AWS Bedrock, remove the `OPENAI_API_KEY` line and ensure your environment has valid AWS credentials (IAM role, environment variables, or AWS credentials file).
+   For OpenAI, replace the placeholder with your actual key. For AWS Bedrock, remove the `OPENAI_API_KEY` line and ensure your environment has valid AWS credentials (IAM role, environment variables, or AWS credentials file). Keep `ORACLE_GEO_INDEX_IPNS` so the geo tools can resolve the derived geo/value index.
 3. Save and toggle the Elephant connection inside Cursor's MCP panel.
 4. If you are hacking on a local checkout, switch the command to `npm start` and set `cwd` to your repository path.
 
@@ -167,6 +184,8 @@ The stdio transport means no port or server identity flags are required. Environ
 | `OPENAI_API_KEY` | OpenAI API key for embeddings. When set, OpenAI is used; otherwise falls back to AWS Bedrock. | _(optional)_ |
 | `AWS_REGION` | AWS region for Bedrock API calls. | `us-east-1` |
 | `LOG_LEVEL` | Pino log level (`error`, `warn`, `info`, `debug`). | `info` |
+| `ORACLE_GEO_INDEX_IPNS` | IPNS name of the derived geo/value index (e.g. `oracle-geo-index-lee`); resolved to its current CID at runtime. | _(optional)_ |
+| `ORACLE_GEO_INDEX_CID` | Fixed CID of the derived geo/value index; used when `ORACLE_GEO_INDEX_IPNS` is unset. | _(optional)_ |
 
 ### AWS Bedrock Authentication
 
