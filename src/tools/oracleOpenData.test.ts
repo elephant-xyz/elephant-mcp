@@ -676,4 +676,63 @@ describe("multi-county routing", () => {
     expect(parsed.error).toContain("nowhere");
     expect(parsed.propertyCount).toBe(0);
   });
+
+  // === Legacy single-IPNS mode: county must not leak the wrong dataset ===
+
+  it("[getProperty][legacy index] mismatched county does not return a parcel", async () => {
+    // Legacy mode serves the single (Lee) index for any county.
+    const shards = [buildShardRef(0, "1000", "2999", 2, "shard-cid-0")];
+    mockFetchOracleIndex.mockResolvedValue(buildIndex(shards, "Lee"));
+
+    const result = await getOraclePropertyHandler({
+      parcelIdentifier: "2000",
+      county: "Palm Beach",
+    });
+    const parsed = JSON.parse(result.content[0].text);
+
+    expect(parsed.error).toContain("Palm Beach");
+    // Must not fetch the shard or property from the wrong dataset.
+    expect(mockFetchShardByCid).not.toHaveBeenCalled();
+    expect(mockGetJsonByCid).not.toHaveBeenCalled();
+  });
+
+  it("[getProperty][legacy manifest] mismatched county does not return a parcel", async () => {
+    mockFetchOracleIndex.mockResolvedValue(null);
+    mockFetchOracleManifest.mockResolvedValue(
+      buildManifest([buildEntry("uuid-001", "1234567890", "cid-001")]),
+    );
+
+    const result = await getOraclePropertyHandler({
+      parcelIdentifier: "1234567890",
+      county: "Palm Beach",
+    });
+    const parsed = JSON.parse(result.content[0].text);
+
+    expect(parsed.error).toContain("Palm Beach");
+    expect(mockGetJsonByCid).not.toHaveBeenCalled();
+  });
+
+  it("[datasetInfo][legacy index] mismatched county returns not-served", async () => {
+    const shards = [buildShardRef(0, "1000", "2999", 2, "shard-cid-0")];
+    mockFetchOracleIndex.mockResolvedValue(buildIndex(shards, "Lee"));
+
+    const result = await getOracleDatasetInfoHandler({ county: "Palm Beach" });
+    const parsed = JSON.parse(result.content[0].text);
+
+    expect(parsed.error).toContain("Palm Beach");
+    expect(parsed.propertyCount).toBe(0);
+  });
+
+  it("[datasetInfo][legacy manifest] mismatched county returns not-served", async () => {
+    mockFetchOracleIndex.mockResolvedValue(null);
+    mockFetchOracleManifest.mockResolvedValue(
+      buildManifest([buildEntry("uuid-001", "1234567890", "cid-001")]),
+    );
+
+    const result = await getOracleDatasetInfoHandler({ county: "Palm Beach" });
+    const parsed = JSON.parse(result.content[0].text);
+
+    expect(parsed.error).toContain("Palm Beach");
+    expect(parsed.propertyCount).toBe(0);
+  });
 });

@@ -89,17 +89,23 @@ describe("resolveCountyIpns — multi-county registry mode", () => {
     defaultCounty: "lee",
   };
 
-  it("resolves a registered county to its own IPNS (no fixed fallback)", () => {
-    expect(resolveCountyIpns("lee", env)).toMatchObject({
-      ipnsName: LEE_IPNS,
-      served: true,
-      allowFixedFallback: false,
-      countyKey: "lee",
-    });
+  it("resolves a non-default registered county to its own IPNS (no fixed fallback)", () => {
     expect(resolveCountyIpns("Palm Beach", env)).toMatchObject({
       ipnsName: PB_IPNS,
       served: true,
+      allowFixedFallback: false,
       countyKey: "palm-beach",
+    });
+  });
+
+  it("keeps the fixed-CID fallback for the default county even when it is in the map", () => {
+    // Regression: the default county must retain the legacy fixed-CID fallback
+    // so its data stays reachable when IPNS resolution fails.
+    expect(resolveCountyIpns("lee", env)).toMatchObject({
+      ipnsName: LEE_IPNS,
+      served: true,
+      allowFixedFallback: true,
+      countyKey: "lee",
     });
   });
 

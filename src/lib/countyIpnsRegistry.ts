@@ -140,13 +140,15 @@ export function resolveCountyIpns(
     };
   }
 
-  // County is explicitly registered.
+  // County is explicitly registered. The default county always keeps the
+  // legacy fixed-CID fallback (even with a mapped IPNS) so its data stays
+  // reachable when IPNS resolution fails; non-default counties do not.
   const mappedIpns = map[requestedKey];
   if (mappedIpns !== undefined) {
     return {
       ipnsName: mappedIpns,
       served: true,
-      allowFixedFallback: false,
+      allowFixedFallback: requestedKey === defaultCountyKey,
       countyKey: requestedKey,
     };
   }

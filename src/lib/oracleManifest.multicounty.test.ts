@@ -93,6 +93,26 @@ describe("resolveManifestCid — multi-county registry", () => {
     expect(getOpenDataIpnsName("palm-beach")).toBe(PB_IPNS);
     expect(getOpenDataIpnsName("nowhere")).toBeNull();
   });
+
+  it("default county falls back to the fixed CID when its IPNS fails to resolve", async () => {
+    // Regression: lee is the default county and present in the map; if its IPNS
+    // resolution yields nothing, the fixed manifest CID must still be served.
+    process.env.ORACLE_OPEN_DATA_MANIFEST_CID = "QmFixedDefaultCid";
+    // Re-stub fetch so IPNS resolution returns no root CID (resolution fails).
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        return {
+          ok: true,
+          headers: { get: () => null },
+        } as unknown as Response;
+      }),
+    );
+
+    expect(await resolveManifestCid("lee")).toBe("QmFixedDefaultCid");
+    // A non-default county gets no fixed fallback → null when its IPNS fails.
+    expect(await resolveManifestCid("palm-beach")).toBeNull();
+  });
 });
 
 describe("resolveManifestCid — backward compat (no map)", () => {

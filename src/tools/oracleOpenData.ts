@@ -18,6 +18,20 @@ const MAX_LIMIT = 500;
 const DEFAULT_LIMIT = 50;
 
 /**
+ * Dataset-info result for a county this deployment does not serve (unknown
+ * county, or a county that doesn't match the single legacy dataset).
+ */
+function countyNotServedResult(county?: string) {
+  return createTextResult({
+    error: county
+      ? `County '${county}' is not served by this deployment.`
+      : "No oracle open-data dataset is available.",
+    county: county ?? null,
+    propertyCount: 0,
+  });
+}
+
+/**
  * Binary search: find the shard whose [fromParcel, toParcel] range contains
  * the given parcelIdentifier. Parcel IDs are compared lexicographically.
  * Returns null if no shard covers the parcel.
@@ -241,6 +255,20 @@ export async function getOraclePropertyHandler(args: {
       const index = await fetchOracleIndex(args.county);
 
       if (index !== null) {
+        // In legacy single-IPNS mode the index is served for any requested
+        // county; guard against returning a parcel from a different dataset.
+        if (
+          args.county &&
+          index.county.toLowerCase() !== args.county.toLowerCase()
+        ) {
+          const lookupKey = hasParcelIdentifier
+            ? `parcelIdentifier '${args.parcelIdentifier}'`
+            : `propertyId '${args.propertyId}'`;
+          return createTextResult({
+            error: `Property with ${lookupKey} not found in county '${args.county}'.`,
+          });
+        }
+
         if (hasParcelIdentifier) {
           // Fast path: binary search shards by parcel range
           const shard = findShardForParcel(
@@ -306,6 +334,20 @@ export async function getOraclePropertyHandler(args: {
           });
         }
 
+        // Legacy single-IPNS mode serves one manifest for any county; guard
+        // against returning a parcel from a different dataset.
+        if (
+          args.county &&
+          manifest.county.toLowerCase() !== args.county.toLowerCase()
+        ) {
+          const lookupKey = hasParcelIdentifier
+            ? `parcelIdentifier '${args.parcelIdentifier}'`
+            : `propertyId '${args.propertyId}'`;
+          return createTextResult({
+            error: `Property with ${lookupKey} not found in county '${args.county}'.`,
+          });
+        }
+
         const entry = hasParcelIdentifier
           ? manifest.entries.find(
               (e) => e.parcelIdentifier === args.parcelIdentifier,
@@ -350,6 +392,15 @@ export async function getOracleDatasetInfoHandler(
     const index = await fetchOracleIndex(args.county);
 
     if (index !== null) {
+      // Legacy single-IPNS mode serves one dataset for any county; guard
+      // against reporting a different dataset's metadata.
+      if (
+        args.county &&
+        index.county.toLowerCase() !== args.county.toLowerCase()
+      ) {
+        return countyNotServedResult(args.county);
+      }
+
       return createTextResult({
         county: index.county,
         propertyCount: index.propertyCount,
@@ -368,13 +419,16 @@ export async function getOracleDatasetInfoHandler(
     const manifest = await fetchOracleManifest(args.county);
 
     if (manifest === null) {
-      return createTextResult({
-        error: args.county
-          ? `County '${args.county}' is not served by this deployment.`
-          : "No oracle open-data dataset is available.",
-        county: args.county ?? null,
-        propertyCount: 0,
-      });
+      return countyNotServedResult(args.county);
+    }
+
+    // Legacy single-IPNS mode serves one manifest for any county; guard
+    // against reporting a different dataset's metadata.
+    if (
+      args.county &&
+      manifest.county.toLowerCase() !== args.county.toLowerCase()
+    ) {
+      return countyNotServedResult(args.county);
     }
 
     const manifestCid = getManifestCid();
