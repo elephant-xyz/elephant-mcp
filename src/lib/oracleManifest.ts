@@ -1,6 +1,10 @@
 import { getJsonByCid } from "./ipfs.ts";
 import { logger } from "../logger.ts";
 import {
+  resolveCountyIpns,
+  type CountyIpnsResolution,
+} from "./countyIpnsRegistry.ts";
+import {
   OracleManifestSchema,
   OracleIndexSchema,
   type OracleManifest,
@@ -11,55 +15,103 @@ const DEFAULT_MANIFEST_CID = "QmQ6pdjzm4w7ddEjKDekqukqfdBbvDhgphVXqdTsssqK4d";
 
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
+// Cache key used when no county (and no default county) is in play.
+const DEFAULT_CACHE_KEY = "__default__";
+
 interface ManifestCacheEntry {
   manifest: OracleManifest;
   fetchedAt: number;
 }
 
-let manifestCache: ManifestCacheEntry | null = null;
+// Per-county caches: one MCP deployment may serve several counties, each from
+// its own IPNS, so the manifest/index are cached keyed by resolved county.
+const manifestCache = new Map<string, ManifestCacheEntry>();
 
 const INDEX_CACHE_TTL_MS = 5 * 60 * 1000; // 5 min
 
 type IndexCacheEntry = { index: OracleIndex; fetchedAt: number };
-let indexCache: IndexCacheEntry | null = null;
+const indexCache = new Map<string, IndexCacheEntry>();
 
 export function getManifestCid(): string {
   return process.env.ORACLE_OPEN_DATA_MANIFEST_CID ?? DEFAULT_MANIFEST_CID;
 }
 
 export function clearManifestCache(): void {
-  manifestCache = null;
+  manifestCache.clear();
 }
 
 /**
- * Resolve the CID the manifest read path should use. When ORACLE_OPEN_DATA_IPNS
- * is set, the IPNS-resolved CID wins so that the manifest is served via the IPNS
- * name (which may point at either a sharded index or a flat manifest — see
- * fetchOracleIndex for the auto-detect). Falls back to the fixed env/default CID.
+ * Resolve which county→IPNS configuration applies to a request, reading the
+ * open-data registry env vars. Exposed so tools can report the resolved IPNS
+ * name and short-circuit unknown counties.
  */
-async function resolveManifestCid(): Promise<string> {
-  const ipnsCid = await resolveIpnsToCid();
-  if (ipnsCid) {
-    return ipnsCid;
-  }
-  return getManifestCid();
+export function resolveOpenDataCounty(county?: string): CountyIpnsResolution {
+  return resolveCountyIpns(county, {
+    map: process.env.ORACLE_OPEN_DATA_IPNS_MAP,
+    singleIpns: process.env.ORACLE_OPEN_DATA_IPNS,
+    defaultCounty: process.env.ORACLE_OPEN_DATA_DEFAULT_COUNTY,
+  });
 }
 
-export async function fetchOracleManifest(): Promise<OracleManifest> {
-  const now = Date.now();
+/** The IPNS name configured for a county, or null. Used for reporting. */
+export function getOpenDataIpnsName(county?: string): string | null {
+  return resolveOpenDataCounty(county).ipnsName;
+}
 
-  if (manifestCache !== null && now - manifestCache.fetchedAt < CACHE_TTL_MS) {
-    logger.debug("Oracle manifest served from cache");
-    return manifestCache.manifest;
+/**
+ * Resolve the CID the manifest read path should use for the given county. The
+ * county's IPNS (from the registry, or the legacy single IPNS) is resolved to a
+ * CID; a fixed env/default CID is only used as a fallback for the legacy/default
+ * county. Returns null when the county is not served by this deployment.
+ */
+export async function resolveManifestCid(
+  county?: string,
+): Promise<string | null> {
+  const resolution = resolveOpenDataCounty(county);
+  if (!resolution.served) {
+    return null;
   }
 
-  const cid = await resolveManifestCid();
-  logger.info({ cid }, "Fetching Oracle open-data manifest");
+  if (resolution.ipnsName) {
+    const cid = await resolveIpnsToCid(resolution.ipnsName);
+    if (cid) {
+      return cid;
+    }
+  }
+
+  return resolution.allowFixedFallback ? getManifestCid() : null;
+}
+
+/**
+ * Load the flat open-data manifest for a county. Returns null when the county is
+ * not served by this deployment (no IPNS configured for it).
+ */
+export async function fetchOracleManifest(
+  county?: string,
+): Promise<OracleManifest | null> {
+  const now = Date.now();
+  const resolution = resolveOpenDataCounty(county);
+  if (!resolution.served) {
+    return null;
+  }
+
+  const cacheKey = resolution.countyKey ?? DEFAULT_CACHE_KEY;
+  const cached = manifestCache.get(cacheKey);
+  if (cached !== undefined && now - cached.fetchedAt < CACHE_TTL_MS) {
+    logger.debug({ county: cacheKey }, "Oracle manifest served from cache");
+    return cached.manifest;
+  }
+
+  const cid = await resolveManifestCid(county);
+  if (!cid) {
+    return null;
+  }
+  logger.info({ cid, county: cacheKey }, "Fetching Oracle open-data manifest");
 
   const raw = await getJsonByCid<unknown>(cid);
   const manifest = OracleManifestSchema.parse(raw);
 
-  manifestCache = { manifest, fetchedAt: now };
+  manifestCache.set(cacheKey, { manifest, fetchedAt: now });
   logger.info(
     { propertyCount: manifest.propertyCount, county: manifest.county },
     "Oracle manifest loaded and cached",
@@ -73,7 +125,7 @@ export function getIndexCid(): string | null {
 }
 
 export function clearIndexCache(): void {
-  indexCache = null;
+  indexCache.clear();
 }
 
 /**
@@ -85,8 +137,9 @@ export function clearIndexCache(): void {
  * the `x-ipfs-roots` response header. We issue a HEAD request and read that
  * header — works for both flat-manifest and sharded-index targets.
  */
-export async function resolveIpnsToCid(): Promise<string | null> {
-  const ipnsName = process.env.ORACLE_OPEN_DATA_IPNS;
+export async function resolveIpnsToCid(
+  ipnsName: string,
+): Promise<string | null> {
   if (!ipnsName) {
     return null;
   }
@@ -131,20 +184,30 @@ export async function resolveIpnsToCid(): Promise<string | null> {
   return null;
 }
 
-export async function fetchOracleIndex(): Promise<OracleIndex | null> {
+export async function fetchOracleIndex(
+  county?: string,
+): Promise<OracleIndex | null> {
   const now = Date.now();
+  const resolution = resolveOpenDataCounty(county);
+  if (!resolution.served) {
+    return null;
+  }
 
-  if (indexCache !== null && now - indexCache.fetchedAt < INDEX_CACHE_TTL_MS) {
-    logger.debug("Oracle index served from cache");
-    return indexCache.index;
+  const cacheKey = resolution.countyKey ?? DEFAULT_CACHE_KEY;
+  const cached = indexCache.get(cacheKey);
+  if (cached !== undefined && now - cached.fetchedAt < INDEX_CACHE_TTL_MS) {
+    logger.debug({ county: cacheKey }, "Oracle index served from cache");
+    return cached.index;
   }
 
   try {
-    // Try IPNS resolution first
-    let cid = await resolveIpnsToCid();
+    // Resolve this county's IPNS to a CID. The fixed env-var CID is only used
+    // as a fallback for the legacy/default county (never cross-county).
+    let cid = resolution.ipnsName
+      ? await resolveIpnsToCid(resolution.ipnsName)
+      : null;
 
-    // Fall back to fixed env-var CID
-    if (!cid) {
+    if (!cid && resolution.allowFixedFallback) {
       cid = getIndexCid();
     }
 
@@ -152,7 +215,7 @@ export async function fetchOracleIndex(): Promise<OracleIndex | null> {
       return null;
     }
 
-    logger.info({ cid }, "Fetching Oracle sharded index");
+    logger.info({ cid, county: cacheKey }, "Fetching Oracle sharded index");
 
     const raw = await getJsonByCid<unknown>(cid);
 
@@ -170,7 +233,7 @@ export async function fetchOracleIndex(): Promise<OracleIndex | null> {
     }
     const index = parsed.data;
 
-    indexCache = { index, fetchedAt: now };
+    indexCache.set(cacheKey, { index, fetchedAt: now });
     logger.info(
       {
         propertyCount: index.propertyCount,

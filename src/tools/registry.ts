@@ -169,12 +169,19 @@ export function registerAllTools(server: McpServer): void {
           .string()
           .optional()
           .describe("IPFS CID for the consolidated property JSON"),
+        county: z
+          .string()
+          .optional()
+          .describe(
+            "County to look up the parcel/property in (case-insensitive). Selects which county's open data to read when the deployment serves multiple counties.",
+          ),
       },
     },
     async (args: {
       parcelIdentifier?: string;
       propertyId?: string;
       cid?: string;
+      county?: string;
     }) => {
       return getOraclePropertyHandler(args);
     },
@@ -186,10 +193,17 @@ export function registerAllTools(server: McpServer): void {
       title: "Get Oracle open-data dataset info",
       description:
         "Returns dataset-level provenance and freshness metadata: county, propertyCount, exportedAt, schemaVersion, totalBytes, and the manifest CID.",
-      inputSchema: {},
+      inputSchema: {
+        county: z
+          .string()
+          .optional()
+          .describe(
+            "County to report dataset info for (case-insensitive). Selects which county's open data to read when the deployment serves multiple counties.",
+          ),
+      },
     },
-    async () => {
-      return getOracleDatasetInfoHandler();
+    async (args: { county?: string }) => {
+      return getOracleDatasetInfoHandler(args);
     },
   );
 

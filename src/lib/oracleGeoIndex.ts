@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { getJsonByCid } from "./ipfs.ts";
 import { logger } from "../logger.ts";
+import { resolveCountyIpns } from "./countyIpnsRegistry.ts";
 
 /**
  * Derived geo/value index loader.
@@ -37,12 +38,17 @@ const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 // cache-miss request indefinitely.
 const GATEWAY_TIMEOUT_MS = 12_000;
 
+// Cache key used when no county (and no default county) is in play.
+const DEFAULT_CACHE_KEY = "__default__";
+
 interface GeoIndexCacheEntry {
   index: GeoIndex;
   fetchedAt: number;
 }
 
-let geoIndexCache: GeoIndexCacheEntry | null = null;
+// Per-county caches: the geo index can be published per county under its own
+// IPNS (ORACLE_GEO_INDEX_IPNS_MAP), so cache keyed by resolved county.
+const geoIndexCache = new Map<string, GeoIndexCacheEntry>();
 
 /**
  * Resolve the geo index CID from ORACLE_GEO_INDEX_CID. Returns null when unset.
@@ -53,16 +59,17 @@ export function getGeoIndexCid(): string | null {
 }
 
 export function clearGeoIndexCache(): void {
-  geoIndexCache = null;
+  geoIndexCache.clear();
 }
 
 /**
- * Resolve the geo index IPNS name (ORACLE_GEO_INDEX_IPNS) to its current CID via
- * public IPFS gateways, reading the resolved root from the `x-ipfs-roots`
- * header. Mirrors the open-data manifest resolver but on the geo-specific var.
+ * Resolve a geo index IPNS name to its current CID via public IPFS gateways,
+ * reading the resolved root from the `x-ipfs-roots` header. Mirrors the
+ * open-data manifest resolver but on the geo-specific vars.
  */
-export async function resolveGeoIndexIpnsToCid(): Promise<string | null> {
-  const ipnsName = process.env.ORACLE_GEO_INDEX_IPNS;
+export async function resolveGeoIndexIpnsToCid(
+  ipnsName: string,
+): Promise<string | null> {
   if (!ipnsName) {
     return null;
   }
@@ -114,42 +121,68 @@ export async function resolveGeoIndexIpnsToCid(): Promise<string | null> {
 }
 
 /**
- * Resolve the CID to read the geo index from: IPNS-resolved CID wins when
- * ORACLE_GEO_INDEX_IPNS is set, otherwise the fixed ORACLE_GEO_INDEX_CID.
+ * Resolve the CID to read the geo index from for the given county. The county's
+ * IPNS (from ORACLE_GEO_INDEX_IPNS_MAP, or the legacy single ORACLE_GEO_INDEX_IPNS)
+ * is resolved to a CID; the fixed ORACLE_GEO_INDEX_CID is only used as a fallback
+ * for the legacy/default county. Returns null when nothing is configured.
  */
-async function resolveGeoIndexCid(): Promise<string | null> {
-  const ipnsCid = await resolveGeoIndexIpnsToCid();
-  if (ipnsCid) {
-    return ipnsCid;
+async function resolveGeoIndexCid(county?: string): Promise<string | null> {
+  const resolution = resolveCountyIpns(county, {
+    map: process.env.ORACLE_GEO_INDEX_IPNS_MAP,
+    singleIpns: process.env.ORACLE_GEO_INDEX_IPNS,
+    defaultCounty: process.env.ORACLE_GEO_INDEX_DEFAULT_COUNTY,
+  });
+  if (!resolution.served) {
+    return null;
   }
-  return getGeoIndexCid();
+
+  if (resolution.ipnsName) {
+    const cid = await resolveGeoIndexIpnsToCid(resolution.ipnsName);
+    if (cid) {
+      return cid;
+    }
+  }
+
+  return resolution.allowFixedFallback ? getGeoIndexCid() : null;
 }
 
 /**
  * Load and parse the derived geo index JSON via the shared IPFS helpers.
- * Throws when no geo index CID/IPNS is configured.
+ * Throws when no geo index CID/IPNS is configured for the requested county.
  */
-export async function fetchGeoIndex(): Promise<GeoIndex> {
+export async function fetchGeoIndex(county?: string): Promise<GeoIndex> {
   const now = Date.now();
-
-  if (geoIndexCache !== null && now - geoIndexCache.fetchedAt < CACHE_TTL_MS) {
-    logger.debug("Geo index served from cache");
-    return geoIndexCache.index;
+  const resolution = resolveCountyIpns(county, {
+    map: process.env.ORACLE_GEO_INDEX_IPNS_MAP,
+    singleIpns: process.env.ORACLE_GEO_INDEX_IPNS,
+    defaultCounty: process.env.ORACLE_GEO_INDEX_DEFAULT_COUNTY,
+  });
+  if (!resolution.served) {
+    throw new Error(
+      `County '${county ?? ""}' is not served by this deployment's geo index`,
+    );
   }
 
-  const cid = await resolveGeoIndexCid();
+  const cacheKey = resolution.countyKey ?? DEFAULT_CACHE_KEY;
+  const cached = geoIndexCache.get(cacheKey);
+  if (cached !== undefined && now - cached.fetchedAt < CACHE_TTL_MS) {
+    logger.debug({ county: cacheKey }, "Geo index served from cache");
+    return cached.index;
+  }
+
+  const cid = await resolveGeoIndexCid(county);
   if (!cid) {
     throw new Error(
       "No geo index configured — set ORACLE_GEO_INDEX_CID or ORACLE_GEO_INDEX_IPNS",
     );
   }
 
-  logger.info({ cid }, "Fetching derived geo index");
+  logger.info({ cid, county: cacheKey }, "Fetching derived geo index");
 
   const raw = await getJsonByCid<unknown>(cid);
   const index = GeoIndexSchema.parse(raw);
 
-  geoIndexCache = { index, fetchedAt: now };
+  geoIndexCache.set(cacheKey, { index, fetchedAt: now });
   logger.info(
     { county: index.county, entries: index.entries.length },
     "Geo index loaded and cached",

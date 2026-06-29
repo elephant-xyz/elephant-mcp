@@ -6,6 +6,7 @@ import {
   getManifestCid,
   fetchOracleIndex,
   getIndexCid,
+  getOpenDataIpnsName,
 } from "../lib/oracleManifest.ts";
 import type {
   SlimPropertyEntry,
@@ -93,8 +94,8 @@ export async function listOraclePropertiesHandler(args: {
     const limit = Math.min(args.limit ?? DEFAULT_LIMIT, MAX_LIMIT);
     const offset = args.offset ?? 0;
 
-    // Try sharded index first
-    const index = await fetchOracleIndex();
+    // Try sharded index first — resolved from the requested county's IPNS.
+    const index = await fetchOracleIndex(args.county);
 
     if (index !== null) {
       // County filter: the index covers exactly one county
@@ -148,8 +149,19 @@ export async function listOraclePropertiesHandler(args: {
       return createTextResult(result);
     }
 
-    // Fallback: flat manifest
-    const manifest = await fetchOracleManifest();
+    // Fallback: flat manifest. A null manifest means the requested county is
+    // not served by this deployment → empty result.
+    const manifest = await fetchOracleManifest(args.county);
+
+    if (manifest === null) {
+      const result: ListOraclePropertiesResult = {
+        total: 0,
+        offset,
+        limit,
+        properties: [],
+      };
+      return createTextResult(result);
+    }
 
     const countyMatches =
       !args.county ||
@@ -194,6 +206,7 @@ export async function getOraclePropertyHandler(args: {
   parcelIdentifier?: string;
   propertyId?: string;
   cid?: string;
+  county?: string;
 }) {
   const hasCid = typeof args.cid === "string" && args.cid.length > 0;
   const hasParcelIdentifier =
@@ -224,8 +237,8 @@ export async function getOraclePropertyHandler(args: {
     if (hasCid) {
       resolvedCid = args.cid!;
     } else {
-      // Try sharded index first
-      const index = await fetchOracleIndex();
+      // Try sharded index first — resolved from the requested county's IPNS.
+      const index = await fetchOracleIndex(args.county);
 
       if (index !== null) {
         if (hasParcelIdentifier) {
@@ -281,8 +294,17 @@ export async function getOraclePropertyHandler(args: {
           resolvedCid = foundCid;
         }
       } else {
-        // Fallback: flat manifest
-        const manifest = await fetchOracleManifest();
+        // Fallback: flat manifest. A null manifest means the requested county
+        // is not served by this deployment.
+        const manifest = await fetchOracleManifest(args.county);
+
+        if (manifest === null) {
+          return createTextResult({
+            error: args.county
+              ? `County '${args.county}' is not served by this deployment.`
+              : "No oracle open-data manifest is available.",
+          });
+        }
 
         const entry = hasParcelIdentifier
           ? manifest.entries.find(
@@ -320,10 +342,12 @@ export async function getOraclePropertyHandler(args: {
   }
 }
 
-export async function getOracleDatasetInfoHandler() {
+export async function getOracleDatasetInfoHandler(
+  args: { county?: string } = {},
+) {
   try {
-    // Try sharded index first
-    const index = await fetchOracleIndex();
+    // Try sharded index first — resolved from the requested county's IPNS.
+    const index = await fetchOracleIndex(args.county);
 
     if (index !== null) {
       return createTextResult({
@@ -335,12 +359,24 @@ export async function getOracleDatasetInfoHandler() {
         shardCount: index.shards.length,
         totalBytes: index.totalBytes,
         indexCid: getIndexCid() ?? null,
-        ipnsName: process.env.ORACLE_OPEN_DATA_IPNS ?? null,
+        ipnsName: getOpenDataIpnsName(args.county) ?? null,
       });
     }
 
-    // Fallback: flat manifest
-    const manifest = await fetchOracleManifest();
+    // Fallback: flat manifest. A null manifest means the requested county is
+    // not served by this deployment.
+    const manifest = await fetchOracleManifest(args.county);
+
+    if (manifest === null) {
+      return createTextResult({
+        error: args.county
+          ? `County '${args.county}' is not served by this deployment.`
+          : "No oracle open-data dataset is available.",
+        county: args.county ?? null,
+        propertyCount: 0,
+      });
+    }
+
     const manifestCid = getManifestCid();
 
     return createTextResult({
@@ -351,7 +387,7 @@ export async function getOracleDatasetInfoHandler() {
       totalBytes: manifest.totalBytes ?? null,
       manifestCid,
       indexCid: getIndexCid() ?? null,
-      ipnsName: process.env.ORACLE_OPEN_DATA_IPNS ?? null,
+      ipnsName: getOpenDataIpnsName(args.county) ?? null,
     });
   } catch (error) {
     logger.error(

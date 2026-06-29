@@ -15,11 +15,17 @@ vi.mock("../lib/oracleManifest.ts", () => ({
   getManifestCid: vi.fn(),
   fetchOracleIndex: vi.fn(),
   getIndexCid: vi.fn(),
+  getOpenDataIpnsName: vi.fn(),
 }));
 
 const { getJsonByCid, fetchShardByCid } = await import("../lib/ipfs.ts");
-const { fetchOracleManifest, getManifestCid, fetchOracleIndex, getIndexCid } =
-  await import("../lib/oracleManifest.ts");
+const {
+  fetchOracleManifest,
+  getManifestCid,
+  fetchOracleIndex,
+  getIndexCid,
+  getOpenDataIpnsName,
+} = await import("../lib/oracleManifest.ts");
 
 const mockGetJsonByCid = vi.mocked(getJsonByCid);
 const mockFetchShardByCid = vi.mocked(fetchShardByCid);
@@ -27,6 +33,7 @@ const mockFetchOracleManifest = vi.mocked(fetchOracleManifest);
 const mockGetManifestCid = vi.mocked(getManifestCid);
 const mockFetchOracleIndex = vi.mocked(fetchOracleIndex);
 const mockGetIndexCid = vi.mocked(getIndexCid);
+const mockGetOpenDataIpnsName = vi.mocked(getOpenDataIpnsName);
 
 const buildEntry = (
   propertyId: string,
@@ -502,6 +509,7 @@ describe("getOracleDatasetInfoHandler", () => {
     vi.resetAllMocks();
     mockFetchOracleIndex.mockResolvedValue(null);
     mockGetIndexCid.mockReturnValue(null);
+    mockGetOpenDataIpnsName.mockReturnValue(null);
   });
 
   it("returns dataset summary from manifest", async () => {
@@ -595,5 +603,77 @@ describe("getOracleDatasetInfoHandler", () => {
     expect(parsed.ipnsName).toBeNull();
     // Manifest should NOT be consulted
     expect(mockFetchOracleManifest).not.toHaveBeenCalled();
+  });
+});
+
+describe("multi-county routing", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mockGetIndexCid.mockReturnValue(null);
+    mockGetOpenDataIpnsName.mockReturnValue(null);
+  });
+
+  it("[list] threads the county arg into the index/manifest fetch", async () => {
+    mockFetchOracleIndex.mockResolvedValue(null);
+    mockFetchOracleManifest.mockResolvedValue(
+      buildManifest([buildEntry("uuid-001", "1234567890", "cid-001")]),
+    );
+
+    await listOraclePropertiesHandler({ county: "Palm Beach" });
+
+    expect(mockFetchOracleIndex).toHaveBeenCalledWith("Palm Beach");
+    expect(mockFetchOracleManifest).toHaveBeenCalledWith("Palm Beach");
+  });
+
+  it("[list] returns an empty result for an unknown (unserved) county", async () => {
+    // Both fetches resolve null → county not served by this deployment.
+    mockFetchOracleIndex.mockResolvedValue(null);
+    mockFetchOracleManifest.mockResolvedValue(null);
+
+    const result = await listOraclePropertiesHandler({ county: "nowhere" });
+    const parsed = JSON.parse(result.content[0].text);
+
+    expect(parsed.total).toBe(0);
+    expect(parsed.properties).toHaveLength(0);
+  });
+
+  it("[getProperty] threads the county arg into the index fetch", async () => {
+    mockFetchOracleIndex.mockResolvedValue(null);
+    mockFetchOracleManifest.mockResolvedValue(
+      buildManifest([buildEntry("uuid-001", "1234567890", "cid-001")]),
+    );
+    mockGetJsonByCid.mockResolvedValue({ ok: true });
+
+    await getOraclePropertyHandler({
+      parcelIdentifier: "1234567890",
+      county: "palm-beach",
+    });
+
+    expect(mockFetchOracleIndex).toHaveBeenCalledWith("palm-beach");
+    expect(mockFetchOracleManifest).toHaveBeenCalledWith("palm-beach");
+  });
+
+  it("[getProperty] returns a clear error for an unknown county", async () => {
+    mockFetchOracleIndex.mockResolvedValue(null);
+    mockFetchOracleManifest.mockResolvedValue(null);
+
+    const result = await getOraclePropertyHandler({
+      parcelIdentifier: "1234567890",
+      county: "nowhere",
+    });
+    const parsed = JSON.parse(result.content[0].text);
+
+    expect(parsed.error).toContain("nowhere");
+  });
+
+  it("[datasetInfo] returns a not-served result for an unknown county", async () => {
+    mockFetchOracleIndex.mockResolvedValue(null);
+    mockFetchOracleManifest.mockResolvedValue(null);
+
+    const result = await getOracleDatasetInfoHandler({ county: "nowhere" });
+    const parsed = JSON.parse(result.content[0].text);
+
+    expect(parsed.error).toContain("nowhere");
+    expect(parsed.propertyCount).toBe(0);
   });
 });
