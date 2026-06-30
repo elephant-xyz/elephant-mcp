@@ -184,7 +184,13 @@ The stdio transport means no port or server identity flags are required. Environ
 | `OPENAI_API_KEY` | OpenAI API key for embeddings. When set, OpenAI is used; otherwise falls back to AWS Bedrock. | _(optional)_ |
 | `AWS_REGION` | AWS region for Bedrock API calls. | `us-east-1` |
 | `LOG_LEVEL` | Pino log level (`error`, `warn`, `info`, `debug`). | `info` |
+| `ORACLE_OPEN_DATA_IPNS_MAP` | JSON object mapping county → IPNS for multi-county deployments, e.g. `{"lee":"k51…lee","palm-beach":"k51…pb"}`. County keys are lowercased and hyphenated. When set, each requested `county` resolves to its own IPNS. | _(optional)_ |
+| `ORACLE_OPEN_DATA_DEFAULT_COUNTY` | County used when a request omits `county`. When the map is unset, this is the single-IPNS county. | _(optional)_ |
+| `ORACLE_OPEN_DATA_IPNS` | Legacy single-county IPNS of the open-data manifest/index. Used when `ORACLE_OPEN_DATA_IPNS_MAP` is unset/empty, or for the default county. | _(optional)_ |
+| `ORACLE_OPEN_DATA_INDEX_CID` / `ORACLE_OPEN_DATA_MANIFEST_CID` | Fixed CID fallback for the default county when IPNS resolution yields nothing. | _(optional)_ |
 | `ORACLE_GEO_INDEX_IPNS` | IPNS name of the derived geo/value index (e.g. `oracle-geo-index-lee`); resolved to its current CID at runtime. | _(optional)_ |
+| `ORACLE_GEO_INDEX_IPNS_MAP` | JSON object mapping county → IPNS for the geo/value index (same shape as `ORACLE_OPEN_DATA_IPNS_MAP`). | _(optional)_ |
+| `ORACLE_GEO_INDEX_DEFAULT_COUNTY` | Default county for the geo/value index when no county is requested. | _(optional)_ |
 | `ORACLE_GEO_INDEX_CID` | Fixed CID of the derived geo/value index; used when `ORACLE_GEO_INDEX_IPNS` is unset. | _(optional)_ |
 
 ### AWS Bedrock Authentication
