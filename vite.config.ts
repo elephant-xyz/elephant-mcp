@@ -19,6 +19,10 @@ const sharedExternals = [
   // succeeds even when the native module is not installed/buildable.
   "tree-sitter",
   "tree-sitter-javascript",
+  // Embedded DuckDB native addon — lazy-loaded at runtime by the property query
+  // engine. Keep external so it is never bundled and the build stays portable.
+  "@duckdb/node-api",
+  "@duckdb/node-bindings",
   "zod",
   "node:crypto",
   "node:http",

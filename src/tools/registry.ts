@@ -16,6 +16,11 @@ import {
   findPropertiesInAreaHandler,
   sumPropertyValueInAreaHandler,
 } from "./oracleGeo.ts";
+import {
+  queryPropertiesHandler,
+  getPropertyQuerySchemaHandler,
+} from "./propertyQuery.ts";
+import { MAX_ROW_LIMIT, DEFAULT_ROW_LIMIT } from "../lib/duckdbQuery.ts";
 
 /**
  * Registers all MCP tools onto the given server instance.
@@ -118,7 +123,7 @@ export function registerAllTools(server: McpServer): void {
     {
       title: "List Oracle open-data properties",
       description:
-        "Paginated discovery of properties in the Oracle open-data manifest. Returns slim entries (propertyId, parcelIdentifier, cid, county, fileSizeBytes). Use getOracleProperty to fetch full consolidated data for a specific entry.",
+        "Paginated discovery of properties for a county. Returns slim entries (propertyId, parcelIdentifier, cid, county, fileSizeBytes) plus summary fields (address, marketValue, ownerName) when served from the query table. Use getOracleProperty to fetch full consolidated data for a specific entry.",
       inputSchema: {
         county: z
           .string()
@@ -192,7 +197,7 @@ export function registerAllTools(server: McpServer): void {
     {
       title: "Get Oracle open-data dataset info",
       description:
-        "Returns dataset-level provenance and freshness metadata: county, propertyCount, exportedAt, schemaVersion, totalBytes, and the manifest CID.",
+        "Returns dataset-level metadata for a county: county, propertyCount (live row count when served from the query table), state, and provenance/CID fields on the legacy path.",
       inputSchema: {
         county: z
           .string()
@@ -251,20 +256,29 @@ export function registerAllTools(server: McpServer): void {
     .min(3, "A polygon needs at least 3 vertices")
     .describe("User-supplied polygon ring of coordinates");
 
+  const areaCountySchema = z
+    .string()
+    .optional()
+    .describe(
+      "County whose data to read (case-insensitive). Optional: when the deployment serves a single/default county it is inferred; otherwise names which county's query table to search.",
+    );
+
   server.registerTool(
     "findPropertiesInArea",
     {
       title: "Find properties in an area",
       description:
-        "Returns the set of properties whose centroid (latitude/longitude) falls inside a user-supplied bounding box or polygon. Provide exactly one of bbox or polygon. Reads the derived geo index; no NOAA/FEMA geometry is used.",
+        "Returns the set of properties whose centroid (latitude/longitude) falls inside a user-supplied bounding box or polygon. Provide exactly one of bbox or polygon. Reads the per-county property query table (falls back to the derived geo index); no NOAA/FEMA geometry is used.",
       inputSchema: {
         bbox: bboxSchema.optional(),
         polygon: polygonSchema.optional(),
+        county: areaCountySchema,
       },
     },
     async (args: {
       bbox?: { minLat: number; minLng: number; maxLat: number; maxLng: number };
       polygon?: Array<{ lat: number; lng: number }>;
+      county?: string;
     }) => {
       return findPropertiesInAreaHandler(args);
     },
@@ -275,17 +289,72 @@ export function registerAllTools(server: McpServer): void {
     {
       title: "Sum property value in an area",
       description:
-        "Returns the exact sum of current_avm_value over the properties whose centroid falls inside a user-supplied bounding box or polygon, plus the in-area count. Null valuations are treated as 0. Provide exactly one of bbox or polygon.",
+        "Returns the exact sum of avm_value over the properties whose centroid falls inside a user-supplied bounding box or polygon, plus the in-area count. Null valuations are treated as 0. Provide exactly one of bbox or polygon. Reads the per-county property query table (falls back to the derived geo index).",
       inputSchema: {
         bbox: bboxSchema.optional(),
         polygon: polygonSchema.optional(),
+        county: areaCountySchema,
       },
     },
     async (args: {
       bbox?: { minLat: number; minLng: number; maxLat: number; maxLng: number };
       polygon?: Array<{ lat: number; lng: number }>;
+      county?: string;
     }) => {
       return sumPropertyValueInAreaHandler(args);
+    },
+  );
+
+  server.registerTool(
+    "queryProperties",
+    {
+      title: "Query properties (SQL)",
+      description:
+        "Run a read-only SQL SELECT against a county's flat property query table (view name 'properties', one row per property) backed by embedded DuckDB. Use getPropertyQuerySchema first to see available columns. SAFETY: a single SELECT statement only (a leading WITH/CTE is allowed); multiple statements and any mutating or file/extension keyword (INSERT/UPDATE/DELETE/COPY/ATTACH/INSTALL/LOAD/PRAGMA/CALL/SET …) are rejected; results are always capped at " +
+        `${MAX_ROW_LIMIT} rows.`,
+      inputSchema: {
+        county: z
+          .string()
+          .min(1, "county is required")
+          .describe("County to query (case-insensitive), e.g. 'Lee'."),
+        sql: z
+          .string()
+          .min(1, "sql is required")
+          .describe(
+            "A single read-only SELECT statement over the 'properties' view.",
+          ),
+        limit: z
+          .number()
+          .int()
+          .positive()
+          .max(MAX_ROW_LIMIT)
+          .optional()
+          .default(DEFAULT_ROW_LIMIT)
+          .describe(
+            `Max rows to return (default ${DEFAULT_ROW_LIMIT}, max ${MAX_ROW_LIMIT}). Always enforced.`,
+          ),
+      },
+    },
+    async (args: { county: string; sql: string; limit?: number }) => {
+      return queryPropertiesHandler(args);
+    },
+  );
+
+  server.registerTool(
+    "getPropertyQuerySchema",
+    {
+      title: "Get property query schema",
+      description:
+        "Returns the column list, DuckDB types, and a one-line description of each column of the 'properties' query table for a county, so queryProperties can be written without guessing. Notes that some coverage-dependent fields may be NULL.",
+      inputSchema: {
+        county: z
+          .string()
+          .min(1, "county is required")
+          .describe("County to describe (case-insensitive), e.g. 'Lee'."),
+      },
+    },
+    async (args: { county: string }) => {
+      return getPropertyQuerySchemaHandler(args);
     },
   );
 }
