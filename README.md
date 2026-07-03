@@ -25,6 +25,8 @@ This helps the AI understand which data context to use and ensures it leverages 
 [![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=%40elephant-xyz%2Fmcp&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBlbGVwaGFudC14eXovbWNwQGxhdGVzdCJdfQ==)
 [<img alt="Install in VS Code (npx)" src="https://img.shields.io/badge/Install%20in%20VS%20Code-0098FF?style=for-the-badge&logo=visualstudiocode&logoColor=white">](https://insiders.vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%7B%22name%22%3A%22%40elephant-xyz%2Fmcp%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40elephant-xyz%2Fmcp%40latest%22%5D%7D)
 
+> **Heads up:** the one-click badges above install the npm build (`@elephant-xyz/mcp@latest`), which is temporarily behind and does **not** include the query-table tools (`queryProperties`), and one-click cannot set the required `PROPERTY_QUERY_TABLE_MAP`. Until the next npm release, use the manual configuration below (GitHub build).
+
 ## Why Elephant?
 
 - Ready-to-use `npx` launcher compatible with Claude, Cursor, VS Code, Gemini CLI, and other MCP clients.
@@ -39,6 +41,12 @@ This helps the AI understand which data context to use and ensures it leverages 
 - `getVerifiedScriptExamples` – Returns a list of working examples of the code, that maps data to the Elephant schema.
 - `findPropertiesInArea` – Returns properties whose centroid falls inside a user-supplied bounding box or polygon, sourced from the derived geo index.
 - `sumPropertyValueInArea` – Sums the current AVM value of properties whose centroid falls inside a bounding box or polygon.
+- `queryProperties` – Runs a read-only SQL `SELECT`/`WITH` over a county's query-table (view `properties`) via embedded DuckDB, for arbitrary counts, filters, and aggregates over owner, address, zip, value, acreage, material, and more.
+- `getPropertyQuerySchema` – Returns the query-table's columns and types for a county so callers know what they can query.
+- `getOracleProperty` – Fetches the full consolidated record for one property (by parcel id, property id, or CID).
+- `listOracleProperties` – Paginated per-county property listing.
+- `getOracleDatasetInfo` – Per-county dataset summary (property count, export time, source).
+- `getPropertyPermits` – On-demand permit harvest for a parcel.
 
 ### Geo tools and data sources
 
@@ -70,12 +78,20 @@ runs the server locally via `npx`, see below):
        "OPENAI_API_KEY": "sk-your-openai-key",
        // Option 2: Use AWS Bedrock (omit OPENAI_API_KEY)
        // "AWS_REGION": "us-east-1"  // optional, defaults to us-east-1
-       // Required for the geo tools (findPropertiesInArea / sumPropertyValueInArea):
-       "ORACLE_GEO_INDEX_IPNS": "k51qzi5uqu5djo3756w73x3swtt63g9y7igj7tvv1gs4skjk3haj3fuk7qosdi",
+       // Recommended: the per-county query-table (powers queryProperties AND all
+       // property/geo/dataset tools). A served county needs ONLY this line:
+       "PROPERTY_QUERY_TABLE_MAP": "{\"lee\":\"https://ipfs.filebase.io/ipns/k51qzi5uqu5djd4ohcf3qm87dhlt0e270xw8ejhkyia62edr76uj0u05hrf7m5\"}",
+       // Optional legacy fallback (only for counties NOT in the query-table map):
+       // "ORACLE_GEO_INDEX_IPNS": "k51qzi5uqu5djo3756w73x3swtt63g9y7igj7tvv1gs4skjk3haj3fuk7qosdi",
      },
    }
    ```
-   For OpenAI, replace the placeholder with your actual key. For AWS Bedrock, remove the `OPENAI_API_KEY` line and ensure your environment has valid AWS credentials (IAM role, environment variables, or AWS credentials file). Keep `ORACLE_GEO_INDEX_IPNS` so the geo tools can resolve the derived geo/value index.
+   For OpenAI, replace the placeholder with your actual key. For AWS Bedrock, remove the `OPENAI_API_KEY` line and ensure your environment has valid AWS credentials (IAM role, environment variables, or AWS credentials file).
+
+`PROPERTY_QUERY_TABLE_MAP` maps each county to its published query-table Parquet on IPFS. It powers `queryProperties` (arbitrary SQL) and is the primary source for `getOracleProperty`, `listOracleProperties`, `getOracleDatasetInfo`, and the geo tools — so a county listed there needs no `ORACLE_*` vars. The `ORACLE_OPEN_DATA_*` / `ORACLE_GEO_INDEX_*` vars are optional fallback for counties not yet in the map.
+
+> **Note:** the query-table tools (`queryProperties`, `getPropertyQuerySchema`) are on `main`. Until the next npm release, install the current build from GitHub — replace the args with `["-y", "github:elephant-xyz/elephant-mcp"]` (first launch builds from source; give it a minute).
+
 3. Save and toggle the Elephant connection inside Cursor's MCP panel.
 4. If you are hacking on a local checkout, switch the command to `npm start` and set `cwd` to your repository path.
 
@@ -184,6 +200,9 @@ The stdio transport means no port or server identity flags are required. Environ
 | `OPENAI_API_KEY` | OpenAI API key for embeddings. When set, OpenAI is used; otherwise falls back to AWS Bedrock. | _(optional)_ |
 | `AWS_REGION` | AWS region for Bedrock API calls. | `us-east-1` |
 | `LOG_LEVEL` | Pino log level (`error`, `warn`, `info`, `debug`). | `info` |
+| `PROPERTY_QUERY_TABLE_MAP` | **Recommended.** JSON object mapping county → query-table Parquet location (an IPNS gateway URL or a local path), e.g. `{"lee":"https://ipfs.filebase.io/ipns/k51…"}`. County keys are lowercased and hyphenated (`palm-beach`, not `palm_beach`). When a requested `county` is here, all data tools read the query-table via DuckDB; the `ORACLE_*` vars below are unused. | _(optional)_ |
+| `PROPERTY_QUERY_TABLE` | Single-county query-table location (fallback when the map is unset). | _(optional)_ |
+| `PROPERTY_QUERY_TABLE_DEFAULT_COUNTY` | County the single `PROPERTY_QUERY_TABLE` serves. | _(optional)_ |
 | `ORACLE_OPEN_DATA_IPNS_MAP` | JSON object mapping county → IPNS for multi-county deployments, e.g. `{"lee":"k51…lee","palm-beach":"k51…pb"}`. County keys are lowercased and hyphenated. When set, each requested `county` resolves to its own IPNS. | _(optional)_ |
 | `ORACLE_OPEN_DATA_DEFAULT_COUNTY` | County used when a request omits `county`. When the map is unset, this is the single-IPNS county. | _(optional)_ |
 | `ORACLE_OPEN_DATA_IPNS` | Legacy single-county IPNS of the open-data manifest/index. Used when `ORACLE_OPEN_DATA_IPNS_MAP` is unset/empty, or for the default county. | _(optional)_ |
