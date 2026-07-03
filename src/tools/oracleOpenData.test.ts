@@ -18,6 +18,12 @@ vi.mock("../lib/oracleManifest.ts", () => ({
   getOpenDataIpnsName: vi.fn(),
 }));
 
+vi.mock("../lib/duckdbQuery.ts", () => ({
+  isCountyServedByQueryTable: vi.fn(),
+  runInternalPropertyQuery: vi.fn(),
+  PROPERTIES_VIEW: "properties",
+}));
+
 const { getJsonByCid, fetchShardByCid } = await import("../lib/ipfs.ts");
 const {
   fetchOracleManifest,
@@ -26,6 +32,9 @@ const {
   getIndexCid,
   getOpenDataIpnsName,
 } = await import("../lib/oracleManifest.ts");
+const { isCountyServedByQueryTable, runInternalPropertyQuery } = await import(
+  "../lib/duckdbQuery.ts"
+);
 
 const mockGetJsonByCid = vi.mocked(getJsonByCid);
 const mockFetchShardByCid = vi.mocked(fetchShardByCid);
@@ -34,6 +43,8 @@ const mockGetManifestCid = vi.mocked(getManifestCid);
 const mockFetchOracleIndex = vi.mocked(fetchOracleIndex);
 const mockGetIndexCid = vi.mocked(getIndexCid);
 const mockGetOpenDataIpnsName = vi.mocked(getOpenDataIpnsName);
+const mockIsCountyServedByQueryTable = vi.mocked(isCountyServedByQueryTable);
+const mockRunInternalPropertyQuery = vi.mocked(runInternalPropertyQuery);
 
 const buildEntry = (
   propertyId: string,
@@ -734,5 +745,144 @@ describe("multi-county routing", () => {
 
     expect(parsed.error).toContain("Palm Beach");
     expect(parsed.propertyCount).toBe(0);
+  });
+});
+
+// === Query-table PRIMARY path (retired sharded/geo indexes) ===
+describe("query-table primary path", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    // County is served by the per-county query table → primary path is taken.
+    mockIsCountyServedByQueryTable.mockReturnValue(true);
+  });
+
+  it("[getProperty] resolves parcelIdentifier via SQL then fetches by CID", async () => {
+    mockRunInternalPropertyQuery.mockResolvedValue([
+      { property_cid: "cid-from-query-table" },
+    ]);
+    mockGetJsonByCid.mockResolvedValue({ appraisal: { value: 425000 } });
+
+    const result = await getOraclePropertyHandler({
+      parcelIdentifier: "1234567890",
+      county: "Lee",
+    });
+    const parsed = JSON.parse(result.content[0].text);
+
+    // CID lookup went through the query table, not the sharded index.
+    expect(mockFetchOracleIndex).not.toHaveBeenCalled();
+    expect(mockFetchOracleManifest).not.toHaveBeenCalled();
+    const [, sql, params] = mockRunInternalPropertyQuery.mock.calls[0];
+    expect(sql).toContain("parcel_identifier = $1");
+    expect(params).toEqual(["1234567890"]);
+    // Full record still comes from IPFS by CID.
+    expect(mockGetJsonByCid).toHaveBeenCalledWith("cid-from-query-table");
+    expect(parsed.appraisal.value).toBe(425000);
+  });
+
+  it("[getProperty] resolves propertyId via SQL on the property_id column", async () => {
+    mockRunInternalPropertyQuery.mockResolvedValue([
+      { property_cid: "cid-uuid" },
+    ]);
+    mockGetJsonByCid.mockResolvedValue({ ok: true });
+
+    await getOraclePropertyHandler({ propertyId: "uuid-xyz", county: "Lee" });
+
+    const [, sql, params] = mockRunInternalPropertyQuery.mock.calls[0];
+    expect(sql).toContain("property_id = $1");
+    expect(params).toEqual(["uuid-xyz"]);
+  });
+
+  it("[getProperty] returns not-found when the query table has no such parcel", async () => {
+    mockRunInternalPropertyQuery.mockResolvedValue([]);
+
+    const result = await getOraclePropertyHandler({
+      parcelIdentifier: "9999999999",
+      county: "Lee",
+    });
+    const parsed = JSON.parse(result.content[0].text);
+
+    expect(parsed.error).toContain("9999999999");
+    expect(mockGetJsonByCid).not.toHaveBeenCalled();
+  });
+
+  it("[getProperty] errors when the row has a null property_cid", async () => {
+    mockRunInternalPropertyQuery.mockResolvedValue([{ property_cid: null }]);
+
+    const result = await getOraclePropertyHandler({
+      parcelIdentifier: "1234567890",
+      county: "Lee",
+    });
+    const parsed = JSON.parse(result.content[0].text);
+
+    expect(parsed.error).toContain("property_cid");
+    expect(mockGetJsonByCid).not.toHaveBeenCalled();
+  });
+
+  it("[getProperty] cid input path never touches the query table", async () => {
+    mockGetJsonByCid.mockResolvedValue({ direct: true });
+
+    await getOraclePropertyHandler({ cid: "cid-direct", county: "Lee" });
+
+    expect(mockRunInternalPropertyQuery).not.toHaveBeenCalled();
+    expect(mockGetJsonByCid).toHaveBeenCalledWith("cid-direct");
+  });
+
+  it("[list] paginates from the query table with summary fields", async () => {
+    mockRunInternalPropertyQuery
+      .mockResolvedValueOnce([{ c: 511695 }])
+      .mockResolvedValueOnce([
+        {
+          property_id: "uuid-1",
+          parcel_identifier: "1000",
+          property_cid: "cid-1000",
+          county_name: "Lee",
+          address_street: "123 Main St",
+          address_city: "Fort Myers",
+          address_zip: "33901",
+          market_value: 350000,
+          owner_name: "Jane Doe",
+        },
+      ]);
+
+    const result = await listOraclePropertiesHandler({
+      county: "Lee",
+      limit: 1,
+      offset: 0,
+    });
+    const parsed = JSON.parse(result.content[0].text);
+
+    expect(mockFetchOracleIndex).not.toHaveBeenCalled();
+    expect(parsed.total).toBe(511695);
+    expect(parsed.properties).toHaveLength(1);
+    expect(parsed.properties[0]).toMatchObject({
+      propertyId: "uuid-1",
+      parcelIdentifier: "1000",
+      cid: "cid-1000",
+      county: "Lee",
+      fileSizeBytes: null,
+      address: "123 Main St, Fort Myers, 33901",
+      marketValue: 350000,
+      ownerName: "Jane Doe",
+    });
+    // The page query binds the caller's limit/offset.
+    const [, sql, params] = mockRunInternalPropertyQuery.mock.calls[1];
+    expect(sql).toContain("LIMIT $1 OFFSET $2");
+    expect(params).toEqual([1, 0]);
+  });
+
+  it("[datasetInfo] reports the live row count, not the stale manifest", async () => {
+    mockRunInternalPropertyQuery.mockResolvedValue([
+      { c: 511695, county: "Lee", state: "FL" },
+    ]);
+
+    const result = await getOracleDatasetInfoHandler({ county: "Lee" });
+    const parsed = JSON.parse(result.content[0].text);
+
+    expect(mockFetchOracleIndex).not.toHaveBeenCalled();
+    expect(mockFetchOracleManifest).not.toHaveBeenCalled();
+    expect(parsed.propertyCount).toBe(511695);
+    expect(parsed.county).toBe("Lee");
+    expect(parsed.stateCode).toBe("FL");
+    expect(parsed.source).toBe("query-table");
   });
 });

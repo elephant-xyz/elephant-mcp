@@ -19,9 +19,18 @@
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
-const { fetchGeoIndexMock, getGeoIndexCidMock } = vi.hoisted(() => ({
+const {
+  fetchGeoIndexMock,
+  getGeoIndexCidMock,
+  isCountyServedMock,
+  runInternalPropertyQueryMock,
+  resolveDefaultQueryTableCountyMock,
+} = vi.hoisted(() => ({
   fetchGeoIndexMock: vi.fn(),
   getGeoIndexCidMock: vi.fn(),
+  isCountyServedMock: vi.fn(),
+  runInternalPropertyQueryMock: vi.fn(),
+  resolveDefaultQueryTableCountyMock: vi.fn(),
 }));
 
 // Mock the (future) derived geo-index loader. A factory keeps this file
@@ -30,6 +39,15 @@ const { fetchGeoIndexMock, getGeoIndexCidMock } = vi.hoisted(() => ({
 vi.mock("../lib/oracleGeoIndex.ts", () => ({
   fetchGeoIndex: fetchGeoIndexMock,
   getGeoIndexCid: getGeoIndexCidMock,
+}));
+
+// Mock the query-table layer so we can drive the PRIMARY path (served) and the
+// FALLBACK path (not served → geo index) independently.
+vi.mock("../lib/duckdbQuery.ts", () => ({
+  isCountyServedByQueryTable: isCountyServedMock,
+  runInternalPropertyQuery: runInternalPropertyQueryMock,
+  resolveDefaultQueryTableCounty: resolveDefaultQueryTableCountyMock,
+  PROPERTIES_VIEW: "properties",
 }));
 
 // A small derived geo index: per-parcel centroid + current AVM value + type.
@@ -209,5 +227,153 @@ describe("sumPropertyValueInAreaHandler (red — tool not implemented)", () => {
 
     expect(parsed.totalValue).toBe(0);
     expect(parsed.count).toBe(0);
+  });
+});
+
+// === Query-table PRIMARY path ===
+describe("geo tools over the query table (primary path)", () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    isCountyServedMock.mockReturnValue(true);
+    resolveDefaultQueryTableCountyMock.mockReturnValue(null);
+  });
+
+  it("[find] bbox becomes a SQL BETWEEN filter and returns the shaped parcels", async () => {
+    runInternalPropertyQueryMock.mockResolvedValue([
+      {
+        parcel_identifier: "P-1",
+        request_identifier: "REQ-1",
+        latitude: 5,
+        longitude: 5,
+        avm_value: 100_000,
+        property_type: "COMMERCIAL",
+      },
+    ]);
+    const { findPropertiesInAreaHandler } = await import("./oracleGeo.ts");
+
+    const result = await findPropertiesInAreaHandler({
+      bbox: BBOX,
+      county: "Lee",
+    });
+    const parsed = parse(result);
+
+    // Fallback geo index is never consulted.
+    expect(fetchGeoIndexMock).not.toHaveBeenCalled();
+    const [county, sql, params] = runInternalPropertyQueryMock.mock.calls[0];
+    expect(county).toBe("Lee");
+    expect(sql).toContain("latitude BETWEEN $1 AND $2");
+    expect(sql).toContain("longitude BETWEEN $3 AND $4");
+    expect(params).toEqual([0, 10, 0, 10]);
+    expect(parsed.count).toBe(1);
+    expect(parsed.parcels[0]).toMatchObject({
+      parcelIdentifier: "P-1",
+      requestIdentifier: "REQ-1",
+      latitude: 5,
+      longitude: 5,
+      currentAvmValue: 100_000,
+      propertyType: "COMMERCIAL",
+    });
+  });
+
+  it("[find] polygon pre-filters by its bbox in SQL then ray-casts survivors", async () => {
+    // Triangle covering the lower-left half of the [0,10] square.
+    const triangle = [
+      { lat: 0, lng: 0 },
+      { lat: 0, lng: 10 },
+      { lat: 10, lng: 0 },
+    ];
+    // Both rows pass the bbox pre-filter; only the first is inside the triangle.
+    runInternalPropertyQueryMock.mockResolvedValue([
+      {
+        parcel_identifier: "IN",
+        request_identifier: "R1",
+        latitude: 1,
+        longitude: 1,
+        avm_value: 10,
+        property_type: null,
+      },
+      {
+        parcel_identifier: "OUT",
+        request_identifier: "R2",
+        latitude: 9,
+        longitude: 9,
+        avm_value: 20,
+        property_type: null,
+      },
+    ]);
+    const { findPropertiesInAreaHandler } = await import("./oracleGeo.ts");
+
+    const result = await findPropertiesInAreaHandler({
+      polygon: triangle,
+      county: "Lee",
+    });
+    const parsed = parse(result);
+
+    // SQL pre-filter uses the polygon's bounding box.
+    const [, , params] = runInternalPropertyQueryMock.mock.calls[0];
+    expect(params).toEqual([0, 10, 0, 10]);
+    // Ray-cast keeps only the point inside the triangle.
+    expect(parsed.count).toBe(1);
+    expect(parsed.parcels[0].parcelIdentifier).toBe("IN");
+  });
+
+  it("[sum] sums avm_value over in-area parcels (nulls → 0)", async () => {
+    runInternalPropertyQueryMock.mockResolvedValue([
+      {
+        parcel_identifier: "A",
+        request_identifier: "R1",
+        latitude: 5,
+        longitude: 5,
+        avm_value: 100_000,
+        property_type: null,
+      },
+      {
+        parcel_identifier: "B",
+        request_identifier: "R2",
+        latitude: 2,
+        longitude: 8,
+        avm_value: 250_000,
+        property_type: null,
+      },
+      {
+        parcel_identifier: "C",
+        request_identifier: "R3",
+        latitude: 9,
+        longitude: 1,
+        avm_value: null,
+        property_type: null,
+      },
+    ]);
+    const { sumPropertyValueInAreaHandler } = await import("./oracleGeo.ts");
+
+    const result = await sumPropertyValueInAreaHandler({
+      bbox: BBOX,
+      county: "Lee",
+    });
+    const parsed = parse(result);
+
+    expect(parsed.totalValue).toBe(350_000);
+    expect(parsed.count).toBe(3);
+    expect(new Set(parsed.parcels)).toEqual(new Set(["A", "B", "C"]));
+  });
+
+  it("[find] resolves the sole served county when none is supplied", async () => {
+    resolveDefaultQueryTableCountyMock.mockReturnValue("lee");
+    runInternalPropertyQueryMock.mockResolvedValue([]);
+    const { findPropertiesInAreaHandler } = await import("./oracleGeo.ts");
+
+    await findPropertiesInAreaHandler({ bbox: BBOX });
+
+    expect(runInternalPropertyQueryMock.mock.calls[0][0]).toBe("lee");
+  });
+
+  it("[find] rejects an invalid area before querying", async () => {
+    const { findPropertiesInAreaHandler } = await import("./oracleGeo.ts");
+
+    const result = await findPropertiesInAreaHandler({ county: "Lee" });
+    const parsed = parse(result);
+
+    expect(parsed.error).toContain("Invalid area");
+    expect(runInternalPropertyQueryMock).not.toHaveBeenCalled();
   });
 });

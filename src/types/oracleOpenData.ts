@@ -28,7 +28,17 @@ export interface SlimPropertyEntry {
   parcelIdentifier: string;
   cid: string | null;
   county: string;
-  fileSizeBytes: number;
+  /**
+   * Per-property file size from the legacy manifest/sharded index. The
+   * query-table path does not carry this, so it is null there.
+   */
+  fileSizeBytes: number | null;
+  /** Situs street address (query-table path only; omitted on the legacy path). */
+  address?: string | null;
+  /** Market/just value from the appraiser roll (query-table path only). */
+  marketValue?: number | null;
+  /** Primary owner name (query-table path only). */
+  ownerName?: string | null;
 }
 
 export interface ListOraclePropertiesResult {
