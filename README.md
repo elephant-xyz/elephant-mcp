@@ -25,6 +25,8 @@ This helps the AI understand which data context to use and ensures it leverages 
 [![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=%40elephant-xyz%2Fmcp&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBlbGVwaGFudC14eXovbWNwQGxhdGVzdCJdfQ==)
 [<img alt="Install in VS Code (npx)" src="https://img.shields.io/badge/Install%20in%20VS%20Code-0098FF?style=for-the-badge&logo=visualstudiocode&logoColor=white">](https://insiders.vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%7B%22name%22%3A%22%40elephant-xyz%2Fmcp%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40elephant-xyz%2Fmcp%40latest%22%5D%7D)
 
+> **Heads up:** the one-click badges above install the npm build (`@elephant-xyz/mcp@latest`), which is temporarily behind and does **not** include the query-table tools (`queryProperties`), and one-click cannot set the required `PROPERTY_QUERY_TABLE_MAP`. Until the next npm release, use the manual configuration below (GitHub build).
+
 ## Why Elephant?
 
 - Ready-to-use `npx` launcher compatible with Claude, Cursor, VS Code, Gemini CLI, and other MCP clients.
@@ -39,6 +41,12 @@ This helps the AI understand which data context to use and ensures it leverages 
 - `getVerifiedScriptExamples` – Returns a list of working examples of the code, that maps data to the Elephant schema.
 - `findPropertiesInArea` – Returns properties whose centroid falls inside a user-supplied bounding box or polygon, sourced from the derived geo index.
 - `sumPropertyValueInArea` – Sums the current AVM value of properties whose centroid falls inside a bounding box or polygon.
+- `queryProperties` – Runs a read-only SQL `SELECT`/`WITH` over a county's query-table (view `properties`) via embedded DuckDB, for arbitrary counts, filters, and aggregates over owner, address, zip, value, acreage, material, and more.
+- `getPropertyQuerySchema` – Returns the query-table's columns and types for a county so callers know what they can query.
+- `getOracleProperty` – Fetches the full consolidated record for one property (by parcel id, property id, or CID).
+- `listOracleProperties` – Paginated per-county property listing.
+- `getOracleDatasetInfo` – Per-county dataset summary (property count, export time, source).
+- `getPropertyPermits` – On-demand permit harvest for a parcel.
 
 ### Geo tools and data sources
 
@@ -83,6 +91,7 @@ runs the server locally via `npx`, see below):
 `PROPERTY_QUERY_TABLE_MAP` maps each county to its published query-table Parquet on IPFS. It powers `queryProperties` (arbitrary SQL) and is the primary source for `getOracleProperty`, `listOracleProperties`, `getOracleDatasetInfo`, and the geo tools — so a county listed there needs no `ORACLE_*` vars. The `ORACLE_OPEN_DATA_*` / `ORACLE_GEO_INDEX_*` vars are optional fallback for counties not yet in the map.
 
 > **Note:** the query-table tools (`queryProperties`, `getPropertyQuerySchema`) are on `main`. Until the next npm release, install the current build from GitHub — replace the args with `["-y", "github:elephant-xyz/elephant-mcp"]` (first launch builds from source; give it a minute).
+
 3. Save and toggle the Elephant connection inside Cursor's MCP panel.
 4. If you are hacking on a local checkout, switch the command to `npm start` and set `cwd` to your repository path.
 
