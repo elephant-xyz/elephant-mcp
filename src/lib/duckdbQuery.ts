@@ -5,28 +5,35 @@ import { logger } from "../logger.ts";
 import { normalizeCountyKey } from "./countyIpnsRegistry.ts";
 
 /**
- * Embedded DuckDB query engine over a per-county Parquet "query table".
+ * Embedded DuckDB query engine over per-county Parquet "query tables".
  *
  * Step 2 of the DuckDB-on-IPFS indexing feature. Each county's flat, one-row-
- * per-property Parquet is exposed to callers as a stable view named
- * `properties`. An in-process DuckDB reads it directly (local path) or via HTTP
- * range reads (IPFS gateway URL), so the donphan agent can answer arbitrary
- * questions with plain SQL.
+ * per-record Parquet is exposed to callers as a stable view. An in-process
+ * DuckDB reads it directly (local path) or via HTTP range reads (IPFS gateway
+ * URL), so the donphan agent can answer arbitrary questions with plain SQL.
  *
- * County → Parquet location is resolved from env vars, mirroring the IPNS-map
- * pattern used by the open-data/geo datasets:
- *   PROPERTY_QUERY_TABLE_MAP  – JSON map {"lee":"<location>", ...}
- *   PROPERTY_QUERY_TABLE      – legacy single-county location (fallback)
- *   PROPERTY_QUERY_TABLE_DEFAULT_COUNTY – county the single location serves
+ * Two datasets share ALL of this machinery (SQL safety, env resolution,
+ * connection caching), differing only in a small {@link DatasetConfig}:
+ *   - PROPERTIES: one row per property, view `properties`, env
+ *     PROPERTY_QUERY_TABLE_MAP / PROPERTY_QUERY_TABLE /
+ *     PROPERTY_QUERY_TABLE_DEFAULT_COUNTY (Lee runs this in prod).
+ *   - PERMITS: one row per building permit, view `permits`, env
+ *     PERMIT_QUERY_TABLE_MAP / PERMIT_QUERY_TABLE /
+ *     PERMIT_QUERY_TABLE_DEFAULT_COUNTY.
+ *
  * A <location> is EITHER a local filesystem path OR an http(s) URL.
  *
- * Safety: callers never touch the DuckDB connection directly. Every query goes
- * through {@link runPropertyQuery}, which accepts a SINGLE read-only SELECT
- * statement (see {@link validateSelectQuery}) and always caps the returned rows.
+ * Safety: callers never touch the DuckDB connection directly. Every caller-
+ * facing query goes through {@link runPropertyQuery} / {@link runPermitQuery},
+ * which accept a SINGLE read-only SELECT statement (see
+ * {@link validateSelectQuery}) and always cap the returned rows.
  */
 
-/** The stable view name every county's query table is exposed under. */
+/** The stable view name the property query table is exposed under. */
 export const PROPERTIES_VIEW = "properties";
+
+/** The stable view name the permit query table is exposed under. */
+export const PERMITS_VIEW = "permits";
 
 /** Default row cap when the caller does not specify one. */
 export const DEFAULT_ROW_LIMIT = 100;
@@ -80,15 +87,55 @@ export interface QueryTableResolution {
   readonly countyKey: string | null;
 }
 
+interface CountyConnection {
+  readonly connection: DuckDBConnection;
+  readonly location: string;
+}
+
 /**
- * Parse the PROPERTY_QUERY_TABLE_MAP env var (a JSON object of
- * county → Parquet location). Returns an empty map when unset, blank, or
- * malformed — the failure is logged so a bad config is visible without
- * crashing the server. Keys are normalized; blank/non-string values are
- * skipped.
+ * The per-dataset configuration that specializes the shared DuckDB machinery.
+ * Everything else (SQL safety, env resolution, connection caching) is generic
+ * over this. Each dataset owns its OWN connection cache so a property and a
+ * permit table for the same county never collide on a cache key.
  */
-export function parseQueryTableMap(
+interface DatasetConfig {
+  /** The view name the parquet is exposed under (e.g. `properties`, `permits`). */
+  readonly view: string;
+  /** JSON county→location map env var (e.g. `PROPERTY_QUERY_TABLE_MAP`). */
+  readonly mapEnv: string;
+  /** Single-location fallback env var (e.g. `PROPERTY_QUERY_TABLE`). */
+  readonly singleEnv: string;
+  /** Default-county env var for the single location (e.g. `..._DEFAULT_COUNTY`). */
+  readonly defaultCountyEnv: string;
+  /** This dataset's private connection cache, keyed by countyKey + location. */
+  readonly connectionCache: Map<string, Promise<CountyConnection>>;
+}
+
+const PROPERTY_DATASET: DatasetConfig = {
+  view: PROPERTIES_VIEW,
+  mapEnv: "PROPERTY_QUERY_TABLE_MAP",
+  singleEnv: "PROPERTY_QUERY_TABLE",
+  defaultCountyEnv: "PROPERTY_QUERY_TABLE_DEFAULT_COUNTY",
+  connectionCache: new Map<string, Promise<CountyConnection>>(),
+};
+
+const PERMIT_DATASET: DatasetConfig = {
+  view: PERMITS_VIEW,
+  mapEnv: "PERMIT_QUERY_TABLE_MAP",
+  singleEnv: "PERMIT_QUERY_TABLE",
+  defaultCountyEnv: "PERMIT_QUERY_TABLE_DEFAULT_COUNTY",
+  connectionCache: new Map<string, Promise<CountyConnection>>(),
+};
+
+/**
+ * Parse a JSON county→location map env value (generic core). Returns an empty
+ * map when unset, blank, or malformed — the failure is logged (naming the env
+ * var) so a bad config is visible without crashing the server. Keys are
+ * normalized; blank/non-string values are skipped.
+ */
+function parseDatasetMap(
   raw: string | undefined,
+  mapEnv: string,
 ): Record<string, string> {
   if (!raw || raw.trim() === "") {
     return {};
@@ -100,13 +147,13 @@ export function parseQueryTableMap(
   } catch (err) {
     logger.warn(
       { error: err instanceof Error ? err.message : String(err) },
-      "Failed to parse PROPERTY_QUERY_TABLE_MAP JSON — ignoring (falling back to single query table)",
+      `Failed to parse ${mapEnv} JSON — ignoring (falling back to single query table)`,
     );
     return {};
   }
 
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    logger.warn("PROPERTY_QUERY_TABLE_MAP is not a JSON object — ignoring");
+    logger.warn(`${mapEnv} is not a JSON object — ignoring`);
     return {};
   }
 
@@ -115,7 +162,7 @@ export function parseQueryTableMap(
     if (typeof location !== "string" || location.trim() === "") {
       logger.warn(
         { county },
-        "Skipping PROPERTY_QUERY_TABLE_MAP entry with a non-string/blank location",
+        `Skipping ${mapEnv} entry with a non-string/blank location`,
       );
       continue;
     }
@@ -126,20 +173,20 @@ export function parseQueryTableMap(
 }
 
 /**
- * Resolve the Parquet location to read for the given county.
+ * Resolve the Parquet location to read for the given county (generic core).
  *
- * - No map configured (legacy mode): always resolve to the single
- *   PROPERTY_QUERY_TABLE location.
+ * - No map configured (legacy mode): always resolve to the single location.
  * - Map configured: county in the map → its location; county equals the
  *   configured default county → the single location; otherwise → not served.
  */
-export function resolveQueryTableLocation(
+function resolveDatasetLocation(
+  config: DatasetConfig,
   county: string | undefined,
 ): QueryTableResolution {
-  const map = parseQueryTableMap(process.env.PROPERTY_QUERY_TABLE_MAP);
-  const single = process.env.PROPERTY_QUERY_TABLE?.trim() || null;
-  const defaultCountyKey = process.env.PROPERTY_QUERY_TABLE_DEFAULT_COUNTY
-    ? normalizeCountyKey(process.env.PROPERTY_QUERY_TABLE_DEFAULT_COUNTY)
+  const map = parseDatasetMap(process.env[config.mapEnv], config.mapEnv);
+  const single = process.env[config.singleEnv]?.trim() || null;
+  const defaultCountyKey = process.env[config.defaultCountyEnv]
+    ? normalizeCountyKey(process.env[config.defaultCountyEnv] as string)
     : null;
   const requestedKey = county ? normalizeCountyKey(county) : defaultCountyKey;
 
@@ -172,38 +219,100 @@ export function resolveQueryTableLocation(
 }
 
 /**
- * Whether this deployment can serve the requested county from a per-county
- * query table (DuckDB over Parquet). The data tools use this as the gate that
- * decides between the query-table PRIMARY path and the legacy sharded/geo-index
- * FALLBACK path.
+ * Resolve the county a dataset-backed tool should target when the caller did not
+ * name one (generic core). Returns the sole county key when the map has exactly
+ * one entry; the configured default county otherwise; null when neither applies.
  */
-export function isCountyServedByQueryTable(
-  county: string | undefined,
-): boolean {
-  return resolveQueryTableLocation(county).served;
-}
-
-/**
- * Resolve the county a query-table-backed tool should target when the caller
- * did not name one. This keeps the env-minimal story working — a migrated
- * deployment can set only PROPERTY_QUERY_TABLE_MAP with a single county and the
- * countyless geo tools still resolve it. Returns:
- *   - the sole county key when the map has exactly one entry;
- *   - the configured default county otherwise;
- *   - null when neither applies (legacy single-table mode resolves undefined
- *     directly, so null is the correct "no explicit county" signal there).
- */
-export function resolveDefaultQueryTableCounty(): string | null {
-  const map = parseQueryTableMap(process.env.PROPERTY_QUERY_TABLE_MAP);
+function resolveDefaultDatasetCounty(config: DatasetConfig): string | null {
+  const map = parseDatasetMap(process.env[config.mapEnv], config.mapEnv);
   const keys = Object.keys(map);
   if (keys.length === 1) {
     return keys[0] ?? null;
   }
-  const defaultCounty = process.env.PROPERTY_QUERY_TABLE_DEFAULT_COUNTY?.trim();
+  const defaultCounty = process.env[config.defaultCountyEnv]?.trim();
   if (defaultCounty) {
     return normalizeCountyKey(defaultCounty);
   }
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// PROPERTY dataset — public API (exact signatures/behavior preserved).
+// ---------------------------------------------------------------------------
+
+/**
+ * Parse the PROPERTY_QUERY_TABLE_MAP env var (a JSON object of
+ * county → Parquet location). Returns an empty map when unset, blank, or
+ * malformed. Keys are normalized; blank/non-string values are skipped.
+ */
+export function parseQueryTableMap(
+  raw: string | undefined,
+): Record<string, string> {
+  return parseDatasetMap(raw, PROPERTY_DATASET.mapEnv);
+}
+
+/** Resolve the property Parquet location to read for the given county. */
+export function resolveQueryTableLocation(
+  county: string | undefined,
+): QueryTableResolution {
+  return resolveDatasetLocation(PROPERTY_DATASET, county);
+}
+
+/**
+ * Whether this deployment can serve the requested county from a per-county
+ * property query table (DuckDB over Parquet).
+ */
+export function isCountyServedByQueryTable(
+  county: string | undefined,
+): boolean {
+  return resolveDatasetLocation(PROPERTY_DATASET, county).served;
+}
+
+/**
+ * Resolve the property county a query-table-backed tool should target when the
+ * caller did not name one.
+ */
+export function resolveDefaultQueryTableCounty(): string | null {
+  return resolveDefaultDatasetCounty(PROPERTY_DATASET);
+}
+
+// ---------------------------------------------------------------------------
+// PERMIT dataset — public API (parallel surface).
+// ---------------------------------------------------------------------------
+
+/**
+ * Parse the PERMIT_QUERY_TABLE_MAP env var (a JSON object of
+ * county → Parquet location). Same semantics as {@link parseQueryTableMap}.
+ */
+export function parsePermitQueryTableMap(
+  raw: string | undefined,
+): Record<string, string> {
+  return parseDatasetMap(raw, PERMIT_DATASET.mapEnv);
+}
+
+/** Resolve the permit Parquet location to read for the given county. */
+export function resolvePermitTableLocation(
+  county: string | undefined,
+): QueryTableResolution {
+  return resolveDatasetLocation(PERMIT_DATASET, county);
+}
+
+/**
+ * Whether this deployment can serve the requested county from a per-county
+ * permit query table (DuckDB over Parquet).
+ */
+export function isCountyServedByPermitTable(
+  county: string | undefined,
+): boolean {
+  return resolveDatasetLocation(PERMIT_DATASET, county).served;
+}
+
+/**
+ * Resolve the permit county a query-table-backed tool should target when the
+ * caller did not name one.
+ */
+export function resolveDefaultPermitTableCounty(): string | null {
+  return resolveDefaultDatasetCounty(PERMIT_DATASET);
 }
 
 /**
@@ -321,20 +430,20 @@ export function validateSelectQuery(sql: string): SelectValidation {
   return { ok: true, sql: trimmed.replace(/;\s*$/, "") };
 }
 
-interface CountyConnection {
-  readonly connection: DuckDBConnection;
-  readonly location: string;
+// One DuckDB connection per resolved (county → location) PER DATASET. The MCP
+// process is long-lived, so opening the instance once and reusing the view
+// keeps per-query latency low. Keyed by countyKey + location so a config change
+// (or a per-county location) never serves the wrong table. Each dataset holds
+// its own cache (see DatasetConfig.connectionCache).
+
+/** Reset all cached PROPERTY DuckDB connections. Intended for tests. */
+export function clearPropertyQueryConnections(): void {
+  PROPERTY_DATASET.connectionCache.clear();
 }
 
-// One DuckDB connection per resolved (county → location). The MCP process is
-// long-lived, so opening the instance once and reusing the `properties` view
-// keeps per-query latency low. Keyed by countyKey + location so a config change
-// (or a per-county location) never serves the wrong table.
-const connectionCache = new Map<string, Promise<CountyConnection>>();
-
-/** Reset all cached DuckDB connections. Intended for tests. */
-export function clearPropertyQueryConnections(): void {
-  connectionCache.clear();
+/** Reset all cached PERMIT DuckDB connections. Intended for tests. */
+export function clearPermitQueryConnections(): void {
+  PERMIT_DATASET.connectionCache.clear();
 }
 
 function isHttpLocation(location: string): boolean {
@@ -342,6 +451,7 @@ function isHttpLocation(location: string): boolean {
 }
 
 async function openCountyConnection(
+  view: string,
   location: string,
 ): Promise<CountyConnection> {
   const instance = await DuckDBInstance.create(":memory:");
@@ -361,32 +471,33 @@ async function openCountyConnection(
 
   const escaped = location.replace(/'/g, "''");
   await connection.run(
-    `CREATE VIEW ${PROPERTIES_VIEW} AS SELECT * FROM read_parquet('${escaped}')`,
+    `CREATE VIEW ${view} AS SELECT * FROM read_parquet('${escaped}')`,
   );
 
-  logger.info({ location }, "Opened DuckDB query table view 'properties'");
+  logger.info({ view, location }, "Opened DuckDB query table view");
   return { connection, location };
 }
 
 async function getCountyConnection(
+  config: DatasetConfig,
   county: string | undefined,
 ): Promise<CountyConnection> {
-  const resolution = resolveQueryTableLocation(county);
+  const resolution = resolveDatasetLocation(config, county);
   if (!resolution.served || resolution.location === null) {
     throw new Error(
       county
-        ? `County '${county}' is not served by this deployment's property query table.`
-        : "No property query table is configured — set PROPERTY_QUERY_TABLE or PROPERTY_QUERY_TABLE_MAP.",
+        ? `County '${county}' is not served by this deployment's ${config.view} query table.`
+        : `No ${config.view} query table is configured — set ${config.singleEnv} or ${config.mapEnv}.`,
     );
   }
 
   const cacheKey = `${resolution.countyKey ?? "__default__"}::${resolution.location}`;
-  let pending = connectionCache.get(cacheKey);
+  let pending = config.connectionCache.get(cacheKey);
   if (pending === undefined) {
-    pending = openCountyConnection(resolution.location);
-    connectionCache.set(cacheKey, pending);
+    pending = openCountyConnection(config.view, resolution.location);
+    config.connectionCache.set(cacheKey, pending);
     // Don't cache a failed open — let the next call retry.
-    pending.catch(() => connectionCache.delete(cacheKey));
+    pending.catch(() => config.connectionCache.delete(cacheKey));
   }
   return pending;
 }
@@ -399,14 +510,14 @@ export interface PropertyQueryResult {
 }
 
 /**
- * Run a single read-only SELECT against the `properties` view for `county`.
- * The query is validated by {@link validateSelectQuery} and wrapped so the row
- * cap is always enforced regardless of any LIMIT the caller wrote.
+ * Run a single validated, capped read-only SELECT against a dataset's view
+ * (generic core shared by the property and permit query surfaces).
  */
-export async function runPropertyQuery(
+async function runDatasetQuery(
+  config: DatasetConfig,
   county: string,
   sql: string,
-  limit: number = DEFAULT_ROW_LIMIT,
+  limit: number,
 ): Promise<PropertyQueryResult> {
   const validation = validateSelectQuery(sql);
   if (!validation.ok) {
@@ -414,7 +525,7 @@ export async function runPropertyQuery(
   }
 
   const cappedLimit = Math.max(1, Math.min(limit, MAX_ROW_LIMIT));
-  const { connection } = await getCountyConnection(county);
+  const { connection } = await getCountyConnection(config, county);
 
   const wrapped = `SELECT * FROM (${validation.sql}) AS _q LIMIT ${cappedLimit}`;
   const reader = await connection.runAndReadAll(wrapped);
@@ -429,21 +540,18 @@ export async function runPropertyQuery(
 }
 
 /**
- * Run a TRUSTED, internal read-only query against a county's `properties` view.
- *
- * Unlike {@link runPropertyQuery}, this does NOT run the caller-facing SELECT
- * validator or force a row cap: the SQL here is authored by the data tools
- * themselves (not user input), with all runtime values bound as positional
- * `$1…$n` parameters, so it is safe by construction. It exists so the open-data
- * and geo tools can read the same per-county query table instead of the retired
- * sharded/geo indexes.
+ * Run a TRUSTED, internal read-only query against a dataset's view (generic
+ * core). Does NOT run the caller-facing validator or force a row cap: the SQL
+ * here is authored by the data tools themselves, with all runtime values bound
+ * as positional `$1…$n` parameters, so it is safe by construction.
  */
-export async function runInternalPropertyQuery(
+async function runInternalDatasetQuery(
+  config: DatasetConfig,
   county: string | undefined,
   sql: string,
-  params: DuckDBValue[] = [],
+  params: DuckDBValue[],
 ): Promise<Array<Record<string, Json>>> {
-  const { connection } = await getCountyConnection(county);
+  const { connection } = await getCountyConnection(config, county);
   const reader = await connection.runAndReadAll(sql, params);
   return reader.getRowObjectsJson();
 }
@@ -453,6 +561,50 @@ export interface PropertyColumn {
   readonly type: string;
 }
 
+/** Return the column names and DuckDB types of a dataset's view (generic core). */
+async function getDatasetColumns(
+  config: DatasetConfig,
+  county: string,
+): Promise<PropertyColumn[]> {
+  const { connection } = await getCountyConnection(config, county);
+  const reader = await connection.runAndReadAll(`DESCRIBE ${config.view}`);
+  const rows = reader.getRowObjectsJson();
+
+  return rows.map((row) => ({
+    name: String(row.column_name ?? ""),
+    type: String(row.column_type ?? ""),
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// PROPERTY dataset — query API (exact signatures/behavior preserved).
+// ---------------------------------------------------------------------------
+
+/**
+ * Run a single read-only SELECT against the `properties` view for `county`.
+ * The query is validated by {@link validateSelectQuery} and wrapped so the row
+ * cap is always enforced regardless of any LIMIT the caller wrote.
+ */
+export async function runPropertyQuery(
+  county: string,
+  sql: string,
+  limit: number = DEFAULT_ROW_LIMIT,
+): Promise<PropertyQueryResult> {
+  return runDatasetQuery(PROPERTY_DATASET, county, sql, limit);
+}
+
+/**
+ * Run a TRUSTED, internal read-only query against a county's `properties` view.
+ * Values must be bound as positional `$1…$n` parameters.
+ */
+export async function runInternalPropertyQuery(
+  county: string | undefined,
+  sql: string,
+  params: DuckDBValue[] = [],
+): Promise<Array<Record<string, Json>>> {
+  return runInternalDatasetQuery(PROPERTY_DATASET, county, sql, params);
+}
+
 /**
  * Return the column names and DuckDB types of the `properties` view for the
  * given county (via DESCRIBE), reflecting the real Parquet schema.
@@ -460,12 +612,43 @@ export interface PropertyColumn {
 export async function getPropertyColumns(
   county: string,
 ): Promise<PropertyColumn[]> {
-  const { connection } = await getCountyConnection(county);
-  const reader = await connection.runAndReadAll(`DESCRIBE ${PROPERTIES_VIEW}`);
-  const rows = reader.getRowObjectsJson();
+  return getDatasetColumns(PROPERTY_DATASET, county);
+}
 
-  return rows.map((row) => ({
-    name: String(row.column_name ?? ""),
-    type: String(row.column_type ?? ""),
-  }));
+// ---------------------------------------------------------------------------
+// PERMIT dataset — query API (parallel surface).
+// ---------------------------------------------------------------------------
+
+/**
+ * Run a single read-only SELECT against the `permits` view for `county` (one row
+ * per building permit). Same validation/capping as {@link runPropertyQuery}.
+ */
+export async function runPermitQuery(
+  county: string,
+  sql: string,
+  limit: number = DEFAULT_ROW_LIMIT,
+): Promise<PropertyQueryResult> {
+  return runDatasetQuery(PERMIT_DATASET, county, sql, limit);
+}
+
+/**
+ * Run a TRUSTED, internal read-only query against a county's `permits` view.
+ * Values must be bound as positional `$1…$n` parameters.
+ */
+export async function runInternalPermitQuery(
+  county: string | undefined,
+  sql: string,
+  params: DuckDBValue[] = [],
+): Promise<Array<Record<string, Json>>> {
+  return runInternalDatasetQuery(PERMIT_DATASET, county, sql, params);
+}
+
+/**
+ * Return the column names and DuckDB types of the `permits` view for the given
+ * county (via DESCRIBE), reflecting the real Parquet schema.
+ */
+export async function getPermitColumns(
+  county: string,
+): Promise<PropertyColumn[]> {
+  return getDatasetColumns(PERMIT_DATASET, county);
 }
