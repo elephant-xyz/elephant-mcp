@@ -2,9 +2,9 @@
  * Tests for the queryPermits / getPermitQuerySchema / getPermitCoverage tools.
  *
  * The end-to-end assertions run against the REAL validated Lee permit-table
- * Parquet (2,114,833 rows). If that file is not present (e.g. a fresh CI
- * checkout without the export), the DB-backed block is skipped, but the
- * safety/registration tests — which need no Parquet — always run.
+ * Parquet (2,114,833 rows), located via the LEE_PERMIT_PARQUET env var. When it
+ * is unset or the file is absent (e.g. a fresh CI checkout), the DB-backed block
+ * is skipped, but the safety/registration tests — which need no Parquet — always run.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
@@ -17,8 +17,9 @@ import {
 import { registerAllTools } from "./registry.ts";
 import { clearPermitQueryConnections } from "../lib/duckdbQuery.ts";
 
-const LEE_PARQUET =
-  "/Users/markov/Documents/Projects/elephant/elephant-query-db/.permit-table-export/lee/permit-table.parquet";
+// Point LEE_PERMIT_PARQUET at a locally-exported permit-table.parquet to run the
+// e2e block; unset (CI, other machines) skips it, so no personal path is baked in.
+const LEE_PARQUET = process.env.LEE_PERMIT_PARQUET ?? "";
 const LEE_ROW_COUNT = 2114833;
 const hasLeeParquet = existsSync(LEE_PARQUET);
 
