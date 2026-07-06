@@ -1,3 +1,4 @@
+import { tmpdir } from "node:os";
 import { DuckDBInstance } from "@duckdb/node-api";
 import type { DuckDBConnection, DuckDBValue, Json } from "@duckdb/node-api";
 import { logger } from "../logger.ts";
@@ -348,6 +349,12 @@ async function openCountyConnection(
 
   if (isHttpLocation(location)) {
     // httpfs lets DuckDB range-read a Parquet served from an IPFS gateway.
+    // INSTALL writes the extension under DuckDB's home directory; serverless
+    // runtimes (e.g. Vercel Functions) start with an empty HOME, which makes
+    // INSTALL fail with "Can't find the home directory at ''". Point the home
+    // directory at a writable temp dir first (overridable via env).
+    const homeDir = process.env.DUCKDB_HOME_DIRECTORY ?? tmpdir();
+    await connection.run(`SET home_directory='${homeDir.replace(/'/g, "''")}'`);
     await connection.run("INSTALL httpfs");
     await connection.run("LOAD httpfs");
   }
