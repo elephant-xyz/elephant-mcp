@@ -66,6 +66,17 @@ describe("getPropertyPermits SQS enqueue", () => {
     // queue with InvalidParameterValue.
     expect(input).not.toHaveProperty("MessageGroupId");
     expect(input).not.toHaveProperty("MessageDeduplicationId");
+
+    // On-demand harvests must carry onDemand:true so the worker relaxes the
+    // eligibility and appraiser-link gates and the permits land in Neon.
+    const body = JSON.parse(input.MessageBody) as {
+      type: string;
+      parcelIdentifier: string;
+      onDemand?: unknown;
+    };
+    expect(body.type).toBe("lee-property-first-permit-parcel");
+    expect(body.parcelIdentifier).toBe("test-parcel-no-fifo");
+    expect(body.onDemand).toBe(true);
   });
 
   it("returns a clear 'not configured' error when PERMIT_HARVEST_QUEUE_URL is unset", async () => {
