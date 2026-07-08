@@ -1,9 +1,13 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   listOraclePropertiesHandler,
   getOraclePropertyHandler,
   getOracleDatasetInfoHandler,
 } from "./oracleOpenData.ts";
+import { clearDatasetCoverageCache } from "../lib/datasetCoverage.ts";
 
 vi.mock("../lib/ipfs.ts", () => ({
   getJsonByCid: vi.fn(),
@@ -884,5 +888,124 @@ describe("query-table primary path", () => {
     expect(parsed.county).toBe("Lee");
     expect(parsed.stateCode).toBe("FL");
     expect(parsed.source).toBe("query-table");
+  });
+});
+
+describe("getOracleDatasetInfo per-source coverage merge", () => {
+  let dir: string;
+
+  const writeCoverage = (county: string, datasets: unknown[]): string => {
+    const file = join(dir, `${county}.json`);
+    writeFileSync(
+      file,
+      JSON.stringify({ county, exportedAt: "2026-07-08T00:00:00Z", datasets }),
+    );
+    return file;
+  };
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mockFetchOracleIndex.mockResolvedValue(null);
+    mockFetchOracleManifest.mockResolvedValue(null);
+    mockGetIndexCid.mockReturnValue(null);
+    mockGetOpenDataIpnsName.mockReturnValue(null);
+    clearDatasetCoverageCache();
+    dir = mkdtempSync(join(tmpdir(), "cov-handler-"));
+    delete process.env.DATASET_COVERAGE_MAP;
+    delete process.env.DATASET_COVERAGE;
+  });
+
+  afterEach(() => {
+    delete process.env.DATASET_COVERAGE_MAP;
+    delete process.env.DATASET_COVERAGE;
+    clearDatasetCoverageCache();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("attaches datasets[] alongside the query-table property count", async () => {
+    mockIsCountyServedByQueryTable.mockReturnValue(true);
+    mockRunInternalPropertyQuery.mockResolvedValue([
+      { c: 933087, county: "Miami-Dade", state: "FL" },
+    ]);
+    const file = writeCoverage("miami-dade", [
+      {
+        county: "miami-dade",
+        source: "appraisal",
+        ingested_count: 933087,
+        expected_count: 950000,
+        first_loaded_at: "2026-07-01T00:00:00Z",
+        last_loaded_at: "2026-07-08T00:00:00Z",
+        cid: "QmA",
+        ipns_label: "oracle-query-table-miami-dade",
+      },
+      {
+        county: "miami-dade",
+        source: "permits",
+        ingested_count: 27,
+        expected_count: null,
+        first_loaded_at: null,
+        last_loaded_at: "2026-07-08T00:00:00Z",
+        cid: null,
+        ipns_label: "oracle-permit-table-miami-dade",
+      },
+    ]);
+    process.env.DATASET_COVERAGE_MAP = JSON.stringify({ "miami-dade": file });
+
+    const result = await getOracleDatasetInfoHandler({ county: "Miami-Dade" });
+    const parsed = JSON.parse(result.content[0].text);
+
+    expect(parsed.propertyCount).toBe(933087);
+    expect(parsed.source).toBe("query-table");
+    expect(parsed.datasets).toHaveLength(2);
+    expect(parsed.datasets[0]).toMatchObject({
+      source: "appraisal",
+      ingestedCount: 933087,
+      expectedCount: 950000,
+      completionPercent: 98,
+    });
+    expect(parsed.datasets[1]).toMatchObject({
+      source: "permits",
+      ingestedCount: 27,
+      completionPercent: null,
+    });
+  });
+
+  it("reports coverage for a permits-only county with no property dataset", async () => {
+    mockIsCountyServedByQueryTable.mockReturnValue(false);
+    const file = writeCoverage("orange", [
+      {
+        county: "orange",
+        source: "permits",
+        ingested_count: 12,
+        expected_count: 100,
+        first_loaded_at: "2026-07-05T00:00:00Z",
+        last_loaded_at: "2026-07-08T00:00:00Z",
+        cid: null,
+        ipns_label: "oracle-permit-table-orange",
+      },
+    ]);
+    process.env.DATASET_COVERAGE_MAP = JSON.stringify({ orange: file });
+
+    const result = await getOracleDatasetInfoHandler({ county: "Orange" });
+    const parsed = JSON.parse(result.content[0].text);
+
+    expect(parsed.error).toBeUndefined();
+    expect(parsed.propertyCount).toBe(0);
+    expect(parsed.datasets).toHaveLength(1);
+    expect(parsed.datasets[0]).toMatchObject({
+      source: "permits",
+      completionPercent: 12,
+    });
+  });
+
+  it("still reports not-served when neither property dataset nor coverage exist", async () => {
+    mockIsCountyServedByQueryTable.mockReturnValue(false);
+
+    const result = await getOracleDatasetInfoHandler({ county: "Nowhere" });
+    const parsed = JSON.parse(result.content[0].text);
+
+    expect(parsed.propertyCount).toBe(0);
+    expect(parsed.error).toContain("not served");
+    expect(parsed.datasets).toBeUndefined();
   });
 });
