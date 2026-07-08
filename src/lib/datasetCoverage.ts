@@ -112,7 +112,11 @@ export function resolveCoverageLocation(
   const requestedKey = county ? normalizeCountyKey(county) : defaultCountyKey;
 
   if (Object.keys(map).length === 0) {
-    return { served: single !== null, location: single, countyKey: requestedKey };
+    return {
+      served: single !== null,
+      location: single,
+      countyKey: requestedKey,
+    };
   }
 
   if (requestedKey === null) {
@@ -125,7 +129,11 @@ export function resolveCoverageLocation(
   }
 
   if (defaultCountyKey !== null && requestedKey === defaultCountyKey) {
-    return { served: single !== null, location: single, countyKey: requestedKey };
+    return {
+      served: single !== null,
+      location: single,
+      countyKey: requestedKey,
+    };
   }
 
   return { served: false, location: null, countyKey: requestedKey };

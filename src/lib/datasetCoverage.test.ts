@@ -181,7 +181,11 @@ describe("fetchDatasetCoverage / getDatasetCoverageEntries", () => {
         exportedAt: "2026-07-08T00:00:00Z",
         datasets: [
           sampleRow(),
-          sampleRow({ source: "permits", ingested_count: 27, expected_count: null }),
+          sampleRow({
+            source: "permits",
+            ingested_count: 27,
+            expected_count: null,
+          }),
         ],
       }),
     );
@@ -245,7 +249,9 @@ describe("fetchDatasetCoverage / getDatasetCoverageEntries", () => {
       .mockResolvedValue(
         new Response(JSON.stringify(snapshot), { status: 200 }),
       );
-    process.env.DATASET_COVERAGE_MAP = JSON.stringify({ lee: "https://gw/c.json" });
+    process.env.DATASET_COVERAGE_MAP = JSON.stringify({
+      lee: "https://gw/c.json",
+    });
 
     await fetchDatasetCoverage("lee");
     await fetchDatasetCoverage("lee");
