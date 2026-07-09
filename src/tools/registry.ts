@@ -197,7 +197,7 @@ export function registerAllTools(server: McpServer): void {
     {
       title: "Get Oracle open-data dataset info",
       description:
-        "Returns dataset-level metadata for a county: county, propertyCount (live row count when served from the query table), state, and provenance/CID fields on the legacy path. When per-source coverage is configured, also returns datasets[] with, per source (appraisal, permits, sunbiz, bbb), ingestedCount, expectedCount, completionPercent, and first/last loaded timestamps — so callers can qualify partial answers by coverage.",
+        "Returns dataset-level metadata for a county: county, propertyCount (live row count when served from the query table), state, and provenance/CID fields on the legacy path. When per-source coverage is configured, also returns datasets[] with, per source (appraisal, permits, sunbiz, bbb), ingestedCount, expectedCount, completionPercent, and first/last loaded timestamps — so callers can qualify partial answers by coverage. For a coverage-only county (no property dataset served) propertyCount is null and propertyDatasetAvailable is false, so callers can distinguish a missing property table from a county with zero properties.",
       inputSchema: {
         county: z
           .string()

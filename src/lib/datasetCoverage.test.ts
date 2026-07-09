@@ -257,4 +257,41 @@ describe("fetchDatasetCoverage / getDatasetCoverageEntries", () => {
     await fetchDatasetCoverage("lee");
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
+
+  it("ignores a snapshot whose county does not match the requested county", async () => {
+    const file = join(dir, "stale.json");
+    writeFileSync(
+      file,
+      JSON.stringify({
+        county: "orange",
+        exportedAt: "2026-07-08T00:00:00Z",
+        datasets: [sampleRow({ county: "orange" })],
+      }),
+    );
+    process.env.DATASET_COVERAGE_MAP = JSON.stringify({ lee: file });
+
+    expect(await fetchDatasetCoverage("lee")).toBeNull();
+  });
+
+  it("does not cache a failed read, so a later successful read still resolves", async () => {
+    const snapshot = {
+      county: "lee",
+      exportedAt: "2026-07-08T00:00:00Z",
+      datasets: [sampleRow()],
+    };
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response("boom", { status: 503 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(snapshot), { status: 200 }),
+      );
+    process.env.DATASET_COVERAGE_MAP = JSON.stringify({
+      lee: "https://gw/c.json",
+    });
+
+    expect(await fetchDatasetCoverage("lee")).toBeNull();
+    const second = await fetchDatasetCoverage("lee");
+    expect(second?.datasets).toHaveLength(1);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
 });

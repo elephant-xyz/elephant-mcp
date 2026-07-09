@@ -625,9 +625,15 @@ export async function getOracleDatasetInfoHandler(
       return countyNotServedResult(args.county);
     }
 
+    // Coverage-only county: no property dataset is served, so report
+    // propertyCount as null (unknown/unavailable) rather than 0. A literal 0
+    // would be indistinguishable from a served county that has zero
+    // properties; the explicit flag lets callers tell "no property table" from
+    // "zero properties".
     const result: Record<string, unknown> = base ?? {
       county: args.county ?? null,
-      propertyCount: 0,
+      propertyCount: null,
+      propertyDatasetAvailable: false,
     };
 
     if (coverage !== null && coverage.length > 0) {

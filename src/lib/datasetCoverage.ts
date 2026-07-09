@@ -194,7 +194,25 @@ export async function fetchDatasetCoverage(
     if (raw !== null) {
       const parsed = OracleDatasetCoverageSnapshotSchema.safeParse(raw);
       if (parsed.success) {
-        snapshot = parsed.data;
+        // Guard against a stale/misconfigured location serving another
+        // county's snapshot — mirroring the county-mismatch rejection the
+        // property metadata paths already apply.
+        const snapshotCountyKey = normalizeCountyKey(parsed.data.county);
+        if (
+          resolution.countyKey !== null &&
+          snapshotCountyKey !== resolution.countyKey
+        ) {
+          logger.warn(
+            {
+              location: resolution.location,
+              expectedCounty: resolution.countyKey,
+              snapshotCounty: parsed.data.county,
+            },
+            "Coverage snapshot county mismatch — ignoring",
+          );
+        } else {
+          snapshot = parsed.data;
+        }
       } else {
         logger.warn(
           { location: resolution.location, error: parsed.error.message },
@@ -212,7 +230,12 @@ export async function fetchDatasetCoverage(
     );
   }
 
-  coverageCache.set(cacheKey, { snapshot, fetchedAt: now });
+  // Only cache successful reads. Caching a null (transient gateway error,
+  // DNS failure, missing file, or county mismatch) would suppress `datasets[]`
+  // for the full TTL even once the underlying read recovers.
+  if (snapshot !== null) {
+    coverageCache.set(cacheKey, { snapshot, fetchedAt: now });
+  }
   return snapshot;
 }
 

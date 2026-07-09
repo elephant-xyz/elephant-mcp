@@ -990,7 +990,8 @@ describe("getOracleDatasetInfo per-source coverage merge", () => {
     const parsed = JSON.parse(result.content[0].text);
 
     expect(parsed.error).toBeUndefined();
-    expect(parsed.propertyCount).toBe(0);
+    expect(parsed.propertyCount).toBeNull();
+    expect(parsed.propertyDatasetAvailable).toBe(false);
     expect(parsed.datasets).toHaveLength(1);
     expect(parsed.datasets[0]).toMatchObject({
       source: "permits",
