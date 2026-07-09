@@ -20,6 +20,11 @@ import {
   queryPropertiesHandler,
   getPropertyQuerySchemaHandler,
 } from "./propertyQuery.ts";
+import {
+  queryPermitsHandler,
+  getPermitQuerySchemaHandler,
+  getPermitCoverageHandler,
+} from "./permitQuery.ts";
 import { MAX_ROW_LIMIT, DEFAULT_ROW_LIMIT } from "../lib/duckdbQuery.ts";
 
 /**
@@ -355,6 +360,79 @@ export function registerAllTools(server: McpServer): void {
     },
     async (args: { county: string }) => {
       return getPropertyQuerySchemaHandler(args);
+    },
+  );
+
+  server.registerTool(
+    "queryPermits",
+    {
+      title: "Query permits (SQL)",
+      description:
+        "Run a read-only SQL SELECT against a county's flat permit query table (view name 'permits', one row per building permit) backed by embedded DuckDB. Use getPermitQuerySchema first to see available columns and getPermitCoverage to qualify aggregate answers by source. SAFETY: a single SELECT statement only (a leading WITH/CTE is allowed); multiple statements and any mutating or file/extension keyword (INSERT/UPDATE/DELETE/COPY/ATTACH/INSTALL/LOAD/PRAGMA/CALL/SET …) are rejected; results are always capped at " +
+        `${MAX_ROW_LIMIT} rows.`,
+      inputSchema: {
+        county: z
+          .string()
+          .min(1, "county is required")
+          .describe("County to query (case-insensitive), e.g. 'Lee'."),
+        sql: z
+          .string()
+          .min(1, "sql is required")
+          .describe(
+            "A single read-only SELECT statement over the 'permits' view.",
+          ),
+        limit: z
+          .number()
+          .int()
+          .positive()
+          .max(MAX_ROW_LIMIT)
+          .optional()
+          .default(DEFAULT_ROW_LIMIT)
+          .describe(
+            `Max rows to return (default ${DEFAULT_ROW_LIMIT}, max ${MAX_ROW_LIMIT}). Always enforced.`,
+          ),
+      },
+    },
+    async (args: { county: string; sql: string; limit?: number }) => {
+      return queryPermitsHandler(args);
+    },
+  );
+
+  server.registerTool(
+    "getPermitQuerySchema",
+    {
+      title: "Get permit query schema",
+      description:
+        "Returns the column list, DuckDB types, and a one-line description of each column of the 'permits' query table for a county, so queryPermits can be written without guessing. Notes that date/value fields are frequently NULL depending on the permit source.",
+      inputSchema: {
+        county: z
+          .string()
+          .min(1, "county is required")
+          .describe("County to describe (case-insensitive), e.g. 'Lee'."),
+      },
+    },
+    async (args: { county: string }) => {
+      return getPermitQuerySchemaHandler(args);
+    },
+  );
+
+  server.registerTool(
+    "getPermitCoverage",
+    {
+      title: "Get permit coverage by source",
+      description:
+        "Returns per-source-system permit coverage for a county from the 'permits' query table: each source_system with its permit_count and completion_date range (earliest/latest), plus the overall total. The donphan agent uses this to QUALIFY aggregate permit answers (permit data lags appraisals and some sources may have NULL dates).",
+      inputSchema: {
+        county: z
+          .string()
+          .min(1, "county is required")
+          .describe(
+            "County to report permit coverage for (case-insensitive), e.g. 'Lee'.",
+          ),
+      },
+    },
+    async (args: { county: string }) => {
+      return getPermitCoverageHandler(args);
     },
   );
 }

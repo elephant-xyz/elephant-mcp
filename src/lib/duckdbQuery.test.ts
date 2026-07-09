@@ -1,15 +1,24 @@
 /**
- * Unit tests for the property query engine's pure logic: SQL safety validation
- * and county → Parquet location resolution. These need no DuckDB/native binary
- * and run fast in CI. The real-parquet end-to-end assertions live in
- * ../tools/propertyQuery.test.ts.
+ * Tests for the property query engine. Most cover the pure logic (SQL safety
+ * validation and county → Parquet location resolution) and need no native
+ * binary. One integration block exercises the real DuckDB httpfs path against a
+ * localhost Parquet under an empty HOME. Further real-parquet end-to-end
+ * assertions live in ../tools/propertyQuery.test.ts.
  */
 
-import { describe, it, expect, afterEach } from "vitest";
+import { createServer, type Server } from "node:http";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { AddressInfo } from "node:net";
+import { describe, it, expect, afterEach, beforeAll, afterAll } from "vitest";
+import { DuckDBInstance } from "@duckdb/node-api";
 import {
   validateSelectQuery,
   resolveQueryTableLocation,
   parseQueryTableMap,
+  runPropertyQuery,
+  clearPropertyQueryConnections,
 } from "./duckdbQuery.ts";
 
 describe("validateSelectQuery", () => {
@@ -151,4 +160,134 @@ describe("resolveQueryTableLocation", () => {
       location: "/single.parquet",
     });
   });
+});
+
+/**
+ * Regression test for the serverless empty-HOME bug: opening an HTTP(S) query
+ * table runs `INSTALL httpfs`, which writes under DuckDB's home directory. On
+ * Vercel Functions HOME is empty, so INSTALL failed with "Can't find the home
+ * directory at ''". The fix points home_directory at tmpdir() (overridable via
+ * DUCKDB_HOME_DIRECTORY) before INSTALL. This exercises the real httpfs path
+ * end-to-end — a Parquet range-read over localhost HTTP with HOME='' — so the
+ * test fails if the home_directory fix is removed.
+ */
+describe("runPropertyQuery over an HTTP query table with empty HOME", () => {
+  const SAVED_ENV = [
+    "HOME",
+    "PROPERTY_QUERY_TABLE_MAP",
+    "PROPERTY_QUERY_TABLE",
+    "PROPERTY_QUERY_TABLE_DEFAULT_COUNTY",
+    "DUCKDB_HOME_DIRECTORY",
+  ] as const;
+  const saved: Record<string, string | undefined> = {};
+
+  let tmpDir: string;
+  let parquetPath: string;
+  let server: Server;
+
+  beforeAll(async () => {
+    for (const key of SAVED_ENV) saved[key] = process.env[key];
+
+    tmpDir = mkdtempSync(join(tmpdir(), "duckdb-http-test-"));
+    parquetPath = join(tmpDir, "x.parquet");
+
+    // Generate the Parquet fixture at runtime with DuckDB itself (no committed
+    // binary). Two columns mirror the shape the query engine reads.
+    const instance = await DuckDBInstance.create(":memory:");
+    const conn = await instance.connect();
+    const escaped = parquetPath.replace(/'/g, "''");
+    await conn.run(
+      `COPY (SELECT 1 AS request_identifier, 'x' AS owners_text) TO '${escaped}' (FORMAT PARQUET)`,
+    );
+
+    const fileBuf = readFileSync(parquetPath);
+
+    // Serve the fixture over localhost with HTTP Range support — httpfs issues
+    // range reads (and a HEAD for the size) rather than fetching the whole file.
+    server = createServer((req, res) => {
+      if (req.method === "HEAD") {
+        res.writeHead(200, {
+          "Content-Length": String(fileBuf.length),
+          "Accept-Ranges": "bytes",
+          "Content-Type": "application/octet-stream",
+        });
+        res.end();
+        return;
+      }
+
+      const range = req.headers.range;
+      const match = range ? /^bytes=(\d*)-(\d*)$/.exec(range) : null;
+      if (match) {
+        const total = fileBuf.length;
+        const startRaw = match[1];
+        const endRaw = match[2];
+        let start: number;
+        let end: number;
+        if (startRaw === "") {
+          // suffix range: last N bytes
+          const suffix = Number(endRaw);
+          start = Math.max(0, total - suffix);
+          end = total - 1;
+        } else {
+          start = Number(startRaw);
+          end = endRaw === "" ? total - 1 : Math.min(Number(endRaw), total - 1);
+        }
+        const slice = fileBuf.subarray(start, end + 1);
+        res.writeHead(206, {
+          "Content-Range": `bytes ${start}-${end}/${total}`,
+          "Accept-Ranges": "bytes",
+          "Content-Length": String(slice.length),
+          "Content-Type": "application/octet-stream",
+        });
+        res.end(slice);
+        return;
+      }
+
+      res.writeHead(200, {
+        "Content-Length": String(fileBuf.length),
+        "Accept-Ranges": "bytes",
+        "Content-Type": "application/octet-stream",
+      });
+      res.end(fileBuf);
+    });
+
+    await new Promise<void>((resolve) => {
+      server.listen(0, "127.0.0.1", resolve);
+    });
+
+    const port = (server.address() as AddressInfo).port;
+
+    // Empty HOME reproduces the serverless failure mode; DUCKDB_HOME_DIRECTORY
+    // is unset so the fix's tmpdir() fallback is the code path under test.
+    process.env.HOME = "";
+    delete process.env.DUCKDB_HOME_DIRECTORY;
+    delete process.env.PROPERTY_QUERY_TABLE;
+    delete process.env.PROPERTY_QUERY_TABLE_DEFAULT_COUNTY;
+    process.env.PROPERTY_QUERY_TABLE_MAP = JSON.stringify({
+      test: `http://127.0.0.1:${port}/x.parquet`,
+    });
+
+    clearPropertyQueryConnections();
+  });
+
+  afterAll(async () => {
+    clearPropertyQueryConnections();
+    await new Promise<void>((resolve, reject) => {
+      server.close((err) => (err ? reject(err) : resolve()));
+    });
+    rmSync(tmpDir, { recursive: true, force: true });
+    for (const key of SAVED_ENV) {
+      if (saved[key] === undefined) delete process.env[key];
+      else process.env[key] = saved[key];
+    }
+  });
+
+  it("installs httpfs and range-reads the Parquet under empty HOME", async () => {
+    const result = await runPropertyQuery(
+      "test",
+      "SELECT count(*) AS n FROM properties",
+    );
+    expect(result.rows).toHaveLength(1);
+    expect(Number(result.rows[0].n)).toBe(1);
+  }, 60_000);
 });

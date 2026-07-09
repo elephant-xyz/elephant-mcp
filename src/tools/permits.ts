@@ -149,6 +149,10 @@ async function enqueuePermitHarvest(
     jobId,
     parcelIdentifier: parcelId,
     outputPrefix: getPermitOutputPrefix(),
+    // On-demand MCP harvests must land in Neon even when the parcel has no
+    // eligible appraiser usage type and no matching appraiser row yet, so the
+    // worker sees this flag and relaxes both the eligibility and link gates.
+    onDemand: true,
   };
 
   // STANDARD queue: send only QueueUrl + MessageBody. MessageGroupId /
