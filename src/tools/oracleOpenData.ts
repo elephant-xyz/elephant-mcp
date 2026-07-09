@@ -13,6 +13,7 @@ import {
   runInternalPropertyQuery,
   PROPERTIES_VIEW,
 } from "../lib/duckdbQuery.ts";
+import { getDatasetCoverageEntries } from "../lib/datasetCoverage.ts";
 import type { Json } from "@duckdb/node-api";
 import type {
   SlimPropertyEntry,
@@ -530,84 +531,116 @@ export async function getOraclePropertyHandler(args: {
   }
 }
 
+/**
+ * Build the base (single-dataset) portion of the dataset-info response from the
+ * query-table / sharded-index / flat-manifest paths. Coverage datasets are
+ * merged on top by the handler. Returns null when the county is not served by
+ * any property dataset (it may still have per-source coverage).
+ */
+async function buildBaseDatasetInfo(
+  county: string | undefined,
+): Promise<Record<string, unknown> | null> {
+  // Query-table PRIMARY path: report county + live row count from the Parquet
+  // so the tool no longer returns the stale pilot manifest count.
+  if (isCountyServedByQueryTable(county)) {
+    const rows = await runInternalPropertyQuery(
+      county,
+      `SELECT count(*) AS c, any_value(county_name) AS county,
+              any_value(state_code) AS state FROM ${PROPERTIES_VIEW}`,
+    );
+    const row = rows[0] ?? {};
+    return {
+      county: toStringOrNull(row.county) ?? county ?? null,
+      stateCode: toStringOrNull(row.state),
+      propertyCount: toNumberOrNull(row.c) ?? 0,
+      source: "query-table",
+      exportedAt: null,
+      ipnsName: getOpenDataIpnsName(county) ?? null,
+    };
+  }
+
+  // Try sharded index first — resolved from the requested county's IPNS.
+  const index = await fetchOracleIndex(county);
+
+  if (index !== null) {
+    // Legacy single-IPNS mode serves one dataset for any county; guard
+    // against reporting a different dataset's metadata.
+    if (county && index.county.toLowerCase() !== county.toLowerCase()) {
+      return null;
+    }
+
+    return {
+      county: index.county,
+      propertyCount: index.propertyCount,
+      exportedAt: index.exportedAt,
+      completedAt: index.completedAt,
+      shardSize: index.shardSize,
+      shardCount: index.shards.length,
+      totalBytes: index.totalBytes,
+      indexCid: getIndexCid() ?? null,
+      ipnsName: getOpenDataIpnsName(county) ?? null,
+    };
+  }
+
+  // Fallback: flat manifest. A null manifest means the requested county is
+  // not served by this deployment.
+  const manifest = await fetchOracleManifest(county);
+
+  if (manifest === null) {
+    return null;
+  }
+
+  // Legacy single-IPNS mode serves one manifest for any county; guard
+  // against reporting a different dataset's metadata.
+  if (county && manifest.county.toLowerCase() !== county.toLowerCase()) {
+    return null;
+  }
+
+  return {
+    county: manifest.county,
+    propertyCount: manifest.propertyCount,
+    exportedAt: manifest.exportedAt ?? manifest.completedAt ?? null,
+    schemaVersion: manifest.schemaVersion ?? null,
+    totalBytes: manifest.totalBytes ?? null,
+    manifestCid: getManifestCid(),
+    indexCid: getIndexCid() ?? null,
+    ipnsName: getOpenDataIpnsName(county) ?? null,
+  };
+}
+
 export async function getOracleDatasetInfoHandler(
   args: { county?: string } = {},
 ) {
   try {
-    // Query-table PRIMARY path: report county + live row count from the Parquet
-    // so the tool no longer returns the stale pilot manifest count.
-    if (isCountyServedByQueryTable(args.county)) {
-      const rows = await runInternalPropertyQuery(
-        args.county,
-        `SELECT count(*) AS c, any_value(county_name) AS county,
-                any_value(state_code) AS state FROM ${PROPERTIES_VIEW}`,
-      );
-      const row = rows[0] ?? {};
-      return createTextResult({
-        county: toStringOrNull(row.county) ?? args.county ?? null,
-        stateCode: toStringOrNull(row.state),
-        propertyCount: toNumberOrNull(row.c) ?? 0,
-        source: "query-table",
-        exportedAt: null,
-        ipnsName: getOpenDataIpnsName(args.county) ?? null,
-      });
-    }
+    // Per-source coverage (appraisal, permits, sunbiz, bbb) is additive and
+    // resolved independently of the property dataset, so a permits-only county
+    // still reports coverage even without an appraisal query table.
+    const [base, coverage] = await Promise.all([
+      buildBaseDatasetInfo(args.county),
+      getDatasetCoverageEntries(args.county),
+    ]);
 
-    // Try sharded index first — resolved from the requested county's IPNS.
-    const index = await fetchOracleIndex(args.county);
-
-    if (index !== null) {
-      // Legacy single-IPNS mode serves one dataset for any county; guard
-      // against reporting a different dataset's metadata.
-      if (
-        args.county &&
-        index.county.toLowerCase() !== args.county.toLowerCase()
-      ) {
-        return countyNotServedResult(args.county);
-      }
-
-      return createTextResult({
-        county: index.county,
-        propertyCount: index.propertyCount,
-        exportedAt: index.exportedAt,
-        completedAt: index.completedAt,
-        shardSize: index.shardSize,
-        shardCount: index.shards.length,
-        totalBytes: index.totalBytes,
-        indexCid: getIndexCid() ?? null,
-        ipnsName: getOpenDataIpnsName(args.county) ?? null,
-      });
-    }
-
-    // Fallback: flat manifest. A null manifest means the requested county is
-    // not served by this deployment.
-    const manifest = await fetchOracleManifest(args.county);
-
-    if (manifest === null) {
+    // County served by neither a property dataset nor coverage → not served.
+    if (base === null && (coverage === null || coverage.length === 0)) {
       return countyNotServedResult(args.county);
     }
 
-    // Legacy single-IPNS mode serves one manifest for any county; guard
-    // against reporting a different dataset's metadata.
-    if (
-      args.county &&
-      manifest.county.toLowerCase() !== args.county.toLowerCase()
-    ) {
-      return countyNotServedResult(args.county);
+    // Coverage-only county: no property dataset is served, so report
+    // propertyCount as null (unknown/unavailable) rather than 0. A literal 0
+    // would be indistinguishable from a served county that has zero
+    // properties; the explicit flag lets callers tell "no property table" from
+    // "zero properties".
+    const result: Record<string, unknown> = base ?? {
+      county: args.county ?? null,
+      propertyCount: null,
+      propertyDatasetAvailable: false,
+    };
+
+    if (coverage !== null && coverage.length > 0) {
+      result.datasets = coverage;
     }
 
-    const manifestCid = getManifestCid();
-
-    return createTextResult({
-      county: manifest.county,
-      propertyCount: manifest.propertyCount,
-      exportedAt: manifest.exportedAt ?? manifest.completedAt ?? null,
-      schemaVersion: manifest.schemaVersion ?? null,
-      totalBytes: manifest.totalBytes ?? null,
-      manifestCid,
-      indexCid: getIndexCid() ?? null,
-      ipnsName: getOpenDataIpnsName(args.county) ?? null,
-    });
+    return createTextResult(result);
   } catch (error) {
     logger.error(
       {

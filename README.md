@@ -45,7 +45,7 @@ This helps the AI understand which data context to use and ensures it leverages 
 - `getPropertyQuerySchema` – Returns the query-table's columns and types for a county so callers know what they can query.
 - `getOracleProperty` – Fetches the full consolidated record for one property (by parcel id, property id, or CID).
 - `listOracleProperties` – Paginated per-county property listing.
-- `getOracleDatasetInfo` – Per-county dataset summary (property count, export time, source).
+- `getOracleDatasetInfo` – Per-county dataset summary (property count, export time, source) plus per-source coverage `datasets[]` (count, %, date range) when `DATASET_COVERAGE_MAP` is configured.
 - `getPropertyPermits` – On-demand permit harvest for a parcel.
 
 ### Geo tools and data sources
@@ -203,6 +203,9 @@ The stdio transport means no port or server identity flags are required. Environ
 | `PROPERTY_QUERY_TABLE_MAP` | **Recommended.** JSON object mapping county → query-table Parquet location (an IPNS gateway URL or a local path), e.g. `{"lee":"https://ipfs.filebase.io/ipns/k51…"}`. County keys are lowercased and hyphenated (`palm-beach`, not `palm_beach`). When a requested `county` is here, all data tools read the query-table via DuckDB; the `ORACLE_*` vars below are unused. | _(optional)_ |
 | `PROPERTY_QUERY_TABLE` | Single-county query-table location (fallback when the map is unset). | _(optional)_ |
 | `PROPERTY_QUERY_TABLE_DEFAULT_COUNTY` | County the single `PROPERTY_QUERY_TABLE` serves. | _(optional)_ |
+| `DATASET_COVERAGE_MAP` | JSON object mapping county → published `dataset-coverage.json` location (an IPNS gateway URL or a local path), e.g. `{"lee":"https://ipfs.filebase.io/ipns/k51…/dataset-coverage.json"}`. When set, `getOracleDatasetInfo` returns `datasets[]` with per-source (appraisal/permits/sunbiz/bbb) `ingestedCount`, `expectedCount`, `completionPercent`, and load timestamps. Coverage is additive — a read failure never breaks dataset-info. | _(optional)_ |
+| `DATASET_COVERAGE` | Single-county coverage snapshot location (fallback when the map is unset). | _(optional)_ |
+| `DATASET_COVERAGE_DEFAULT_COUNTY` | County the single `DATASET_COVERAGE` serves. | _(optional)_ |
 | `ORACLE_OPEN_DATA_IPNS_MAP` | JSON object mapping county → IPNS for multi-county deployments, e.g. `{"lee":"k51…lee","palm-beach":"k51…pb"}`. County keys are lowercased and hyphenated. When set, each requested `county` resolves to its own IPNS. | _(optional)_ |
 | `ORACLE_OPEN_DATA_DEFAULT_COUNTY` | County used when a request omits `county`. When the map is unset, this is the single-IPNS county. | _(optional)_ |
 | `ORACLE_OPEN_DATA_IPNS` | Legacy single-county IPNS of the open-data manifest/index. Used when `ORACLE_OPEN_DATA_IPNS_MAP` is unset/empty, or for the default county. | _(optional)_ |

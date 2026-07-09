@@ -90,3 +90,59 @@ export const OracleIndexSchema = z.object({
   shards: z.array(ShardRefSchema),
 });
 export type OracleIndex = z.infer<typeof OracleIndexSchema>;
+
+// ---------------------------------------------------------------------------
+// Per-source dataset coverage
+//
+// Mirrors the `oracle_dataset_coverage` snapshot written by the query-db
+// publish loop to `incremental-status/<county>/dataset-coverage.json`. The MCP
+// reads this JSON (over HTTP or a local path) so `getOracleDatasetInfo` can
+// report count/%/date-range per source (appraisal, permits, sunbiz, bbb),
+// without a Postgres dependency. Extra keys are ignored so the contract can
+// grow on the producer side without breaking reads.
+// ---------------------------------------------------------------------------
+
+/** One row of the coverage snapshot (snake_case, as produced by query-db). */
+export const OracleDatasetCoverageRowSchema = z
+  .object({
+    county: z.string(),
+    source: z.string(),
+    ingested_count: z.number(),
+    expected_count: z.number().nullable().optional(),
+    first_loaded_at: z.string().nullable().optional(),
+    last_loaded_at: z.string().nullable().optional(),
+    cid: z.string().nullable().optional(),
+    ipns_label: z.string().nullable().optional(),
+  })
+  .passthrough();
+export type OracleDatasetCoverageRow = z.infer<
+  typeof OracleDatasetCoverageRowSchema
+>;
+
+/** The published snapshot: `{ county, exportedAt, datasets[] }`. */
+export const OracleDatasetCoverageSnapshotSchema = z
+  .object({
+    county: z.string(),
+    exportedAt: z.string().optional(),
+    datasets: z.array(OracleDatasetCoverageRowSchema),
+  })
+  .passthrough();
+export type OracleDatasetCoverageSnapshot = z.infer<
+  typeof OracleDatasetCoverageSnapshotSchema
+>;
+
+/**
+ * Per-source coverage as reported in `getOracleDatasetInfo.datasets[]`
+ * (camelCase, with a derived completion percent).
+ */
+export interface OracleDatasetInfoCoverageEntry {
+  source: string;
+  ingestedCount: number;
+  expectedCount: number | null;
+  /** round(ingested/expected * 100) when expected > 0, else null. */
+  completionPercent: number | null;
+  firstLoadedAt: string | null;
+  lastLoadedAt: string | null;
+  cid: string | null;
+  ipnsLabel: string | null;
+}
