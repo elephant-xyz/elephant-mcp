@@ -27,6 +27,7 @@ import {
  */
 
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const SNAPSHOT_TIMEOUT_MS = 12_000;
 const DEFAULT_CACHE_KEY = "__default__";
 
 interface CoverageCacheEntry {
@@ -151,7 +152,17 @@ function isHttpLocation(location: string): boolean {
  */
 async function readSnapshotJson(location: string): Promise<unknown> {
   if (isHttpLocation(location)) {
-    const response = await fetch(location, { redirect: "follow" });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), SNAPSHOT_TIMEOUT_MS);
+    let response: Response;
+    try {
+      response = await fetch(location, {
+        redirect: "follow",
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
     if (!response.ok) {
       logger.warn(
         { location, status: response.status },
