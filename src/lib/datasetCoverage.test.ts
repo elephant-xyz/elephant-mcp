@@ -238,7 +238,10 @@ describe("fetchDatasetCoverage / getDatasetCoverageEntries", () => {
     expect(result?.datasets).toHaveLength(1);
     expect(fetchSpy).toHaveBeenCalledWith(
       "https://gw/ipns/x/dataset-coverage.json",
-      expect.objectContaining({ redirect: "follow" }),
+      expect.objectContaining({
+        redirect: "follow",
+        signal: expect.any(AbortSignal),
+      }),
     );
   });
 
