@@ -143,7 +143,10 @@ export function resolveCoverageLocation(
     return { served: true, location: mapped, countyKey: requestedKey };
   }
 
-  if (single !== null && (defaultCountyKey === null || requestedKey === defaultCountyKey)) {
+  if (
+    single !== null &&
+    (defaultCountyKey === null || requestedKey === defaultCountyKey)
+  ) {
     return {
       served: true,
       location: single,
