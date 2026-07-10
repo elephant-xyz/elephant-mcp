@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
+  DEFAULT_DATASET_COVERAGE_MAP,
   parseCoverageMap,
   resolveCoverageLocation,
   computeCompletionPercent,
@@ -76,18 +77,25 @@ describe("resolveCoverageLocation", () => {
 
   it("uses the single location in legacy mode", () => {
     process.env.DATASET_COVERAGE = "/tmp/single.json";
-    const res = resolveCoverageLocation("lee");
+    const res = resolveCoverageLocation("not-built-in");
     expect(res.served).toBe(true);
     expect(res.location).toBe("/tmp/single.json");
   });
 
-  it("not served when nothing configured", () => {
-    const res = resolveCoverageLocation("lee");
+  it("uses the built-in coverage map for published counties", () => {
+    const res = resolveCoverageLocation("Lee");
+    expect(res.served).toBe(true);
+    expect(res.location).toBe(DEFAULT_DATASET_COVERAGE_MAP.lee);
+    expect(res.countyKey).toBe("lee");
+  });
+
+  it("not served when an unknown county has no configured snapshot", () => {
+    const res = resolveCoverageLocation("not-built-in");
     expect(res.served).toBe(false);
     expect(res.location).toBeNull();
   });
 
-  it("resolves a mapped county", () => {
+  it("lets DATASET_COVERAGE_MAP override a built-in county", () => {
     process.env.DATASET_COVERAGE_MAP = '{"lee":"/tmp/lee.json"}';
     const res = resolveCoverageLocation("Lee");
     expect(res.served).toBe(true);
@@ -95,17 +103,19 @@ describe("resolveCoverageLocation", () => {
     expect(res.countyKey).toBe("lee");
   });
 
-  it("not served for a county absent from the map", () => {
-    process.env.DATASET_COVERAGE_MAP = '{"lee":"/tmp/lee.json"}';
-    const res = resolveCoverageLocation("orange");
-    expect(res.served).toBe(false);
+  it("resolves a mapped county outside the built-in defaults", () => {
+    process.env.DATASET_COVERAGE_MAP = '{"santa-clara":"/tmp/sc.json"}';
+    const res = resolveCoverageLocation("Santa Clara");
+    expect(res.served).toBe(true);
+    expect(res.location).toBe("/tmp/sc.json");
+    expect(res.countyKey).toBe("santa-clara");
   });
 
   it("falls back to single location for the default county", () => {
     process.env.DATASET_COVERAGE_MAP = '{"lee":"/tmp/lee.json"}';
     process.env.DATASET_COVERAGE = "/tmp/single.json";
-    process.env.DATASET_COVERAGE_DEFAULT_COUNTY = "orange";
-    const res = resolveCoverageLocation("orange");
+    process.env.DATASET_COVERAGE_DEFAULT_COUNTY = "not-built-in";
+    const res = resolveCoverageLocation("not-built-in");
     expect(res.served).toBe(true);
     expect(res.location).toBe("/tmp/single.json");
   });
@@ -202,7 +212,7 @@ describe("fetchDatasetCoverage / getDatasetCoverageEntries", () => {
   });
 
   it("returns null when the county has no configured snapshot", async () => {
-    expect(await getDatasetCoverageEntries("lee")).toBeNull();
+    expect(await getDatasetCoverageEntries("not-built-in")).toBeNull();
   });
 
   it("returns null (not throw) for a malformed snapshot", async () => {

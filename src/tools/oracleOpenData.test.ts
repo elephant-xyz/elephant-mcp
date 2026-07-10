@@ -731,10 +731,10 @@ describe("multi-county routing", () => {
     const shards = [buildShardRef(0, "1000", "2999", 2, "shard-cid-0")];
     mockFetchOracleIndex.mockResolvedValue(buildIndex(shards, "Lee"));
 
-    const result = await getOracleDatasetInfoHandler({ county: "Palm Beach" });
+    const result = await getOracleDatasetInfoHandler({ county: "Broward" });
     const parsed = JSON.parse(result.content[0].text);
 
-    expect(parsed.error).toContain("Palm Beach");
+    expect(parsed.error).toContain("Broward");
     expect(parsed.propertyCount).toBe(0);
   });
 
@@ -744,10 +744,10 @@ describe("multi-county routing", () => {
       buildManifest([buildEntry("uuid-001", "1234567890", "cid-001")]),
     );
 
-    const result = await getOracleDatasetInfoHandler({ county: "Palm Beach" });
+    const result = await getOracleDatasetInfoHandler({ county: "Broward" });
     const parsed = JSON.parse(result.content[0].text);
 
-    expect(parsed.error).toContain("Palm Beach");
+    expect(parsed.error).toContain("Broward");
     expect(parsed.propertyCount).toBe(0);
   });
 });
