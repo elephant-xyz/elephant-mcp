@@ -81,8 +81,8 @@ runs the server locally via `npx`, see below):
        // Recommended: the per-county query-table (powers queryProperties AND all
        // property/geo/dataset tools). A served county needs ONLY this line:
        "PROPERTY_QUERY_TABLE_MAP": "{\"lee\":\"https://ipfs.filebase.io/ipns/k51qzi5uqu5djd4ohcf3qm87dhlt0e270xw8ejhkyia62edr76uj0u05hrf7m5\"}",
-       // Optional: per-county hourly coverage snapshots. Use the Filebase/IPNS
-       // gateway URL printed by query-db's coverage publish step.
+       // Optional override/addition: per-county hourly coverage snapshots.
+       // Lee, Miami-Dade, Orange, and Palm Beach coverage URLs are built in.
        "DATASET_COVERAGE_MAP": "{\"lee\":\"https://ipfs.filebase.io/ipns/<coverage-ipns-name>\"}",
        // Optional legacy fallback (only for counties NOT in the query-table map):
        // "ORACLE_GEO_INDEX_IPNS": "k51qzi5uqu5djo3756w73x3swtt63g9y7igj7tvv1gs4skjk3haj3fuk7qosdi",
@@ -91,7 +91,7 @@ runs the server locally via `npx`, see below):
    ```
    For OpenAI, replace the placeholder with your actual key. For AWS Bedrock, remove the `OPENAI_API_KEY` line and ensure your environment has valid AWS credentials (IAM role, environment variables, or AWS credentials file).
 
-`PROPERTY_QUERY_TABLE_MAP` maps each county to its published query-table Parquet on IPFS. It powers `queryProperties` (arbitrary SQL) and is the primary source for `getOracleProperty`, `listOracleProperties`, `getOracleDatasetInfo`, and the geo tools — so a county listed there needs no `ORACLE_*` vars. `DATASET_COVERAGE_MAP` maps each county to the small hourly `dataset-coverage.json` snapshot on Filebase/IPNS; `getOracleDatasetInfo` returns that coverage so donphan can qualify answers, while Miranda's website can read the same public JSON URL directly. Do not configure this to an AWS S3 URL for public users. The `ORACLE_OPEN_DATA_*` / `ORACLE_GEO_INDEX_*` vars are optional fallback for counties not yet in the map.
+`PROPERTY_QUERY_TABLE_MAP` maps each county to its published query-table Parquet on IPFS. It powers `queryProperties` (arbitrary SQL) and is the primary source for `getOracleProperty`, `listOracleProperties`, `getOracleDatasetInfo`, and the geo tools — so a county listed there needs no `ORACLE_*` vars. `getOracleDatasetInfo` has built-in public coverage snapshots for Lee, Miami-Dade, Orange, and Palm Beach. `DATASET_COVERAGE_MAP` can override those URLs or add more counties by mapping each county to its small hourly `dataset-coverage.json` snapshot on Filebase/IPNS. Donphan uses this coverage to qualify answers, while Miranda's website can read the same public JSON URL directly. Do not configure this to an AWS S3 URL for public users. The `ORACLE_OPEN_DATA_*` / `ORACLE_GEO_INDEX_*` vars are optional fallback for counties not yet in the map.
 
 > **Note:** the query-table tools (`queryProperties`, `getPropertyQuerySchema`) are on `main`. Until the next npm release, install the current build from GitHub — replace the args with `["-y", "github:elephant-xyz/elephant-mcp"]` (first launch builds from source; give it a minute).
 
@@ -206,7 +206,7 @@ The stdio transport means no port or server identity flags are required. Environ
 | `PROPERTY_QUERY_TABLE_MAP` | **Recommended.** JSON object mapping county → query-table Parquet location (an IPNS gateway URL or a local path), e.g. `{"lee":"https://ipfs.filebase.io/ipns/k51…"}`. County keys are lowercased and hyphenated (`palm-beach`, not `palm_beach`). When a requested `county` is here, all data tools read the query-table via DuckDB; the `ORACLE_*` vars below are unused. | _(optional)_ |
 | `PROPERTY_QUERY_TABLE` | Single-county query-table location (fallback when the map is unset). | _(optional)_ |
 | `PROPERTY_QUERY_TABLE_DEFAULT_COUNTY` | County the single `PROPERTY_QUERY_TABLE` serves. | _(optional)_ |
-| `DATASET_COVERAGE_MAP` | JSON object mapping county → published `dataset-coverage.json` location (a Filebase/IPNS gateway URL or a local path for development), e.g. `{"lee":"https://ipfs.filebase.io/ipns/k51…"}`. When set, `getOracleDatasetInfo` returns `datasets[]` with per-source (appraisal/permits/sunbiz/bbb) `ingestedCount`, `expectedCount`, `completionPercent`, and load timestamps. Coverage is additive — a read failure or slow gateway never breaks dataset-info. Do not use AWS S3 URLs for public users. | _(optional)_ |
+| `DATASET_COVERAGE_MAP` | Optional JSON object mapping county → published `dataset-coverage.json` location (a Filebase/IPNS gateway URL or a local path for development), e.g. `{"lee":"https://ipfs.filebase.io/ipns/k51…"}`. Lee, Miami-Dade, Orange, and Palm Beach are built in; this env var overrides those URLs or adds more counties. `getOracleDatasetInfo` returns `datasets[]` with per-source (appraisal/permits/sunbiz/bbb) `ingestedCount`, `expectedCount`, `completionPercent`, and load timestamps. Coverage is additive — a read failure or slow gateway never breaks dataset-info. Do not use AWS S3 URLs for public users. | _(optional)_ |
 | `DATASET_COVERAGE` | Single-county coverage snapshot location (fallback when the map is unset). | _(optional)_ |
 | `DATASET_COVERAGE_DEFAULT_COUNTY` | County the single `DATASET_COVERAGE` serves. | _(optional)_ |
 | `ORACLE_OPEN_DATA_IPNS_MAP` | JSON object mapping county → IPNS for multi-county deployments, e.g. `{"lee":"k51…lee","palm-beach":"k51…pb"}`. County keys are lowercased and hyphenated. When set, each requested `county` resolves to its own IPNS. | _(optional)_ |

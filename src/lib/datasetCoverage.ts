@@ -18,6 +18,7 @@ import {
  * range per source without a Postgres dependency — mirroring the
  * PROPERTY_QUERY_TABLE_MAP pattern used for the Parquet query table:
  *
+ *   Built-in defaults   – public Filebase/IPNS snapshots for published counties
  *   DATASET_COVERAGE_MAP  – JSON map {"lee":"<location>", ...}
  *   DATASET_COVERAGE      – legacy single-county location (fallback)
  *   DATASET_COVERAGE_DEFAULT_COUNTY – county the single location serves
@@ -29,6 +30,16 @@ import {
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const SNAPSHOT_TIMEOUT_MS = 12_000;
 const DEFAULT_CACHE_KEY = "__default__";
+
+export const DEFAULT_DATASET_COVERAGE_MAP: Readonly<Record<string, string>> = {
+  lee: "https://k51qzi5uqu5dimw0elyh4agbtqe7v2fzp0jcd7b1bcu8kxs0hml7yu1no0z0vd.ipns.dweb.link/",
+  "miami-dade":
+    "https://k51qzi5uqu5djj45hvhz6z2dnsdg6pkgucds99t0f78d5gmwu19bfv8o9tygno.ipns.dweb.link/",
+  orange:
+    "https://k51qzi5uqu5dj8n2f8nowh8kts53rvpr62zfj0mz9izc11rfzv56q7m4161lg7.ipns.dweb.link/",
+  "palm-beach":
+    "https://k51qzi5uqu5djwga4mcd8nx1gbwy4o9rks3gkoe1u5py5wi9tieea7h44nh4g2.ipns.dweb.link/",
+};
 
 interface CoverageCacheEntry {
   readonly snapshot: OracleDatasetCoverageSnapshot | null;
@@ -105,16 +116,19 @@ export function parseCoverageMap(
 export function resolveCoverageLocation(
   county: string | undefined,
 ): CoverageResolution {
-  const map = parseCoverageMap(process.env.DATASET_COVERAGE_MAP);
+  const map = {
+    ...DEFAULT_DATASET_COVERAGE_MAP,
+    ...parseCoverageMap(process.env.DATASET_COVERAGE_MAP),
+  };
   const single = process.env.DATASET_COVERAGE?.trim() || null;
   const defaultCountyKey = process.env.DATASET_COVERAGE_DEFAULT_COUNTY
     ? normalizeCountyKey(process.env.DATASET_COVERAGE_DEFAULT_COUNTY)
     : null;
   const requestedKey = county ? normalizeCountyKey(county) : defaultCountyKey;
 
-  if (Object.keys(map).length === 0) {
+  if (Object.keys(map).length === 0 && single !== null) {
     return {
-      served: single !== null,
+      served: true,
       location: single,
       countyKey: requestedKey,
     };
@@ -129,9 +143,9 @@ export function resolveCoverageLocation(
     return { served: true, location: mapped, countyKey: requestedKey };
   }
 
-  if (defaultCountyKey !== null && requestedKey === defaultCountyKey) {
+  if (single !== null && (defaultCountyKey === null || requestedKey === defaultCountyKey)) {
     return {
-      served: single !== null,
+      served: true,
       location: single,
       countyKey: requestedKey,
     };
