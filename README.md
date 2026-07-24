@@ -3,6 +3,7 @@
 Elephant MCP connects Claude-compatible clients to the Elephant data graph, exposing discoverable tools for listing data groups, classes, and individual property schemas. The server is published on npm as `@elephant-xyz/mcp`.
 
 > **Embedding Provider:** The `getVerifiedScriptExamples` tool uses text embeddings for semantic code search. The server supports two embedding providers:
+>
 > - **OpenAI** (preferred when `OPENAI_API_KEY` is set) - Uses `text-embedding-3-small` with 1024 dimensions
 > - **AWS Bedrock** (automatic fallback) - Uses `amazon.titan-embed-text-v2` via IAM authentication
 >
@@ -45,6 +46,7 @@ This helps the AI understand which data context to use and ensures it leverages 
 - `getPropertyQuerySchema` – Returns the query-table's columns and types for a county so callers know what they can query.
 - `getOracleProperty` – Fetches the full consolidated record for one property (by parcel id, property id, or CID).
 - `listOracleProperties` – Paginated per-county property listing.
+- `listPublishedCounties` – Enumerates Oracle's canonical catalog of published counties, stable county FIPS identities, public data URLs, update timestamps, and catalog revision. Use this for county discovery instead of a hard-coded list.
 - `getOracleDatasetInfo` – Per-county dataset summary (property count, export time, source) plus per-source coverage `datasets[]` (count, %, date range) when `DATASET_COVERAGE_MAP` is configured.
 - `getPropertyPermits` – On-demand permit harvest for a parcel.
 
@@ -84,6 +86,8 @@ runs the server locally via `npx`, see below):
        // Optional override/addition: per-county hourly coverage snapshots.
        // Lee, Miami-Dade, Orange, and Palm Beach coverage URLs are built in.
        "DATASET_COVERAGE_MAP": "{\"lee\":\"https://ipfs.filebase.io/ipns/<coverage-ipns-name>\"}",
+       // Optional override for Oracle's canonical published-county catalog:
+       // "PUBLISHED_COUNTY_CATALOG_URL": "https://example.com/published-counties.json",
        // Optional legacy fallback (only for counties NOT in the query-table map):
        // "ORACLE_GEO_INDEX_IPNS": "k51qzi5uqu5djo3756w73x3swtt63g9y7igj7tvv1gs4skjk3haj3fuk7qosdi",
      },
@@ -129,11 +133,13 @@ Restart Claude Code after adding the server so the tools appear in the `@tools` 
 - **CLI setup**
 
   With OpenAI:
+
   ```bash
   codex mcp add elephant --env OPENAI_API_KEY=sk-your-openai-key -- npx -y @elephant-xyz/mcp@latest
   ```
 
   With AWS Bedrock:
+
   ```bash
   codex mcp add elephant -- npx -y @elephant-xyz/mcp@latest
   ```
@@ -144,6 +150,7 @@ Restart Claude Code after adding the server so the tools appear in the `@tools` 
   Edit `~/.codex/config.toml` (or open _MCP settings → Open config.toml_ from the IDE extension) and add:
 
   For OpenAI:
+
   ```toml
   [mcp.elephant]
   command = "npx"
@@ -152,12 +159,14 @@ Restart Claude Code after adding the server so the tools appear in the `@tools` 
   ```
 
   For AWS Bedrock:
+
   ```toml
   [mcp.elephant]
   command = "npx"
   args = ["-y", "@elephant-xyz/mcp@latest"]
   # Uses IAM credentials from environment; optionally set AWS_REGION
   ```
+
   Save the file and restart Codex to load the new server.
 
 ### Gemini CLI
@@ -165,6 +174,7 @@ Restart Claude Code after adding the server so the tools appear in the `@tools` 
 Create (or edit) `.gemini/settings.json` in your project and add:
 
 With OpenAI:
+
 ```jsonc
 {
   "mcpServers": {
@@ -180,6 +190,7 @@ With OpenAI:
 ```
 
 With AWS Bedrock:
+
 ```jsonc
 {
   "mcpServers": {
@@ -198,29 +209,31 @@ Restart Gemini CLI or run `gemini tools sync` to pick up the new server.
 
 The stdio transport means no port or server identity flags are required. Environment variables handled by `src/config.ts`:
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `OPENAI_API_KEY` | OpenAI API key for embeddings. When set, OpenAI is used; otherwise falls back to AWS Bedrock. | _(optional)_ |
-| `AWS_REGION` | AWS region for Bedrock API calls. | `us-east-1` |
-| `LOG_LEVEL` | Pino log level (`error`, `warn`, `info`, `debug`). | `info` |
-| `PROPERTY_QUERY_TABLE_MAP` | **Recommended.** JSON object mapping county → query-table Parquet location (an IPNS gateway URL or a local path), e.g. `{"lee":"https://ipfs.filebase.io/ipns/k51…"}`. County keys are lowercased and hyphenated (`palm-beach`, not `palm_beach`). When a requested `county` is here, all data tools read the query-table via DuckDB; the `ORACLE_*` vars below are unused. | _(optional)_ |
-| `PROPERTY_QUERY_TABLE` | Single-county query-table location (fallback when the map is unset). | _(optional)_ |
-| `PROPERTY_QUERY_TABLE_DEFAULT_COUNTY` | County the single `PROPERTY_QUERY_TABLE` serves. | _(optional)_ |
-| `DATASET_COVERAGE_MAP` | Optional JSON object mapping county → published `dataset-coverage.json` location (a Filebase/IPNS gateway URL or a local path for development), e.g. `{"lee":"https://ipfs.filebase.io/ipns/k51…"}`. Lee, Miami-Dade, Orange, and Palm Beach are built in; this env var overrides those URLs or adds more counties. `getOracleDatasetInfo` returns `datasets[]` with per-source (appraisal/permits/sunbiz/bbb) `ingestedCount`, `expectedCount`, `completionPercent`, and load timestamps. Coverage is additive — a read failure or slow gateway never breaks dataset-info. Do not use AWS S3 URLs for public users. | _(optional)_ |
-| `DATASET_COVERAGE` | Single-county coverage snapshot location (fallback when the map is unset). | _(optional)_ |
-| `DATASET_COVERAGE_DEFAULT_COUNTY` | County the single `DATASET_COVERAGE` serves. | _(optional)_ |
-| `ORACLE_OPEN_DATA_IPNS_MAP` | JSON object mapping county → IPNS for multi-county deployments, e.g. `{"lee":"k51…lee","palm-beach":"k51…pb"}`. County keys are lowercased and hyphenated. When set, each requested `county` resolves to its own IPNS. | _(optional)_ |
-| `ORACLE_OPEN_DATA_DEFAULT_COUNTY` | County used when a request omits `county`. When the map is unset, this is the single-IPNS county. | _(optional)_ |
-| `ORACLE_OPEN_DATA_IPNS` | Legacy single-county IPNS of the open-data manifest/index. Used when `ORACLE_OPEN_DATA_IPNS_MAP` is unset/empty, or for the default county. | _(optional)_ |
-| `ORACLE_OPEN_DATA_INDEX_CID` / `ORACLE_OPEN_DATA_MANIFEST_CID` | Fixed CID fallback for the default county when IPNS resolution yields nothing. | _(optional)_ |
-| `ORACLE_GEO_INDEX_IPNS` | IPNS name of the derived geo/value index (e.g. `oracle-geo-index-lee`); resolved to its current CID at runtime. | _(optional)_ |
-| `ORACLE_GEO_INDEX_IPNS_MAP` | JSON object mapping county → IPNS for the geo/value index (same shape as `ORACLE_OPEN_DATA_IPNS_MAP`). | _(optional)_ |
-| `ORACLE_GEO_INDEX_DEFAULT_COUNTY` | Default county for the geo/value index when no county is requested. | _(optional)_ |
-| `ORACLE_GEO_INDEX_CID` | Fixed CID of the derived geo/value index; used when `ORACLE_GEO_INDEX_IPNS` is unset. | _(optional)_ |
+| Variable                                                       | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | Default                   |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| `OPENAI_API_KEY`                                               | OpenAI API key for embeddings. When set, OpenAI is used; otherwise falls back to AWS Bedrock.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | _(optional)_              |
+| `AWS_REGION`                                                   | AWS region for Bedrock API calls.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | `us-east-1`               |
+| `LOG_LEVEL`                                                    | Pino log level (`error`, `warn`, `info`, `debug`).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `info`                    |
+| `PROPERTY_QUERY_TABLE_MAP`                                     | **Recommended.** JSON object mapping county → query-table Parquet location (an IPNS gateway URL or a local path), e.g. `{"lee":"https://ipfs.filebase.io/ipns/k51…"}`. County keys are lowercased and hyphenated (`palm-beach`, not `palm_beach`). When a requested `county` is here, all data tools read the query-table via DuckDB; the `ORACLE_*` vars below are unused.                                                                                                                                                                                                                                          | _(optional)_              |
+| `PROPERTY_QUERY_TABLE`                                         | Single-county query-table location (fallback when the map is unset).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | _(optional)_              |
+| `PROPERTY_QUERY_TABLE_DEFAULT_COUNTY`                          | County the single `PROPERTY_QUERY_TABLE` serves.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | _(optional)_              |
+| `DATASET_COVERAGE_MAP`                                         | Optional JSON object mapping county → published `dataset-coverage.json` location (a Filebase/IPNS gateway URL or a local path for development), e.g. `{"lee":"https://ipfs.filebase.io/ipns/k51…"}`. Lee, Miami-Dade, Orange, and Palm Beach are built in; this env var overrides those URLs or adds more counties. `getOracleDatasetInfo` returns `datasets[]` with per-source (appraisal/permits/sunbiz/bbb) `ingestedCount`, `expectedCount`, `completionPercent`, and load timestamps. Coverage is additive — a read failure or slow gateway never breaks dataset-info. Do not use AWS S3 URLs for public users. | _(optional)_              |
+| `DATASET_COVERAGE`                                             | Single-county coverage snapshot location (fallback when the map is unset).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | _(optional)_              |
+| `DATASET_COVERAGE_DEFAULT_COUNTY`                              | County the single `DATASET_COVERAGE` serves.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | _(optional)_              |
+| `PUBLISHED_COUNTY_CATALOG_URL`                                 | Canonical Oracle-published county catalog used by `listPublishedCounties`. Accepts an HTTP(S) URL or a local JSON path for development. Defaults to `oracle-node/main/catalog/published-counties.json`.                                                                                                                                                                                                                                                                                                                                                                                                              | Oracle repository catalog |
+| `ORACLE_OPEN_DATA_IPNS_MAP`                                    | JSON object mapping county → IPNS for multi-county deployments, e.g. `{"lee":"k51…lee","palm-beach":"k51…pb"}`. County keys are lowercased and hyphenated. When set, each requested `county` resolves to its own IPNS.                                                                                                                                                                                                                                                                                                                                                                                               | _(optional)_              |
+| `ORACLE_OPEN_DATA_DEFAULT_COUNTY`                              | County used when a request omits `county`. When the map is unset, this is the single-IPNS county.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | _(optional)_              |
+| `ORACLE_OPEN_DATA_IPNS`                                        | Legacy single-county IPNS of the open-data manifest/index. Used when `ORACLE_OPEN_DATA_IPNS_MAP` is unset/empty, or for the default county.                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | _(optional)_              |
+| `ORACLE_OPEN_DATA_INDEX_CID` / `ORACLE_OPEN_DATA_MANIFEST_CID` | Fixed CID fallback for the default county when IPNS resolution yields nothing.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | _(optional)_              |
+| `ORACLE_GEO_INDEX_IPNS`                                        | IPNS name of the derived geo/value index (e.g. `oracle-geo-index-lee`); resolved to its current CID at runtime.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | _(optional)_              |
+| `ORACLE_GEO_INDEX_IPNS_MAP`                                    | JSON object mapping county → IPNS for the geo/value index (same shape as `ORACLE_OPEN_DATA_IPNS_MAP`).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | _(optional)_              |
+| `ORACLE_GEO_INDEX_DEFAULT_COUNTY`                              | Default county for the geo/value index when no county is requested.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | _(optional)_              |
+| `ORACLE_GEO_INDEX_CID`                                         | Fixed CID of the derived geo/value index; used when `ORACLE_GEO_INDEX_IPNS` is unset.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | _(optional)_              |
 
 ### AWS Bedrock Authentication
 
 When using AWS Bedrock (no `OPENAI_API_KEY` set), the server authenticates using the standard AWS credential chain:
+
 1. Environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`)
 2. Shared credentials file (`~/.aws/credentials`)
 3. ECS/Lambda container credentials (`AWS_CONTAINER_CREDENTIALS_*`)
@@ -233,6 +246,7 @@ Ensure your IAM role or user has the `bedrock:InvokeModel` permission and access
 ### Credential Verification
 
 At startup, the server verifies embedding provider credentials:
+
 - For **OpenAI**: Checks that `OPENAI_API_KEY` is set
 - For **AWS Bedrock**: Resolves credentials through the full AWS credential provider chain and logs the detected source
 

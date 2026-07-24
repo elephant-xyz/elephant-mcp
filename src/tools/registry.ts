@@ -25,6 +25,7 @@ import {
   getPermitQuerySchemaHandler,
   getPermitCoverageHandler,
 } from "./permitQuery.ts";
+import { listPublishedCountiesHandler } from "./publishedCounties.ts";
 import { MAX_ROW_LIMIT, DEFAULT_ROW_LIMIT } from "../lib/duckdbQuery.ts";
 
 /**
@@ -121,6 +122,17 @@ export function registerAllTools(server: McpServer): void {
     async (args: { query: string; topK?: number }) => {
       return transformExamplesHandler(args.query, args.topK);
     },
+  );
+
+  server.registerTool(
+    "listPublishedCounties",
+    {
+      title: "List published Oracle counties",
+      description:
+        "Returns every county in Oracle's canonical published-county catalog, including stable county keys, state codes, public query/coverage URLs, update timestamps, and a catalog revision. Use this tool to discover newly published counties instead of maintaining a hard-coded list.",
+      inputSchema: {},
+    },
+    async () => listPublishedCountiesHandler(),
   );
 
   server.registerTool(
