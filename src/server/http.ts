@@ -23,6 +23,10 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import packageJson from "../../package.json";
 import { logger } from "../logger.ts";
 import { registerAllTools } from "../tools/registry.ts";
+import {
+  isAuthorizedHttpRequest,
+  resolveHttpAuthorization,
+} from "./http-auth.ts";
 
 const SERVER_NAME =
   typeof packageJson.name === "string" ? packageJson.name : "@elephant-xyz/mcp";
@@ -89,6 +93,20 @@ async function routeRequest(
   }
 
   if (url === "/mcp" || url === "/") {
+    if (
+      !isAuthorizedHttpRequest(
+        resolveHttpAuthorization(req.headers),
+        process.env.MCP_HTTP_AUTH_TOKEN,
+      )
+    ) {
+      res.writeHead(401, {
+        "Content-Type": "application/json",
+        "WWW-Authenticate": "Bearer",
+      });
+      res.end(JSON.stringify({ error: "Unauthorized" }));
+      return;
+    }
+
     try {
       await handleMcpRequest(req, res);
     } catch (error) {

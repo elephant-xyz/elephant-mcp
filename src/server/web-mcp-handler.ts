@@ -25,6 +25,10 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import packageJson from "../../package.json";
 import { logger } from "../logger.ts";
 import { registerAllTools } from "../tools/registry.ts";
+import {
+  isAuthorizedHttpRequest,
+  resolveHttpAuthorization,
+} from "./http-auth.ts";
 
 const SERVER_NAME =
   typeof packageJson.name === "string" ? packageJson.name : "@elephant-xyz/mcp";
@@ -218,6 +222,31 @@ export async function handleWebMcpRequest(
   input: WebMcpRequestInput,
 ): Promise<Response> {
   const method = input.method.toUpperCase();
+  const authorization = resolveHttpAuthorization(input.headers);
+  if (
+    !isAuthorizedHttpRequest(authorization, process.env.MCP_HTTP_AUTH_TOKEN)
+  ) {
+    const headerNames = Object.keys(input.headers).map((key) =>
+      key.toLowerCase(),
+    );
+    logger.warn(
+      {
+        authConfigured: Boolean(process.env.MCP_HTTP_AUTH_TOKEN),
+        expectedTokenLength: process.env.MCP_HTTP_AUTH_TOKEN?.length ?? 0,
+        authorizationLength: authorization?.length ?? 0,
+        authorizationProvided: headerNames.includes("authorization"),
+        customTokenProvided: headerNames.includes("x-mcp-auth-token"),
+      },
+      "Rejected unauthorized web MCP request",
+    );
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: {
+        "content-type": "application/json",
+        "www-authenticate": "Bearer",
+      },
+    });
+  }
 
   // Lowercase all header keys for the Node shim (transport reads by lc key).
   const nodeHeaders: NodeLikeHeaders = {};
