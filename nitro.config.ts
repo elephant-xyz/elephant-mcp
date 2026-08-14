@@ -18,6 +18,16 @@ export default defineNitroConfig({
   // Default preset — override with NITRO_PRESET env var or --preset flag
   preset: (process.env.NITRO_PRESET as string | undefined) ?? "node-server",
 
+  // Keep the platform deadline above the handler's 120-second budget so
+  // cancellation and a controlled response can complete before Vercel stops
+  // the invocation. This Nitro version emits one shared function config for
+  // /mcp, /health, and the fallback route.
+  vercel: {
+    functions: {
+      maxDuration: 130,
+    },
+  },
+
   // Expose the MCP HTTP handler as a Nitro server route
   handlers: [
     {
