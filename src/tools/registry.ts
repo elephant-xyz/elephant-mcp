@@ -44,7 +44,10 @@ import {
  * entry (src/index.ts) and the HTTP entry (src/server/http.ts) call this
  * function so there is zero duplication between transports.
  */
-export function registerAllTools(server: McpServer): void {
+export function registerAllTools(
+  server: McpServer,
+  requestSignal?: AbortSignal,
+): void {
   server.registerTool(
     "listClassesByDataGroup",
     {
@@ -361,8 +364,16 @@ export function registerAllTools(server: McpServer): void {
           ),
       },
     },
-    async (args: { county: string; sql: string; limit?: number }) => {
-      return queryPropertiesHandler(args);
+    async (
+      args: { county: string; sql: string; limit?: number },
+      { signal },
+    ) => {
+      return queryPropertiesHandler(args, {
+        signal:
+          requestSignal === undefined
+            ? signal
+            : AbortSignal.any([signal, requestSignal]),
+      });
     },
   );
 
@@ -379,8 +390,13 @@ export function registerAllTools(server: McpServer): void {
           .describe("County to describe (case-insensitive), e.g. 'Lee'."),
       },
     },
-    async (args: { county: string }) => {
-      return getPropertyQuerySchemaHandler(args);
+    async (args: { county: string }, { signal }) => {
+      return getPropertyQuerySchemaHandler(args, {
+        signal:
+          requestSignal === undefined
+            ? signal
+            : AbortSignal.any([signal, requestSignal]),
+      });
     },
   );
 
