@@ -35,6 +35,13 @@ const SERVER_NAME =
 const SERVER_VERSION =
   typeof packageJson.version === "string" ? packageJson.version : "0.0.0";
 
+/**
+ * End-to-end budget for one web MCP request. The Vercel function budget is
+ * intentionally larger so this handler can cancel work and return a controlled
+ * response before the platform terminates the invocation.
+ */
+export const WEB_MCP_TIMEOUT_MS = 120_000;
+
 // ---------------------------------------------------------------------------
 // Minimal Node-shim types
 // ---------------------------------------------------------------------------
@@ -118,6 +125,8 @@ class NodeLikeResponse extends EventEmitter {
     if (this.isSettled) return;
     this.isSettled = true;
     this.rejectEnd(reason);
+    // Match a disconnected Node response so transport cleanup always runs.
+    this.emit("close");
   }
 
   /** Called by the transport with (status) or (status, headers). Returns `this` for chaining. */
@@ -248,6 +257,29 @@ export async function handleWebMcpRequest(
     });
   }
 
+  // This bridge buffers finite responses and cannot safely expose a long-lived
+  // SSE stream. MCP explicitly permits 405 when a server does not offer the
+  // optional standalone GET stream.
+  if (method === "GET") {
+    return new Response(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        error: {
+          code: -32000,
+          message: "Method Not Allowed: standalone SSE stream is not supported",
+        },
+        id: null,
+      }),
+      {
+        status: 405,
+        headers: {
+          allow: "POST, DELETE",
+          "content-type": "application/json",
+        },
+      },
+    );
+  }
+
   // Lowercase all header keys for the Node shim (transport reads by lc key).
   const nodeHeaders: NodeLikeHeaders = {};
   for (const [key, value] of Object.entries(input.headers)) {
@@ -279,23 +311,32 @@ export async function handleWebMcpRequest(
     { capabilities: { logging: {} } },
   );
 
-  registerAllTools(server);
+  const requestAbortController = new AbortController();
+  registerAllTools(server, requestAbortController.signal);
 
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
   });
 
-  // Safety timeout: if the transport never calls res.end() AND never throws
-  // (e.g. it writes headers then hangs), force-settle so the request can never
-  // hang forever. Buffered MCP responses complete in well under this window.
-  const SETTLE_TIMEOUT_MS = 30_000;
+  // If the transport never calls res.end() and never throws, abort downstream
+  // work before force-settling the buffered response. Remote DuckDB/IPFS reads
+  // can exceed 30 seconds during a cold read, so this explicit budget is paired
+  // with a larger Vercel function duration in nitro.config.ts.
   const timeout = setTimeout(() => {
-    nodeRes.fail(
-      new Error(
-        `Web MCP handler timed out after ${SETTLE_TIMEOUT_MS}ms without a response`,
-      ),
+    const timeoutError = new Error(
+      `Web MCP handler timed out after ${WEB_MCP_TIMEOUT_MS}ms without a response`,
     );
-  }, SETTLE_TIMEOUT_MS);
+    logger.error(
+      {
+        method,
+        path: input.path,
+        timeoutMs: WEB_MCP_TIMEOUT_MS,
+      },
+      "Web MCP request exceeded its bounded execution budget",
+    );
+    requestAbortController.abort(timeoutError);
+    nodeRes.fail(timeoutError);
+  }, WEB_MCP_TIMEOUT_MS);
   // Don't keep the process/event loop alive solely for this timer.
   if (typeof timeout.unref === "function") timeout.unref();
 
@@ -362,5 +403,18 @@ export async function handleWebMcpRequest(
     });
   } finally {
     clearTimeout(timeout);
+    if (!requestAbortController.signal.aborted) {
+      requestAbortController.abort(
+        new Error("Web MCP request completed; cancelling residual work"),
+      );
+    }
+    try {
+      await server.close();
+    } catch (error) {
+      logger.warn(
+        { error: error instanceof Error ? error.message : String(error) },
+        "Failed to close web MCP server cleanly",
+      );
+    }
   }
 }

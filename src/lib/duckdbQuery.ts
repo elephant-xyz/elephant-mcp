@@ -90,6 +90,8 @@ export interface QueryTableResolution {
 interface CountyConnection {
   readonly connection: DuckDBConnection;
   readonly location: string;
+  /** Serializes operations so an interrupt cannot cancel a different request. */
+  tail: Promise<void>;
 }
 
 /**
@@ -475,7 +477,7 @@ async function openCountyConnection(
   );
 
   logger.info({ view, location }, "Opened DuckDB query table view");
-  return { connection, location };
+  return { connection, location, tail: Promise.resolve() };
 }
 
 async function getCountyConnection(
@@ -502,6 +504,77 @@ async function getCountyConnection(
   return pending;
 }
 
+/**
+ * Run one operation exclusively on a cached county connection.
+ *
+ * DuckDB's interrupt API is connection-scoped. Serializing every operation
+ * ensures cancellation can affect only the request that owns the connection.
+ */
+async function withCountyConnection<Result>(
+  config: DatasetConfig,
+  county: string | undefined,
+  operation: (connection: DuckDBConnection) => Promise<Result>,
+): Promise<Result> {
+  const entry = await getCountyConnection(config, county);
+  const predecessor = entry.tail;
+  let release: (() => void) | undefined;
+  entry.tail = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+
+  await predecessor;
+  try {
+    return await operation(entry.connection);
+  } finally {
+    release?.();
+  }
+}
+
+/**
+ * Run a DuckDB operation that can be cancelled by its MCP/web request.
+ *
+ * Cancellation reasons are intentionally excluded from the error so a
+ * caller-controlled reason can never be copied into service logs.
+ */
+async function runWithCancellation<Result>(
+  connection: DuckDBConnection,
+  operation: () => Promise<Result>,
+  signal?: AbortSignal,
+): Promise<Result> {
+  if (signal?.aborted) {
+    throw new Error("Property query was cancelled before execution.");
+  }
+
+  let interrupted = false;
+  const interrupt = () => {
+    interrupted = true;
+    try {
+      connection.interrupt();
+    } catch (error) {
+      logger.warn(
+        { error: error instanceof Error ? error.message : String(error) },
+        "Failed to interrupt cancelled DuckDB property query",
+      );
+    }
+  };
+  signal?.addEventListener("abort", interrupt, { once: true });
+
+  try {
+    const result = await operation();
+    if (interrupted) {
+      throw new Error("Property query was cancelled during execution.");
+    }
+    return result;
+  } catch (error) {
+    if (interrupted) {
+      throw new Error("Property query was cancelled during execution.");
+    }
+    throw error;
+  } finally {
+    signal?.removeEventListener("abort", interrupt);
+  }
+}
+
 export interface PropertyQueryResult {
   readonly county: string | null;
   readonly rowCount: number;
@@ -518,6 +591,7 @@ async function runDatasetQuery(
   county: string,
   sql: string,
   limit: number,
+  signal?: AbortSignal,
 ): Promise<PropertyQueryResult> {
   const validation = validateSelectQuery(sql);
   if (!validation.ok) {
@@ -525,18 +599,22 @@ async function runDatasetQuery(
   }
 
   const cappedLimit = Math.max(1, Math.min(limit, MAX_ROW_LIMIT));
-  const { connection } = await getCountyConnection(config, county);
-
   const wrapped = `SELECT * FROM (${validation.sql}) AS _q LIMIT ${cappedLimit}`;
-  const reader = await connection.runAndReadAll(wrapped);
-  const rows = reader.getRowObjectsJson();
+  return withCountyConnection(config, county, async (connection) => {
+    const reader = await runWithCancellation(
+      connection,
+      () => connection.runAndReadAll(wrapped),
+      signal,
+    );
+    const rows = reader.getRowObjectsJson();
 
-  return {
-    county: county ?? null,
-    rowCount: rows.length,
-    limit: cappedLimit,
-    rows,
-  };
+    return {
+      county: county ?? null,
+      rowCount: rows.length,
+      limit: cappedLimit,
+      rows,
+    };
+  });
 }
 
 /**
@@ -551,9 +629,10 @@ async function runInternalDatasetQuery(
   sql: string,
   params: DuckDBValue[],
 ): Promise<Array<Record<string, Json>>> {
-  const { connection } = await getCountyConnection(config, county);
-  const reader = await connection.runAndReadAll(sql, params);
-  return reader.getRowObjectsJson();
+  return withCountyConnection(config, county, async (connection) => {
+    const reader = await connection.runAndReadAll(sql, params);
+    return reader.getRowObjectsJson();
+  });
 }
 
 export interface PropertyColumn {
@@ -565,15 +644,21 @@ export interface PropertyColumn {
 async function getDatasetColumns(
   config: DatasetConfig,
   county: string,
+  signal?: AbortSignal,
 ): Promise<PropertyColumn[]> {
-  const { connection } = await getCountyConnection(config, county);
-  const reader = await connection.runAndReadAll(`DESCRIBE ${config.view}`);
-  const rows = reader.getRowObjectsJson();
+  return withCountyConnection(config, county, async (connection) => {
+    const reader = await runWithCancellation(
+      connection,
+      () => connection.runAndReadAll(`DESCRIBE ${config.view}`),
+      signal,
+    );
+    const rows = reader.getRowObjectsJson();
 
-  return rows.map((row) => ({
-    name: String(row.column_name ?? ""),
-    type: String(row.column_type ?? ""),
-  }));
+    return rows.map((row) => ({
+      name: String(row.column_name ?? ""),
+      type: String(row.column_type ?? ""),
+    }));
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -589,8 +674,9 @@ export async function runPropertyQuery(
   county: string,
   sql: string,
   limit: number = DEFAULT_ROW_LIMIT,
+  signal?: AbortSignal,
 ): Promise<PropertyQueryResult> {
-  return runDatasetQuery(PROPERTY_DATASET, county, sql, limit);
+  return runDatasetQuery(PROPERTY_DATASET, county, sql, limit, signal);
 }
 
 /**
@@ -611,8 +697,9 @@ export async function runInternalPropertyQuery(
  */
 export async function getPropertyColumns(
   county: string,
+  signal?: AbortSignal,
 ): Promise<PropertyColumn[]> {
-  return getDatasetColumns(PROPERTY_DATASET, county);
+  return getDatasetColumns(PROPERTY_DATASET, county, signal);
 }
 
 // ---------------------------------------------------------------------------

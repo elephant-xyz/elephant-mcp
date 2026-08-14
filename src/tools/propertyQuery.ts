@@ -75,14 +75,22 @@ const SAFETY_NOTE =
   "(INSERT/UPDATE/DELETE/COPY/ATTACH/INSTALL/LOAD/PRAGMA/CALL/SET …) are rejected. " +
   `Results are always capped at ${MAX_ROW_LIMIT} rows.`;
 
-export async function queryPropertiesHandler(args: {
-  county: string;
-  sql: string;
-  limit?: number;
-}) {
+export async function queryPropertiesHandler(
+  args: {
+    county: string;
+    sql: string;
+    limit?: number;
+  },
+  options: { signal?: AbortSignal } = {},
+) {
   try {
     const limit = args.limit ?? DEFAULT_ROW_LIMIT;
-    const result = await runPropertyQuery(args.county, args.sql, limit);
+    const result = await runPropertyQuery(
+      args.county,
+      args.sql,
+      limit,
+      options.signal,
+    );
     return createTextResult(result);
   } catch (error) {
     logger.error(
@@ -99,9 +107,12 @@ export async function queryPropertiesHandler(args: {
   }
 }
 
-export async function getPropertyQuerySchemaHandler(args: { county: string }) {
+export async function getPropertyQuerySchemaHandler(
+  args: { county: string },
+  options: { signal?: AbortSignal } = {},
+) {
   try {
-    const columns = await getPropertyColumns(args.county);
+    const columns = await getPropertyColumns(args.county, options.signal);
     return createTextResult({
       county: args.county,
       view: PROPERTIES_VIEW,
