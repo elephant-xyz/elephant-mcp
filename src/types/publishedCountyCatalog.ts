@@ -9,6 +9,7 @@ export const PublishedCountySchema = z.object({
   queryTableUrl: z.string().url(),
   datasetCoverageUrl: z.string().url(),
   permitQueryTableUrl: z.string().url().nullable(),
+  placesTableUrl: z.string().url().nullable(),
   updatedAt: z.string().datetime({ offset: true }),
 });
 
