@@ -24,6 +24,7 @@ const catalog = {
       queryTableUrl: "https://example.com/palm-beach.parquet",
       datasetCoverageUrl: "https://example.com/palm-beach-coverage.json",
       permitQueryTableUrl: null,
+      placesTableUrl: null,
       updatedAt: "2026-07-24T09:00:00.000Z",
     },
     {
@@ -35,6 +36,8 @@ const catalog = {
       queryTableUrl: "https://example.com/lee.parquet",
       datasetCoverageUrl: "https://example.com/lee-coverage.json",
       permitQueryTableUrl: null,
+      placesTableUrl:
+        "https://ipfs.filebase.io/ipns/k51places/lee/places-table.parquet",
       updatedAt: "2026-07-24T08:00:00.000Z",
     },
   ],
@@ -101,7 +104,10 @@ describe("published county catalog", () => {
     const firstPayload = JSON.parse(first.content[0]?.text ?? "{}") as {
       countyCount: number;
       catalogRevision: string;
-      counties: Array<{ countyKey: string }>;
+      counties: Array<{
+        countyKey: string;
+        placesTableUrl: string | null;
+      }>;
     };
     const secondPayload = JSON.parse(second.content[0]?.text ?? "{}") as {
       catalogRevision: string;
@@ -109,6 +115,10 @@ describe("published county catalog", () => {
 
     expect(firstPayload.countyCount).toBe(2);
     expect(firstPayload.counties[0]?.countyKey).toBe("lee");
+    expect(firstPayload.counties[0]?.placesTableUrl).toContain(
+      "/lee/places-table.parquet",
+    );
+    expect(firstPayload.counties[1]?.placesTableUrl).toBeNull();
     expect(firstPayload.catalogRevision).toMatch(/^[a-f0-9]{64}$/);
     expect(secondPayload.catalogRevision).toBe(firstPayload.catalogRevision);
   });

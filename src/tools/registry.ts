@@ -25,8 +25,17 @@ import {
   getPermitQuerySchemaHandler,
   getPermitCoverageHandler,
 } from "./permitQuery.ts";
+import {
+  queryPlacesHandler,
+  getPlaceQuerySchemaHandler,
+} from "./placeQuery.ts";
 import { listPublishedCountiesHandler } from "./publishedCounties.ts";
 import { MAX_ROW_LIMIT, DEFAULT_ROW_LIMIT } from "../lib/duckdbQuery.ts";
+import {
+  DEFAULT_PLACE_LIMIT,
+  MAX_PLACE_OFFSET,
+  type PlaceQueryRequest,
+} from "../lib/placeQuery.ts";
 
 /**
  * Registers all MCP tools onto the given server instance.
@@ -129,7 +138,7 @@ export function registerAllTools(server: McpServer): void {
     {
       title: "List published Oracle counties",
       description:
-        "Returns every county in Oracle's canonical published-county catalog, including stable county keys, state codes, public query/coverage URLs, update timestamps, and a catalog revision. Use this tool to discover newly published counties instead of maintaining a hard-coded list.",
+        "Returns every county in Oracle's canonical published-county catalog, including stable county keys, state codes, public query/coverage/permit URLs, nullable placesTableUrl, update timestamps, and a catalog revision. Use this tool to discover newly published counties and places availability instead of maintaining a hard-coded list.",
       inputSchema: {},
     },
     async () => listPublishedCountiesHandler(),
@@ -373,6 +382,168 @@ export function registerAllTools(server: McpServer): void {
     async (args: { county: string }) => {
       return getPropertyQuerySchemaHandler(args);
     },
+  );
+
+  const placeTextFilterSchema = z
+    .object({
+      value: z
+        .string()
+        .trim()
+        .min(1, "filter value is required")
+        .max(200, "filter value is too long"),
+      match: z
+        .enum(["exact", "contains"])
+        .optional()
+        .default("exact")
+        .describe("Exact or case-insensitive substring match."),
+    })
+    .strict();
+
+  const placeFiltersSchema = z
+    .object({
+      taxonomyPrimary: placeTextFilterSchema
+        .optional()
+        .describe(
+          "Filter the one primary taxonomy label. Prefer exact for counts.",
+        ),
+      taxonomyHierarchyMember: z
+        .string()
+        .trim()
+        .min(1)
+        .max(200)
+        .optional()
+        .describe(
+          "Exact case-insensitive segment membership in the '/'-delimited taxonomy hierarchy (roll-up filter).",
+        ),
+      basicCategory: placeTextFilterSchema.optional(),
+      nameContains: z
+        .string()
+        .trim()
+        .min(1)
+        .max(200)
+        .optional()
+        .describe("Case-insensitive substring of the primary place name."),
+      normalizedNameContains: z
+        .string()
+        .trim()
+        .min(1)
+        .max(200)
+        .optional()
+        .describe(
+          "Substring after lowercasing and removing punctuation from the primary name.",
+        ),
+      locality: placeTextFilterSchema
+        .optional()
+        .describe("Exact or contains filter over address locality/city."),
+      postcode: z
+        .string()
+        .trim()
+        .min(1)
+        .max(20)
+        .optional()
+        .describe("Exact postal code."),
+      operatingStatus: z
+        .string()
+        .trim()
+        .min(1)
+        .max(100)
+        .optional()
+        .describe("Exact operating status such as open or permanently_closed."),
+      hostedService: z
+        .enum(["include", "exclude", "only"])
+        .optional()
+        .default("include")
+        .describe(
+          "Include all rows (default), exclude advisory hosted services, or return only hosted services.",
+        ),
+      minConfidence: z
+        .number()
+        .min(0)
+        .max(1)
+        .optional()
+        .describe("Inclusive minimum Overture confidence score."),
+    })
+    .strict();
+
+  server.registerTool(
+    "queryPlaces",
+    {
+      title: "Query published Overture places",
+      description:
+        "Run a structured read-only query over a county's catalog-authorized Overture places parquet. Supports exact/contains category filters, '/'-hierarchy roll-ups, name/locality/postcode/status/confidence filters, hosted-service include/exclude/only, deterministic row pages with totalCount, count-only mode, and grouped taxonomy_primary aggregates. Call getPlaceQuerySchema first. Callers cannot provide SQL or data URLs; results are capped at " +
+        `${MAX_ROW_LIMIT}.`,
+      inputSchema: {
+        county: z
+          .string()
+          .trim()
+          .min(1, "county is required")
+          .max(64)
+          .regex(
+            /^[A-Za-z0-9]+(?:[ -][A-Za-z0-9]+)*$/,
+            "county must be a name or lowercase hyphenated key",
+          )
+          .describe("Published county key/name, e.g. 'lee' or 'Lee'."),
+        mode: z
+          .enum(["rows", "count", "groupByPrimaryCategory"])
+          .optional()
+          .default("rows")
+          .describe("Rows page, filtered count, or primary-category groups."),
+        filters: placeFiltersSchema.optional().default({}),
+        sortBy: z
+          .enum(["gersId", "name", "taxonomyPrimary", "locality", "confidence"])
+          .optional()
+          .default("gersId")
+          .describe("Allowlisted row sort field; ignored for grouped mode."),
+        sortDirection: z
+          .enum(["asc", "desc"])
+          .optional()
+          .default("asc")
+          .describe("Row sort direction; ignored for grouped mode."),
+        limit: z
+          .number()
+          .int()
+          .positive()
+          .max(MAX_ROW_LIMIT)
+          .optional()
+          .default(DEFAULT_PLACE_LIMIT)
+          .describe(
+            `Rows/groups per page (default ${DEFAULT_PLACE_LIMIT}, max ${MAX_ROW_LIMIT}).`,
+          ),
+        offset: z
+          .number()
+          .int()
+          .min(0)
+          .max(MAX_PLACE_OFFSET)
+          .optional()
+          .default(0)
+          .describe(
+            `Zero-based page offset (default 0, max ${MAX_PLACE_OFFSET}).`,
+          ),
+      },
+    },
+    async (args: PlaceQueryRequest) => queryPlacesHandler(args),
+  );
+
+  server.registerTool(
+    "getPlaceQuerySchema",
+    {
+      title: "Get published places query schema",
+      description:
+        "Returns the real published places parquet columns, field descriptions, structured queryPlaces contract, safety limits, Overture release/provenance and licence-gate metadata, and honest null completion semantics for a county.",
+      inputSchema: {
+        county: z
+          .string()
+          .trim()
+          .min(1, "county is required")
+          .max(64)
+          .regex(
+            /^[A-Za-z0-9]+(?:[ -][A-Za-z0-9]+)*$/,
+            "county must be a name or lowercase hyphenated key",
+          )
+          .describe("Published county key/name, e.g. 'lee' or 'Lee'."),
+      },
+    },
+    async (args: { county: string }) => getPlaceQuerySchemaHandler(args),
   );
 
   server.registerTool(

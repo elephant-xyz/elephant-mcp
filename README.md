@@ -44,11 +44,38 @@ This helps the AI understand which data context to use and ensures it leverages 
 - `sumPropertyValueInArea` – Sums the current AVM value of properties whose centroid falls inside a bounding box or polygon.
 - `queryProperties` – Runs a read-only SQL `SELECT`/`WITH` over a county's query-table (view `properties`) via embedded DuckDB, for arbitrary counts, filters, and aggregates over owner, address, zip, value, acreage, material, and more.
 - `getPropertyQuerySchema` – Returns the query-table's columns and types for a county so callers know what they can query.
+- `queryPlaces` – Runs a structured, read-only query over a county's catalog-authorized Overture places parquet. Supports category/hierarchy/name/location/status/hosted-service/confidence filters, count mode, deterministic pages, and grouped `taxonomy_primary` aggregates; callers cannot submit SQL or URLs.
+- `getPlaceQuerySchema` – Returns the real places columns, exact `queryPlaces` contract, safety limits, release/attribution/licence-gate provenance, and honest null completeness for a county.
 - `getOracleProperty` – Fetches the full consolidated record for one property (by parcel id, property id, or CID).
 - `listOracleProperties` – Paginated per-county property listing.
-- `listPublishedCounties` – Enumerates Oracle's canonical catalog of published counties, stable county FIPS identities, public data URLs, update timestamps, and catalog revision. Use this for county discovery instead of a hard-coded list.
+- `listPublishedCounties` – Enumerates Oracle's canonical catalog of published counties, stable county FIPS identities, public data URLs (including nullable `placesTableUrl`), update timestamps, and catalog revision. Use this for county and places-availability discovery instead of a hard-coded list.
 - `getOracleDatasetInfo` – Per-county dataset summary (property count, export time, source) plus per-source coverage `datasets[]` (count, %, date range) when `DATASET_COVERAGE_MAP` is configured.
 - `getPropertyPermits` – On-demand permit harvest for a parcel.
+
+### Overture places queries
+
+Call `getPlaceQuerySchema` before the first query for a county, then call
+`queryPlaces` with `mode: "rows"`, `"count"`, or
+`"groupByPrimaryCategory"`. The exact schema tool name is singular
+`getPlaceQuerySchema`; the query tool is plural `queryPlaces`.
+
+`taxonomyPrimary` supports exact or contains matching and is the correct field
+for category counts. `taxonomyHierarchyMember` performs exact,
+case-insensitive membership over the `/`-delimited hierarchy for roll-ups such
+as `restaurant`. `hostedService` accepts `include` (MCP default), `exclude`, or
+`only`; agents doing business/co-location counts should normally pass
+`exclude` and disclose that choice. Rows include release, address, category,
+status, confidence, coordinates, and hosted-service evidence. Public business
+websites, phones, and emails remain outside the default row projection.
+
+Every request resolves `placesTableUrl` from the canonical published-county
+catalog. Callers cannot supply a parquet URL or SQL. Trusted HTTPS gateway
+validation, bound values, a 60-second query timeout, a bounded connection
+cache, deterministic sorting, and the shared 1,000-row cap protect the query
+surface. Counties whose `placesTableUrl` is `null` return a clear unavailable
+response. Overture has no authoritative total-business denominator, so
+`completionPercent` remains `null`; the schema/query provenance points to the
+published sibling index and notice carrying release and licence-gate evidence.
 
 ### Geo tools and data sources
 
@@ -221,7 +248,7 @@ The stdio transport means no port or server identity flags are required. Environ
 | `DATASET_COVERAGE_MAP`                                         | Optional JSON object mapping county → published `dataset-coverage.json` location (a Filebase/IPNS gateway URL or a local path for development), e.g. `{"lee":"https://ipfs.filebase.io/ipns/k51…"}`. Lee, Miami-Dade, Orange, and Palm Beach are built in; this env var overrides those URLs or adds more counties. `getOracleDatasetInfo` returns `datasets[]` with per-source (appraisal/permits/sunbiz/bbb) `ingestedCount`, `expectedCount`, `completionPercent`, and load timestamps. Coverage is additive — a read failure or slow gateway never breaks dataset-info. Do not use AWS S3 URLs for public users. | _(optional)_              |
 | `DATASET_COVERAGE`                                             | Single-county coverage snapshot location (fallback when the map is unset).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | _(optional)_              |
 | `DATASET_COVERAGE_DEFAULT_COUNTY`                              | County the single `DATASET_COVERAGE` serves.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | _(optional)_              |
-| `PUBLISHED_COUNTY_CATALOG_URL`                                 | Canonical Oracle-published county catalog used by `listPublishedCounties`. Accepts an HTTP(S) URL or a local JSON path for development. Defaults to `oracle-node/main/catalog/published-counties.json`.                                                                                                                                                                                                                                                                                                                                                                                                              | Oracle repository catalog |
+| `PUBLISHED_COUNTY_CATALOG_URL`                                 | Canonical Oracle-published county catalog used by `listPublishedCounties` and as the only source of `queryPlaces` parquet URLs. Accepts an HTTP(S) URL or a local JSON path for development. Places queries additionally require each non-null `placesTableUrl` to use an approved HTTPS IPFS gateway and end in `/places-table.parquet`. Defaults to `oracle-node/main/catalog/published-counties.json`.                                                                                                                                                                                                                                                                            | Oracle repository catalog |
 | `ORACLE_OPEN_DATA_IPNS_MAP`                                    | JSON object mapping county → IPNS for multi-county deployments, e.g. `{"lee":"k51…lee","palm-beach":"k51…pb"}`. County keys are lowercased and hyphenated. When set, each requested `county` resolves to its own IPNS.                                                                                                                                                                                                                                                                                                                                                                                               | _(optional)_              |
 | `ORACLE_OPEN_DATA_DEFAULT_COUNTY`                              | County used when a request omits `county`. When the map is unset, this is the single-IPNS county.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | _(optional)_              |
 | `ORACLE_OPEN_DATA_IPNS`                                        | Legacy single-county IPNS of the open-data manifest/index. Used when `ORACLE_OPEN_DATA_IPNS_MAP` is unset/empty, or for the default county.                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | _(optional)_              |
