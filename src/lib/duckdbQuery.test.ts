@@ -11,15 +11,39 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AddressInfo } from "node:net";
-import { describe, it, expect, afterEach, beforeAll, afterAll } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  afterEach,
+  beforeAll,
+  afterAll,
+} from "vitest";
 import { DuckDBInstance } from "@duckdb/node-api";
 import {
   validateSelectQuery,
   resolveQueryTableLocation,
   parseQueryTableMap,
+  parseQueryTableMapAdditions,
+  parsePermitQueryTableMapAdditions,
+  resolvePermitTableLocation,
+  validateSelectQueryForView,
   runPropertyQuery,
+  getPropertyColumns,
   clearPropertyQueryConnections,
+  resolvePropertyQueryRuntimeLocation,
+  resolvePermitQueryRuntimeLocation,
 } from "./duckdbQuery.ts";
+
+const ROCK_ISLAND_QUERY_TABLE_URL =
+  "https://ipfs.filebase.io/ipns/k51qzi5uqu5djbtswq6lb4p7xbf3nu8bzdzokdtcdld1r2vx6asn7lgfuk54wt";
+const ROCK_ISLAND_PERMIT_TABLE_URL =
+  "https://ipfs.filebase.io/ipns/k51qzi5uqu5di42nblo5nuk94aj7af393d9y5vhqxp5dtxikzso0wt14v3p0wa";
+const ROCK_ISLAND_QUERY_TABLE_CID =
+  "QmQnm6W2Ye9GH3oD6SUswHrQCMegnpGbhRFgipitYW6zCc";
+const ROCK_ISLAND_PERMIT_TABLE_CID =
+  "QmYfhGF427Yvbv8B2e8rvP2idTQp5yEyKCgbj4bzRHGEaW";
 
 describe("validateSelectQuery", () => {
   it("accepts a plain SELECT and strips a trailing semicolon", () => {
@@ -90,10 +114,119 @@ describe("parseQueryTableMap", () => {
   });
 });
 
+describe("parseQueryTableMapAdditions", () => {
+  it("returns an empty map when additions are absent", () => {
+    expect(parseQueryTableMapAdditions(undefined)).toEqual({});
+    expect(parseQueryTableMapAdditions("   ")).toEqual({});
+  });
+
+  it("normalizes county keys and validates absolute HTTP(S) URLs", () => {
+    expect(
+      parseQueryTableMapAdditions(
+        JSON.stringify({
+          " Rock Island ": `  ${ROCK_ISLAND_QUERY_TABLE_URL}  `,
+        }),
+      ),
+    ).toEqual({ "rock-island": ROCK_ISLAND_QUERY_TABLE_URL });
+  });
+
+  it.each([
+    ["malformed JSON", "{not-json", "contains invalid JSON"],
+    ["non-object JSON", "[]", "must be a JSON object"],
+    [
+      "non-string value",
+      JSON.stringify({ "rock-island": 42 }),
+      "must be a non-empty string URL",
+    ],
+    [
+      "relative location",
+      JSON.stringify({ "rock-island": "/tmp/query.parquet" }),
+      "must be an absolute HTTP(S) URL",
+    ],
+    [
+      "unsupported protocol",
+      JSON.stringify({ "rock-island": "s3://bucket/query.parquet" }),
+      "must use http: or https:",
+    ],
+  ])("rejects %s", (_label, raw, expectedMessage) => {
+    expect(() => parseQueryTableMapAdditions(raw)).toThrow(expectedMessage);
+  });
+});
+
+describe("permit query-table additions", () => {
+  it("strictly parses the Rock Island public URL", () => {
+    expect(
+      parsePermitQueryTableMapAdditions(
+        JSON.stringify({
+          " Rock Island ": ` ${ROCK_ISLAND_PERMIT_TABLE_URL} `,
+        }),
+      ),
+    ).toEqual({ "rock-island": ROCK_ISLAND_PERMIT_TABLE_URL });
+    expect(() =>
+      parsePermitQueryTableMapAdditions(
+        JSON.stringify({ "rock-island": "/private/local.parquet" }),
+      ),
+    ).toThrow("absolute HTTP(S) URL");
+  });
+
+  it("preserves Santa Clara while adding Rock Island", () => {
+    const savedBase = process.env.PERMIT_QUERY_TABLE_MAP;
+    const savedAdditions = process.env.PERMIT_QUERY_TABLE_MAP_ADDITIONS;
+    process.env.PERMIT_QUERY_TABLE_MAP = JSON.stringify({
+      "santa-clara": "https://example.com/santa-clara.parquet",
+    });
+    process.env.PERMIT_QUERY_TABLE_MAP_ADDITIONS = JSON.stringify({
+      "rock-island": ROCK_ISLAND_PERMIT_TABLE_URL,
+    });
+
+    try {
+      expect(resolvePermitTableLocation("Santa Clara")).toEqual({
+        served: true,
+        location: "https://example.com/santa-clara.parquet",
+        countyKey: "santa-clara",
+      });
+      expect(resolvePermitTableLocation("Rock Island")).toEqual({
+        served: true,
+        location: ROCK_ISLAND_PERMIT_TABLE_URL,
+        countyKey: "rock-island",
+      });
+    } finally {
+      if (savedBase === undefined) delete process.env.PERMIT_QUERY_TABLE_MAP;
+      else process.env.PERMIT_QUERY_TABLE_MAP = savedBase;
+      if (savedAdditions === undefined) {
+        delete process.env.PERMIT_QUERY_TABLE_MAP_ADDITIONS;
+      } else {
+        process.env.PERMIT_QUERY_TABLE_MAP_ADDITIONS = savedAdditions;
+      }
+    }
+  });
+
+  it("allows only the permits view and its CTEs", () => {
+    expect(
+      validateSelectQueryForView(
+        "WITH issued AS (SELECT * FROM permits) SELECT count(*) FROM issued",
+        "permits",
+      ),
+    ).toMatchObject({ ok: true });
+    expect(
+      validateSelectQueryForView(
+        "SELECT * FROM read_parquet('https://example.com/private.parquet')",
+        "permits",
+      ),
+    ).toMatchObject({ ok: false });
+    expect(
+      validateSelectQueryForView("SELECT * FROM duckdb_tables", "permits"),
+    ).toMatchObject({ ok: false });
+  });
+});
+
 describe("resolveQueryTableLocation", () => {
   const ENV_KEYS = [
     "PROPERTY_QUERY_TABLE",
     "PROPERTY_QUERY_TABLE_MAP",
+    "PROPERTY_QUERY_TABLE_MAP_ADDITIONS",
+    "PROPERTY_QUERY_TABLE_CID_FALLBACK_MAP_ADDITIONS",
+    "PERMIT_QUERY_TABLE_CID_FALLBACK_MAP_ADDITIONS",
     "PROPERTY_QUERY_TABLE_DEFAULT_COUNTY",
   ];
   const saved: Record<string, string | undefined> = {};
@@ -104,6 +237,7 @@ describe("resolveQueryTableLocation", () => {
       else process.env[key] = saved[key];
       delete saved[key];
     }
+    vi.restoreAllMocks();
   });
 
   function setEnv(env: Record<string, string | undefined>) {
@@ -127,17 +261,142 @@ describe("resolveQueryTableLocation", () => {
     expect(res.location).toBeNull();
   });
 
-  it("resolves a mapped county to its own location", () => {
+  it("adds Rock Island while preserving mapped counties and the default", () => {
     setEnv({
       PROPERTY_QUERY_TABLE_MAP: JSON.stringify({
         lee: "/lee.parquet",
         "palm-beach": "https://gw/pb.parquet",
       }),
+      PROPERTY_QUERY_TABLE_MAP_ADDITIONS: JSON.stringify({
+        "rock-island": ROCK_ISLAND_QUERY_TABLE_URL,
+      }),
+      PROPERTY_QUERY_TABLE_DEFAULT_COUNTY: "lee",
+    });
+    expect(resolveQueryTableLocation("Lee")).toEqual({
+      served: true,
+      location: "/lee.parquet",
+      countyKey: "lee",
     });
     expect(resolveQueryTableLocation("Palm Beach")).toMatchObject({
       served: true,
       location: "https://gw/pb.parquet",
     });
+    expect(resolveQueryTableLocation("Rock Island")).toEqual({
+      served: true,
+      location: ROCK_ISLAND_QUERY_TABLE_URL,
+      countyKey: "rock-island",
+    });
+    expect(resolveQueryTableLocation(undefined)).toEqual({
+      served: true,
+      location: "/lee.parquet",
+      countyKey: "lee",
+    });
+  });
+
+  it("validates stable IPNS then selects the reviewed immutable query CID", async () => {
+    setEnv({
+      PROPERTY_QUERY_TABLE_CID_FALLBACK_MAP_ADDITIONS: JSON.stringify({
+        "rock-island": ROCK_ISLAND_QUERY_TABLE_CID,
+      }),
+    });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      headers: new Headers({
+        "x-ipfs-roots": ROCK_ISLAND_QUERY_TABLE_CID,
+      }),
+    } as Response);
+
+    await expect(
+      resolvePropertyQueryRuntimeLocation(
+        ROCK_ISLAND_QUERY_TABLE_URL,
+        "rock-island",
+      ),
+    ).resolves.toBe(
+      `https://ipfs.filebase.io/ipfs/${ROCK_ISLAND_QUERY_TABLE_CID}`,
+    );
+    expect(
+      await resolvePropertyQueryRuntimeLocation(
+        "https://example.com/lee.parquet",
+        "lee",
+      ),
+    ).toBe("https://example.com/lee.parquet");
+  });
+
+  it("keeps permit IPNS primary while selecting its reviewed CID fallback", async () => {
+    setEnv({
+      PERMIT_QUERY_TABLE_CID_FALLBACK_MAP_ADDITIONS: JSON.stringify({
+        "rock-island": ROCK_ISLAND_PERMIT_TABLE_CID,
+      }),
+    });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      headers: new Headers({
+        "x-ipfs-roots": "QmStalePermitCid",
+      }),
+    } as Response);
+
+    await expect(
+      resolvePermitQueryRuntimeLocation(
+        ROCK_ISLAND_PERMIT_TABLE_URL,
+        "rock-island",
+      ),
+    ).resolves.toBe(
+      `https://ipfs.filebase.io/ipfs/${ROCK_ISLAND_PERMIT_TABLE_CID}`,
+    );
+    expect(
+      await resolvePermitQueryRuntimeLocation(
+        "https://example.com/santa-clara.parquet",
+        "santa-clara",
+      ),
+    ).toBe("https://example.com/santa-clara.parquet");
+  });
+
+  it("accepts a same-value duplicate addition idempotently", () => {
+    setEnv({
+      PROPERTY_QUERY_TABLE_MAP: JSON.stringify({
+        "rock-island": ROCK_ISLAND_QUERY_TABLE_URL,
+      }),
+      PROPERTY_QUERY_TABLE_MAP_ADDITIONS: JSON.stringify({
+        "rock-island": ROCK_ISLAND_QUERY_TABLE_URL,
+      }),
+    });
+
+    expect(resolveQueryTableLocation("rock-island")).toEqual({
+      served: true,
+      location: ROCK_ISLAND_QUERY_TABLE_URL,
+      countyKey: "rock-island",
+    });
+  });
+
+  it("fails closed when an addition conflicts with the base map", () => {
+    setEnv({
+      PROPERTY_QUERY_TABLE_MAP: JSON.stringify({
+        "rock-island": "https://example.com/original.parquet",
+      }),
+      PROPERTY_QUERY_TABLE_MAP_ADDITIONS: JSON.stringify({
+        "rock-island": ROCK_ISLAND_QUERY_TABLE_URL,
+      }),
+    });
+
+    expect(() => resolveQueryTableLocation("rock-island")).toThrow(
+      "PROPERTY_QUERY_TABLE_MAP_ADDITIONS conflicts with PROPERTY_QUERY_TABLE_MAP for county 'rock-island'",
+    );
+  });
+
+  it("preserves base behavior when additions are absent", () => {
+    setEnv({
+      PROPERTY_QUERY_TABLE_MAP: JSON.stringify({
+        lee: "/lee.parquet",
+        "palm-beach": "https://gw/pb.parquet",
+      }),
+      PROPERTY_QUERY_TABLE_DEFAULT_COUNTY: "lee",
+    });
+
+    expect(resolveQueryTableLocation("lee").location).toBe("/lee.parquet");
+    expect(resolveQueryTableLocation("palm-beach").location).toBe(
+      "https://gw/pb.parquet",
+    );
+    expect(resolveQueryTableLocation(undefined).countyKey).toBe("lee");
   });
 
   it("does not serve an unmapped county when a map is configured", () => {
@@ -163,6 +422,131 @@ describe("resolveQueryTableLocation", () => {
 });
 
 /**
+ * Build a minimal DuckDB instance/connection double for connection lifecycle
+ * tests. The production code sees the real API shape while tests retain access
+ * to each call for county/location assertions.
+ *
+ * @param columnName - Column name returned from DESCRIBE.
+ * @returns DuckDB instance double plus its observable methods.
+ */
+function createDuckDbDouble(columnName: string) {
+  const reader = {
+    getRowObjectsJson: vi.fn().mockReturnValue([
+      {
+        column_name: columnName,
+        column_type: "VARCHAR",
+      },
+    ]),
+  };
+  const connection = {
+    run: vi.fn().mockResolvedValue(undefined),
+    runAndReadAll: vi.fn().mockResolvedValue(reader),
+  };
+  const instance = {
+    connect: vi.fn().mockResolvedValue(connection),
+  };
+  return { instance, connection };
+}
+
+describe("lazy county-scoped DuckDB initialization", () => {
+  const LEE_URL = "https://example.com/lee.parquet";
+  const ROCK_URL = "https://example.com/rock-island.parquet";
+  type DuckDbInstance = Awaited<ReturnType<typeof DuckDBInstance.create>>;
+
+  afterEach(() => {
+    clearPropertyQueryConnections();
+    delete process.env.PROPERTY_QUERY_TABLE;
+    delete process.env.PROPERTY_QUERY_TABLE_MAP;
+    delete process.env.PROPERTY_QUERY_TABLE_MAP_ADDITIONS;
+    delete process.env.PROPERTY_QUERY_TABLE_DEFAULT_COUNTY;
+    vi.restoreAllMocks();
+  });
+
+  it("opens only the requested county and leaves other map entries cold", async () => {
+    process.env.PROPERTY_QUERY_TABLE_MAP = JSON.stringify({
+      lee: LEE_URL,
+      "rock-island": ROCK_URL,
+    });
+    const rock = createDuckDbDouble("rock_column");
+    const createSpy = vi
+      .spyOn(DuckDBInstance, "create")
+      .mockResolvedValue(rock.instance as unknown as DuckDbInstance);
+
+    const columns = await getPropertyColumns("Rock Island");
+
+    expect(columns).toEqual([{ name: "rock_column", type: "VARCHAR" }]);
+    expect(createSpy).toHaveBeenCalledTimes(1);
+    expect(
+      rock.connection.run.mock.calls.some(([sql]) =>
+        String(sql).includes(`read_parquet('${ROCK_URL}')`),
+      ),
+    ).toBe(true);
+    expect(
+      rock.connection.run.mock.calls.some(([sql]) =>
+        String(sql).includes(LEE_URL),
+      ),
+    ).toBe(false);
+  });
+
+  it("shares one pending initialization across concurrent first calls", async () => {
+    process.env.PROPERTY_QUERY_TABLE_MAP = JSON.stringify({
+      "rock-island": ROCK_URL,
+    });
+    const rock = createDuckDbDouble("rock_column");
+    let resolveCreate: ((instance: DuckDbInstance) => void) | undefined;
+    const pendingCreate = new Promise<DuckDbInstance>((resolve) => {
+      resolveCreate = resolve;
+    });
+    const createSpy = vi
+      .spyOn(DuckDBInstance, "create")
+      .mockReturnValue(pendingCreate);
+
+    const first = getPropertyColumns("Rock Island");
+    const second = getPropertyColumns("Rock Island");
+    await Promise.resolve();
+
+    expect(createSpy).toHaveBeenCalledTimes(1);
+    resolveCreate?.(rock.instance as unknown as DuckDbInstance);
+    const [firstColumns, secondColumns] = await Promise.all([first, second]);
+
+    expect(firstColumns).toEqual(secondColumns);
+    expect(createSpy).toHaveBeenCalledTimes(1);
+    expect(rock.instance.connect).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries a failed county without evicting another county connection", async () => {
+    process.env.PROPERTY_QUERY_TABLE_MAP = JSON.stringify({
+      lee: LEE_URL,
+      "rock-island": ROCK_URL,
+    });
+    const lee = createDuckDbDouble("lee_column");
+    const rock = createDuckDbDouble("rock_column");
+    const createSpy = vi
+      .spyOn(DuckDBInstance, "create")
+      .mockRejectedValueOnce(new Error("temporary Rock Island open failure"))
+      .mockResolvedValueOnce(lee.instance as unknown as DuckDbInstance)
+      .mockResolvedValueOnce(rock.instance as unknown as DuckDbInstance);
+
+    await expect(getPropertyColumns("Rock Island")).rejects.toThrow(
+      "temporary Rock Island open failure",
+    );
+    await expect(getPropertyColumns("Lee")).resolves.toEqual([
+      { name: "lee_column", type: "VARCHAR" },
+    ]);
+    await expect(getPropertyColumns("Rock Island")).resolves.toEqual([
+      { name: "rock_column", type: "VARCHAR" },
+    ]);
+    await expect(getPropertyColumns("Lee")).resolves.toEqual([
+      { name: "lee_column", type: "VARCHAR" },
+    ]);
+
+    expect(createSpy).toHaveBeenCalledTimes(3);
+    expect(lee.instance.connect).toHaveBeenCalledTimes(1);
+    expect(rock.instance.connect).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
  * Regression test for the serverless empty-HOME bug: opening an HTTP(S) query
  * table runs `INSTALL httpfs`, which writes under DuckDB's home directory. On
  * Vercel Functions HOME is empty, so INSTALL failed with "Can't find the home
@@ -175,6 +559,7 @@ describe("runPropertyQuery over an HTTP query table with empty HOME", () => {
   const SAVED_ENV = [
     "HOME",
     "PROPERTY_QUERY_TABLE_MAP",
+    "PROPERTY_QUERY_TABLE_MAP_ADDITIONS",
     "PROPERTY_QUERY_TABLE",
     "PROPERTY_QUERY_TABLE_DEFAULT_COUNTY",
     "DUCKDB_HOME_DIRECTORY",
@@ -262,6 +647,7 @@ describe("runPropertyQuery over an HTTP query table with empty HOME", () => {
     process.env.HOME = "";
     delete process.env.DUCKDB_HOME_DIRECTORY;
     delete process.env.PROPERTY_QUERY_TABLE;
+    delete process.env.PROPERTY_QUERY_TABLE_MAP_ADDITIONS;
     delete process.env.PROPERTY_QUERY_TABLE_DEFAULT_COUNTY;
     process.env.PROPERTY_QUERY_TABLE_MAP = JSON.stringify({
       test: `http://127.0.0.1:${port}/x.parquet`,

@@ -1,0 +1,66 @@
+{
+  "schemaVersion": "1.0",
+  "generatedAt": "2026-08-14T22:34:30.000Z",
+  "counties": [
+    {
+      "countyKey": "lee",
+      "countyName": "Lee",
+      "stateCode": "FL",
+      "countyFips": "12071",
+      "status": "published",
+      "queryTableUrl": "https://ipfs.filebase.io/ipns/k51qzi5uqu5djd4ohcf3qm87dhlt0e270xw8ejhkyia62edr76uj0u05hrf7m5",
+      "datasetCoverageUrl": "https://k51qzi5uqu5dimw0elyh4agbtqe7v2fzp0jcd7b1bcu8kxs0hml7yu1no0z0vd.ipns.dweb.link/",
+      "permitQueryTableUrl": null,
+      "placesTableUrl": "https://ipfs.filebase.io/ipns/k51qzi5uqu5djfa3kbhcxedqlh7kiuyi22bd60he1nsa0wr2jrseo6vvxvwke5/lee/places-table.parquet",
+      "updatedAt": "2026-08-13T03:59:11.000Z"
+    },
+    {
+      "countyKey": "miami-dade",
+      "countyName": "Miami-Dade",
+      "stateCode": "FL",
+      "countyFips": "12086",
+      "status": "published",
+      "queryTableUrl": "https://ipfs.filebase.io/ipns/k51qzi5uqu5dgqktver4htb060qxfnaytjhybcxlfkp22vtgygbx2lb4t1h1xs",
+      "datasetCoverageUrl": "https://k51qzi5uqu5djj45hvhz6z2dnsdg6pkgucds99t0f78d5gmwu19bfv8o9tygno.ipns.dweb.link/",
+      "permitQueryTableUrl": null,
+      "placesTableUrl": null,
+      "updatedAt": "2026-07-07T09:58:45.095Z"
+    },
+    {
+      "countyKey": "orange",
+      "countyName": "Orange",
+      "stateCode": "FL",
+      "countyFips": "12095",
+      "status": "published",
+      "queryTableUrl": "https://ipfs.filebase.io/ipns/k51qzi5uqu5dhgte20ho86rzg5b7h0ght3a2js5wz0t55i96aaf1d12wpl8efn",
+      "datasetCoverageUrl": "https://k51qzi5uqu5dj8n2f8nowh8kts53rvpr62zfj0mz9izc11rfzv56q7m4161lg7.ipns.dweb.link/",
+      "permitQueryTableUrl": null,
+      "placesTableUrl": null,
+      "updatedAt": "2026-07-06T16:28:01.347Z"
+    },
+    {
+      "countyKey": "palm-beach",
+      "countyName": "Palm Beach",
+      "stateCode": "FL",
+      "countyFips": "12099",
+      "status": "published",
+      "queryTableUrl": "https://ipfs.filebase.io/ipns/k51qzi5uqu5dlu7hx158su5palzzxdbl6zcm8ojh7645bxisxs0cf0s158h6h3",
+      "datasetCoverageUrl": "https://k51qzi5uqu5djwga4mcd8nx1gbwy4o9rks3gkoe1u5py5wi9tieea7h44nh4g2.ipns.dweb.link/",
+      "permitQueryTableUrl": null,
+      "placesTableUrl": null,
+      "updatedAt": "2026-07-02T14:21:44.544Z"
+    },
+    {
+      "countyKey": "rock-island",
+      "countyName": "Rock Island",
+      "stateCode": "IL",
+      "countyFips": "17161",
+      "status": "published",
+      "queryTableUrl": "https://ipfs.filebase.io/ipns/k51qzi5uqu5djbtswq6lb4p7xbf3nu8bzdzokdtcdld1r2vx6asn7lgfuk54wt",
+      "datasetCoverageUrl": "https://k51qzi5uqu5disduz18ogkvf3f2zgdsizl20o034fu8spgh2khri8uxmeo3khv.ipns.dweb.link/",
+      "permitQueryTableUrl": "https://ipfs.filebase.io/ipns/k51qzi5uqu5di42nblo5nuk94aj7af393d9y5vhqxp5dtxikzso0wt14v3p0wa",
+      "placesTableUrl": null,
+      "updatedAt": "2026-08-14T22:34:30.000Z"
+    }
+  ]
+}

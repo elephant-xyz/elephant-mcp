@@ -8,13 +8,9 @@ import {
   getIndexCid,
   getOpenDataIpnsName,
 } from "../lib/oracleManifest.ts";
-import {
-  isCountyServedByQueryTable,
-  runInternalPropertyQuery,
-  PROPERTIES_VIEW,
-} from "../lib/duckdbQuery.ts";
 import { getDatasetCoverageEntries } from "../lib/datasetCoverage.ts";
-import type { Json } from "@duckdb/node-api";
+import { normalizeCountyKey } from "../lib/countyIpnsRegistry.ts";
+import { CORPORATE_SCOPE_NOTE } from "../lib/corporateManifest.ts";
 import type {
   SlimPropertyEntry,
   ListOraclePropertiesResult,
@@ -24,121 +20,21 @@ import type {
 const MAX_LIMIT = 500;
 const DEFAULT_LIMIT = 50;
 
-/** Coerce a DuckDB Json scalar to a finite number, or null. */
-function toNumberOrNull(value: Json | undefined): number | null {
-  if (value === null || value === undefined) {
-    return null;
-  }
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
-}
-
-/** Coerce a DuckDB Json scalar to a non-empty string, or null. */
-function toStringOrNull(value: Json | undefined): string | null {
-  if (value === null || value === undefined) {
-    return null;
-  }
-  const s = String(value).trim();
-  return s.length > 0 ? s : null;
-}
-
-/** Join the situs address parts into a single display string, or null. */
-function formatAddress(
-  street: Json | undefined,
-  city: Json | undefined,
-  zip: Json | undefined,
-): string | null {
-  const parts = [street, city, zip]
-    .map((part) => toStringOrNull(part))
-    .filter((part): part is string => part !== null);
-  return parts.length > 0 ? parts.join(", ") : null;
-}
-
-type PropertyLookupKey =
-  | { readonly parcelIdentifier: string }
-  | { readonly propertyId: string };
-
-type CidResolution =
-  | { readonly cid: string; readonly error?: undefined }
-  | { readonly cid?: undefined; readonly error: string };
-
 /**
- * Resolve a property's IPFS CID from the per-county query table. Only the CID
- * lookup moves off the sharded index — the full consolidated record is still
- * fetched from the pinned property file on IPFS by the caller.
+ * Compare a published county label/slug with a caller-provided county value
+ * using the same normalization as all county environment maps.
+ *
+ * @param publishedCounty - County value stored in an index or manifest.
+ * @param requestedCounty - County value supplied by the tool caller.
+ * @returns Whether both values identify the same normalized county.
  */
-async function resolvePropertyCidFromQueryTable(
-  county: string | undefined,
-  key: PropertyLookupKey,
-): Promise<CidResolution> {
-  const isParcel = "parcelIdentifier" in key;
-  const value = isParcel ? key.parcelIdentifier : key.propertyId;
-  const column = isParcel ? "parcel_identifier" : "property_id";
-  const label = isParcel
-    ? `parcelIdentifier '${value}'`
-    : `propertyId '${value}'`;
-
-  const rows = await runInternalPropertyQuery(
-    county,
-    `SELECT property_cid FROM ${PROPERTIES_VIEW} WHERE ${column} = $1 LIMIT 1`,
-    [value],
+function countyKeysMatch(
+  publishedCounty: string,
+  requestedCounty: string,
+): boolean {
+  return (
+    normalizeCountyKey(publishedCounty) === normalizeCountyKey(requestedCounty)
   );
-
-  if (rows.length === 0) {
-    return { error: `Property with ${label} not found in the query table.` };
-  }
-
-  const cid = toStringOrNull(rows[0]?.property_cid);
-  if (cid === null) {
-    return {
-      error: `Property with ${label} has no property_cid in the query table.`,
-    };
-  }
-  return { cid };
-}
-
-/**
- * Paginated listing served from the per-county query table. Keeps the legacy
- * slim fields (propertyId, parcelIdentifier, cid, county) and adds address,
- * marketValue and ownerName now that they are cheaply available.
- */
-async function listOraclePropertiesFromQueryTable(
-  county: string | undefined,
-  limit: number,
-  offset: number,
-): Promise<ListOraclePropertiesResult> {
-  const countRows = await runInternalPropertyQuery(
-    county,
-    `SELECT count(*) AS c FROM ${PROPERTIES_VIEW}`,
-  );
-  const total = toNumberOrNull(countRows[0]?.c) ?? 0;
-
-  const rows = await runInternalPropertyQuery(
-    county,
-    `SELECT property_id, parcel_identifier, property_cid, county_name,
-            address_street, address_city, address_zip, market_value, owner_name
-     FROM ${PROPERTIES_VIEW}
-     ORDER BY parcel_identifier
-     LIMIT $1 OFFSET $2`,
-    [limit, offset],
-  );
-
-  const properties: SlimPropertyEntry[] = rows.map((row) => ({
-    propertyId: toStringOrNull(row.property_id) ?? "",
-    parcelIdentifier: toStringOrNull(row.parcel_identifier) ?? "",
-    cid: toStringOrNull(row.property_cid),
-    county: toStringOrNull(row.county_name) ?? county ?? "",
-    fileSizeBytes: null,
-    address: formatAddress(
-      row.address_street,
-      row.address_city,
-      row.address_zip,
-    ),
-    marketValue: toNumberOrNull(row.market_value),
-    ownerName: toStringOrNull(row.owner_name),
-  }));
-
-  return { total, offset, limit, properties };
 }
 
 /**
@@ -232,24 +128,14 @@ export async function listOraclePropertiesHandler(args: {
     const limit = Math.min(args.limit ?? DEFAULT_LIMIT, MAX_LIMIT);
     const offset = args.offset ?? 0;
 
-    // Query-table PRIMARY path: paginate straight from the per-county Parquet.
-    if (isCountyServedByQueryTable(args.county)) {
-      const result = await listOraclePropertiesFromQueryTable(
-        args.county,
-        limit,
-        offset,
-      );
-      return createTextResult(result);
-    }
-
-    // Try sharded index first — resolved from the requested county's IPNS.
+    // Open-data tools stay independent from DuckDB. Try the county's sharded
+    // IPNS index first, then its legacy flat manifest.
     const index = await fetchOracleIndex(args.county);
 
     if (index !== null) {
       // County filter: the index covers exactly one county
       const countyMatches =
-        !args.county ||
-        index.county.toLowerCase() === args.county.toLowerCase();
+        !args.county || countyKeysMatch(index.county, args.county);
 
       const total = countyMatches ? index.propertyCount : 0;
 
@@ -312,8 +198,7 @@ export async function listOraclePropertiesHandler(args: {
     }
 
     const countyMatches =
-      !args.county ||
-      manifest.county.toLowerCase() === args.county.toLowerCase();
+      !args.county || countyKeysMatch(manifest.county, args.county);
 
     const filtered = countyMatches ? manifest.entries : [];
     const total = filtered.length;
@@ -384,19 +269,6 @@ export async function getOraclePropertyHandler(args: {
 
     if (hasCid) {
       resolvedCid = args.cid!;
-    } else if (isCountyServedByQueryTable(args.county)) {
-      // Query-table PRIMARY path: resolve the CID via SQL, then fetch the full
-      // consolidated record from IPFS by CID (unchanged below).
-      const resolution = await resolvePropertyCidFromQueryTable(
-        args.county,
-        hasParcelIdentifier
-          ? { parcelIdentifier: args.parcelIdentifier! }
-          : { propertyId: args.propertyId! },
-      );
-      if (resolution.error !== undefined) {
-        return createTextResult({ error: resolution.error });
-      }
-      resolvedCid = resolution.cid;
     } else {
       // Try sharded index first — resolved from the requested county's IPNS.
       const index = await fetchOracleIndex(args.county);
@@ -404,10 +276,7 @@ export async function getOraclePropertyHandler(args: {
       if (index !== null) {
         // In legacy single-IPNS mode the index is served for any requested
         // county; guard against returning a parcel from a different dataset.
-        if (
-          args.county &&
-          index.county.toLowerCase() !== args.county.toLowerCase()
-        ) {
+        if (args.county && !countyKeysMatch(index.county, args.county)) {
           const lookupKey = hasParcelIdentifier
             ? `parcelIdentifier '${args.parcelIdentifier}'`
             : `propertyId '${args.propertyId}'`;
@@ -483,10 +352,7 @@ export async function getOraclePropertyHandler(args: {
 
         // Legacy single-IPNS mode serves one manifest for any county; guard
         // against returning a parcel from a different dataset.
-        if (
-          args.county &&
-          manifest.county.toLowerCase() !== args.county.toLowerCase()
-        ) {
+        if (args.county && !countyKeysMatch(manifest.county, args.county)) {
           const lookupKey = hasParcelIdentifier
             ? `parcelIdentifier '${args.parcelIdentifier}'`
             : `propertyId '${args.propertyId}'`;
@@ -533,39 +399,22 @@ export async function getOraclePropertyHandler(args: {
 
 /**
  * Build the base (single-dataset) portion of the dataset-info response from the
- * query-table / sharded-index / flat-manifest paths. Coverage datasets are
- * merged on top by the handler. Returns null when the county is not served by
- * any property dataset (it may still have per-source coverage).
+ * sharded-index / flat-manifest paths. Coverage datasets are merged on top by
+ * the handler. This intentionally never opens DuckDB: dataset metadata belongs
+ * to the open-data path, while query-table initialization remains query-tool
+ * only. Returns null when the county is not served by any open property dataset
+ * (it may still have per-source coverage).
  */
 async function buildBaseDatasetInfo(
   county: string | undefined,
 ): Promise<Record<string, unknown> | null> {
-  // Query-table PRIMARY path: report county + live row count from the Parquet
-  // so the tool no longer returns the stale pilot manifest count.
-  if (isCountyServedByQueryTable(county)) {
-    const rows = await runInternalPropertyQuery(
-      county,
-      `SELECT count(*) AS c, any_value(county_name) AS county,
-              any_value(state_code) AS state FROM ${PROPERTIES_VIEW}`,
-    );
-    const row = rows[0] ?? {};
-    return {
-      county: toStringOrNull(row.county) ?? county ?? null,
-      stateCode: toStringOrNull(row.state),
-      propertyCount: toNumberOrNull(row.c) ?? 0,
-      source: "query-table",
-      exportedAt: null,
-      ipnsName: getOpenDataIpnsName(county) ?? null,
-    };
-  }
-
   // Try sharded index first — resolved from the requested county's IPNS.
   const index = await fetchOracleIndex(county);
 
   if (index !== null) {
     // Legacy single-IPNS mode serves one dataset for any county; guard
     // against reporting a different dataset's metadata.
-    if (county && index.county.toLowerCase() !== county.toLowerCase()) {
+    if (county && !countyKeysMatch(index.county, county)) {
       return null;
     }
 
@@ -592,7 +441,7 @@ async function buildBaseDatasetInfo(
 
   // Legacy single-IPNS mode serves one manifest for any county; guard
   // against reporting a different dataset's metadata.
-  if (county && manifest.county.toLowerCase() !== county.toLowerCase()) {
+  if (county && !countyKeysMatch(manifest.county, county)) {
     return null;
   }
 
@@ -612,7 +461,7 @@ export async function getOracleDatasetInfoHandler(
   args: { county?: string } = {},
 ) {
   try {
-    // Per-source coverage (appraisal, permits, sunbiz, bbb) is additive and
+    // Per-source coverage (appraisal, permits, corporate, bbb, etc.) is additive and
     // resolved independently of the property dataset, so a permits-only county
     // still reports coverage even without an appraisal query table.
     const [base, coverage] = await Promise.all([
@@ -638,6 +487,9 @@ export async function getOracleDatasetInfoHandler(
 
     if (coverage !== null && coverage.length > 0) {
       result.datasets = coverage;
+      if (coverage.some((entry) => entry.source === "corporate")) {
+        result.corporateScopeNote = CORPORATE_SCOPE_NOTE;
+      }
     }
 
     return createTextResult(result);

@@ -9,6 +9,10 @@ import {
   PERMITS_VIEW,
 } from "../lib/duckdbQuery.ts";
 import type { Json } from "@duckdb/node-api";
+import {
+  ROCK_ISLAND_PERMIT_SCOPE_NOTE,
+  isRockIslandPermitCounty,
+} from "../lib/rockIslandPermit.ts";
 
 /**
  * `queryPermits` / `getPermitQuerySchema` / `getPermitCoverage` — the general
@@ -26,6 +30,14 @@ import type { Json } from "@duckdb/node-api";
  * the schema tool can annotate whatever columns DESCRIBE reports for a county.
  */
 const COLUMN_DESCRIPTIONS: Record<string, string> = {
+  permit_key:
+    "Stable key derived only from the approved public source and permit number.",
+  source_report_document_id:
+    "Public City of Rock Island monthly report document identifier.",
+  source_report_title:
+    "Public title of the City of Rock Island issued-permit monthly report.",
+  source_report_url:
+    "Public URL of the City of Rock Island issued-permit monthly report.",
   property_improvement_id: "Stable permit UUID (one per building permit).",
   property_id:
     "UUID of the property this permit is matched to (NULL if unmatched).",
@@ -49,6 +61,11 @@ const COLUMN_DESCRIPTIONS: Record<string, string> = {
   description: "Free-text permit description.",
   estimated_job_value: "Estimated job/construction value (numeric).",
   fee: "Permit fee amount (numeric).",
+  record_status: "Status printed in the source issued-permit report.",
+  record_type: "Permit type printed in the source issued-permit report.",
+  city: "Issuing city label; this does not imply countywide coverage.",
+  is_roof_permit:
+    "Reviewed boolean classification indicating a roof-related permit type.",
 };
 
 const NULLABILITY_NOTE =
@@ -68,9 +85,22 @@ const COVERAGE_NOTE =
 
 const SAFETY_NOTE =
   "Read-only: pass a single SELECT statement (a leading WITH/CTE is allowed). " +
-  "Multiple statements and any mutating or file/extension keyword " +
-  "(INSERT/UPDATE/DELETE/COPY/ATTACH/INSTALL/LOAD/PRAGMA/CALL/SET …) are rejected. " +
+  "Only the 'permits' view and CTEs derived from it may be queried. Multiple " +
+  "statements, external table/file functions, other relations, and any mutating " +
+  "or file/extension keyword (INSERT/UPDATE/DELETE/COPY/ATTACH/INSTALL/LOAD/PRAGMA/CALL/SET …) are rejected. " +
   `Results are always capped at ${MAX_ROW_LIMIT} rows.`;
+
+/**
+ * Return the required Rock Island scope qualification when applicable.
+ *
+ * @param county - User-provided county name.
+ * @returns Explicit source limitation for Rock Island, otherwise undefined.
+ */
+function getPermitScopeNote(county: string): string | undefined {
+  return isRockIslandPermitCounty(county)
+    ? ROCK_ISLAND_PERMIT_SCOPE_NOTE
+    : undefined;
+}
 
 export async function queryPermitsHandler(args: {
   county: string;
@@ -80,7 +110,10 @@ export async function queryPermitsHandler(args: {
   try {
     const limit = args.limit ?? DEFAULT_ROW_LIMIT;
     const result = await runPermitQuery(args.county, args.sql, limit);
-    return createTextResult(result);
+    const scopeNote = getPermitScopeNote(args.county);
+    return createTextResult(
+      scopeNote === undefined ? result : { ...result, scopeNote },
+    );
   } catch (error) {
     logger.error(
       {
@@ -89,9 +122,11 @@ export async function queryPermitsHandler(args: {
       },
       "queryPermits failed",
     );
+    const scopeNote = getPermitScopeNote(args.county);
     return createTextResult({
       error: "Failed to run permit query",
       details: error instanceof Error ? error.message : String(error),
+      ...(scopeNote === undefined ? {} : { scopeNote }),
     });
   }
 }
@@ -99,6 +134,7 @@ export async function queryPermitsHandler(args: {
 export async function getPermitQuerySchemaHandler(args: { county: string }) {
   try {
     const columns = await getPermitColumns(args.county);
+    const scopeNote = getPermitScopeNote(args.county);
     return createTextResult({
       county: args.county,
       view: PERMITS_VIEW,
@@ -108,8 +144,12 @@ export async function getPermitQuerySchemaHandler(args: { county: string }) {
         type: column.type,
         description: COLUMN_DESCRIPTIONS[column.name] ?? null,
       })),
-      nullabilityNote: NULLABILITY_NOTE,
+      nullabilityNote:
+        scopeNote === undefined
+          ? NULLABILITY_NOTE
+          : "The published Rock Island permit fields are required in the source contract; no address, parcel, description, contractor, valuation, contact, or property-link columns are published.",
       safetyNote: SAFETY_NOTE,
+      ...(scopeNote === undefined ? {} : { scopeNote }),
     });
   } catch (error) {
     logger.error(
@@ -119,9 +159,11 @@ export async function getPermitQuerySchemaHandler(args: { county: string }) {
       },
       "getPermitQuerySchema failed",
     );
+    const scopeNote = getPermitScopeNote(args.county);
     return createTextResult({
       error: "Failed to fetch permit query schema",
       details: error instanceof Error ? error.message : String(error),
+      ...(scopeNote === undefined ? {} : { scopeNote }),
     });
   }
 }
@@ -156,12 +198,15 @@ function toIsoOrNull(value: Json): string | null {
  */
 export async function getPermitCoverageHandler(args: { county: string }) {
   try {
+    const scopeNote = getPermitScopeNote(args.county);
+    const coverageDateColumn =
+      scopeNote === undefined ? "completion_date" : "permit_issue_date";
     const rows = (await runInternalPermitQuery(
       args.county,
       `SELECT source_system,
               count(*) AS permit_count,
-              min(completion_date) AS earliest_date,
-              max(completion_date) AS latest_date
+              min(${coverageDateColumn}) AS earliest_date,
+              max(${coverageDateColumn}) AS latest_date
        FROM ${PERMITS_VIEW}
        GROUP BY source_system
        ORDER BY permit_count DESC`,
@@ -181,7 +226,11 @@ export async function getPermitCoverageHandler(args: { county: string }) {
       view: PERMITS_VIEW,
       sources,
       totalPermits,
-      coverageNote: COVERAGE_NOTE,
+      coverageNote:
+        scopeNote === undefined
+          ? COVERAGE_NOTE
+          : "The earliest/latest values are permit issue dates from the currently published City of Rock Island monthly issued-permit reports.",
+      ...(scopeNote === undefined ? {} : { scopeNote }),
     });
   } catch (error) {
     logger.error(
@@ -191,9 +240,11 @@ export async function getPermitCoverageHandler(args: { county: string }) {
       },
       "getPermitCoverage failed",
     );
+    const scopeNote = getPermitScopeNote(args.county);
     return createTextResult({
       error: "Failed to fetch permit coverage",
       details: error instanceof Error ? error.message : String(error),
+      ...(scopeNote === undefined ? {} : { scopeNote }),
     });
   }
 }
