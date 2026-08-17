@@ -8,6 +8,17 @@ import {
   type OracleDatasetCoverageSnapshot,
   type OracleDatasetInfoCoverageEntry,
 } from "../types/oracleOpenData.ts";
+import { CORPORATE_SCOPE_NOTE } from "./corporateManifest.ts";
+import {
+  ROCK_ISLAND_PERMIT_COUNTY_KEY,
+  ROCK_ISLAND_PERMIT_SCOPE_NOTE,
+} from "./rockIslandPermit.ts";
+import {
+  extractIpnsName,
+  filebaseCidUrl,
+  parseCountyCidFallbackMap,
+} from "./cidFallback.ts";
+import { resolveIpnsToCid } from "./oracleManifest.ts";
 
 /**
  * Per-source dataset coverage reader.
@@ -20,6 +31,7 @@ import {
  *
  *   Built-in defaults   – public Filebase/IPNS snapshots for published counties
  *   DATASET_COVERAGE_MAP  – JSON map {"lee":"<location>", ...}
+ *   DATASET_COVERAGE_MAP_ADDITIONS – strict highest-priority public URL additions
  *   DATASET_COVERAGE      – legacy single-county location (fallback)
  *   DATASET_COVERAGE_DEFAULT_COUNTY – county the single location serves
  *
@@ -30,6 +42,8 @@ import {
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const SNAPSHOT_TIMEOUT_MS = 12_000;
 const DEFAULT_CACHE_KEY = "__default__";
+const COVERAGE_CID_FALLBACK_MAP_ENV =
+  "DATASET_COVERAGE_CID_FALLBACK_MAP_ADDITIONS";
 
 export const DEFAULT_DATASET_COVERAGE_MAP: Readonly<Record<string, string>> = {
   lee: "https://k51qzi5uqu5dimw0elyh4agbtqe7v2fzp0jcd7b1bcu8kxs0hml7yu1no0z0vd.ipns.dweb.link/",
@@ -39,6 +53,8 @@ export const DEFAULT_DATASET_COVERAGE_MAP: Readonly<Record<string, string>> = {
     "https://k51qzi5uqu5dj8n2f8nowh8kts53rvpr62zfj0mz9izc11rfzv56q7m4161lg7.ipns.dweb.link/",
   "palm-beach":
     "https://k51qzi5uqu5djwga4mcd8nx1gbwy4o9rks3gkoe1u5py5wi9tieea7h44nh4g2.ipns.dweb.link/",
+  "rock-island":
+    "https://k51qzi5uqu5disduz18ogkvf3f2zgdsizl20o034fu8spgh2khri8uxmeo3khv.ipns.dweb.link/",
 };
 
 interface CoverageCacheEntry {
@@ -107,6 +123,115 @@ export function parseCoverageMap(
 }
 
 /**
+ * Parse a strict additive coverage map.
+ *
+ * This layer exists for deployments where the base coverage map must remain
+ * untouched or cannot be read back. It has explicit highest precedence, so a
+ * newly approved immutable snapshot can supersede one county's stale base URL
+ * without replacing or dropping any other configured county.
+ *
+ * @param raw - JSON object mapping county names to absolute HTTP(S) URLs.
+ * @returns Validated normalized county additions.
+ * @throws {Error} When the supplied JSON or any entry is invalid.
+ */
+export function parseCoverageMapAdditions(
+  raw: string | undefined,
+): Record<string, string> {
+  if (!raw || raw.trim() === "") {
+    return {};
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (error) {
+    throw new Error(
+      `DATASET_COVERAGE_MAP_ADDITIONS contains invalid JSON: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error("DATASET_COVERAGE_MAP_ADDITIONS must be a JSON object");
+  }
+
+  const additions: Record<string, string> = {};
+  for (const [county, rawLocation] of Object.entries(parsed)) {
+    const countyKey = normalizeCountyKey(county);
+    if (countyKey === "") {
+      throw new Error(
+        "DATASET_COVERAGE_MAP_ADDITIONS contains a blank county key",
+      );
+    }
+    if (typeof rawLocation !== "string" || rawLocation.trim() === "") {
+      throw new Error(
+        `DATASET_COVERAGE_MAP_ADDITIONS entry '${countyKey}' must be a non-empty string URL`,
+      );
+    }
+    const location = rawLocation.trim();
+    let url: URL;
+    try {
+      url = new URL(location);
+    } catch {
+      throw new Error(
+        `DATASET_COVERAGE_MAP_ADDITIONS entry '${countyKey}' must be an absolute HTTP(S) URL`,
+      );
+    }
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      throw new Error(
+        `DATASET_COVERAGE_MAP_ADDITIONS entry '${countyKey}' must use http: or https:`,
+      );
+    }
+    additions[countyKey] = location;
+  }
+  return additions;
+}
+
+/** Parse reviewed per-county coverage snapshot CID fallbacks. */
+export function parseCoverageCidFallbackMap(
+  raw: string | undefined,
+): Record<string, string> {
+  return parseCountyCidFallbackMap(raw, COVERAGE_CID_FALLBACK_MAP_ENV);
+}
+
+/**
+ * Resolve a stable coverage IPNS URL before selecting its reviewed immutable
+ * county fallback.
+ *
+ * @param location - Stable county coverage URL.
+ * @param countyKey - Normalized county key, or null in legacy single mode.
+ * @returns The original stable URL when no fallback is configured, otherwise
+ * the reviewed direct-CID URL after attempting IPNS resolution.
+ * @throws {Error} When a county fallback is paired with a non-IPNS base URL.
+ */
+export async function resolveCoverageRuntimeLocation(
+  location: string,
+  countyKey: string | null,
+): Promise<string> {
+  const expectedByCounty = parseCoverageCidFallbackMap(
+    process.env[COVERAGE_CID_FALLBACK_MAP_ENV],
+  );
+  const expectedCid =
+    countyKey === null ? undefined : expectedByCounty[countyKey];
+  if (expectedCid === undefined) return location;
+
+  const ipnsName = extractIpnsName(location);
+  if (ipnsName === null) {
+    throw new Error(
+      `${COVERAGE_CID_FALLBACK_MAP_ENV} requires the base route for '${countyKey}' to remain an IPNS URL`,
+    );
+  }
+  const resolvedCid = await resolveIpnsToCid(ipnsName);
+  if (resolvedCid !== expectedCid) {
+    logger.warn(
+      { county: countyKey, ipnsName, resolvedCid, fallbackCid: expectedCid },
+      "Coverage IPNS is stale or unavailable; using reviewed CID fallback",
+    );
+  }
+  return filebaseCidUrl(expectedCid);
+}
+
+/**
  * Resolve the coverage snapshot location for a county, mirroring
  * {@link import("./duckdbQuery.ts").resolveQueryTableLocation}.
  *
@@ -116,9 +241,13 @@ export function parseCoverageMap(
 export function resolveCoverageLocation(
   county: string | undefined,
 ): CoverageResolution {
-  const map = {
+  const baseMap = {
     ...DEFAULT_DATASET_COVERAGE_MAP,
     ...parseCoverageMap(process.env.DATASET_COVERAGE_MAP),
+  };
+  const map = {
+    ...baseMap,
+    ...parseCoverageMapAdditions(process.env.DATASET_COVERAGE_MAP_ADDITIONS),
   };
   const single = process.env.DATASET_COVERAGE?.trim() || null;
   const defaultCountyKey = process.env.DATASET_COVERAGE_DEFAULT_COUNTY
@@ -140,6 +269,20 @@ export function resolveCoverageLocation(
 
   const mapped = map[requestedKey];
   if (mapped !== undefined) {
+    const immutableFallbacks = parseCoverageCidFallbackMap(
+      process.env[COVERAGE_CID_FALLBACK_MAP_ENV],
+    );
+    const stableBase = baseMap[requestedKey];
+    if (
+      immutableFallbacks[requestedKey] !== undefined &&
+      stableBase !== undefined
+    ) {
+      return {
+        served: true,
+        location: stableBase,
+        countyKey: requestedKey,
+      };
+    }
     return { served: true, location: mapped, countyKey: requestedKey };
   }
 
@@ -218,7 +361,11 @@ export async function fetchDatasetCoverage(
 
   let snapshot: OracleDatasetCoverageSnapshot | null = null;
   try {
-    const raw = await readSnapshotJson(resolution.location);
+    const runtimeLocation = await resolveCoverageRuntimeLocation(
+      resolution.location,
+      resolution.countyKey,
+    );
+    const raw = await readSnapshotJson(runtimeLocation);
     if (raw !== null) {
       const parsed = OracleDatasetCoverageSnapshotSchema.safeParse(raw);
       if (parsed.success) {
@@ -232,18 +379,30 @@ export async function fetchDatasetCoverage(
         ) {
           logger.warn(
             {
-              location: resolution.location,
+              location: runtimeLocation,
               expectedCounty: resolution.countyKey,
               snapshotCounty: parsed.data.county,
             },
             "Coverage snapshot county mismatch — ignoring",
+          );
+        } else if (
+          parsed.data.datasets.some(
+            (row) => normalizeCountyKey(row.county) !== snapshotCountyKey,
+          )
+        ) {
+          logger.warn(
+            {
+              location: runtimeLocation,
+              snapshotCounty: parsed.data.county,
+            },
+            "Coverage snapshot contains a row for another county — ignoring",
           );
         } else {
           snapshot = parsed.data;
         }
       } else {
         logger.warn(
-          { location: resolution.location, error: parsed.error.message },
+          { location: runtimeLocation, error: parsed.error.message },
           "Coverage snapshot failed schema validation — ignoring",
         );
       }
@@ -294,7 +453,7 @@ export function computeCompletionPercent(
 export function toDatasetInfoCoverageEntry(
   row: OracleDatasetCoverageRow,
 ): OracleDatasetInfoCoverageEntry {
-  return {
+  const entry: OracleDatasetInfoCoverageEntry = {
     source: row.source,
     ingestedCount: row.ingested_count,
     expectedCount: row.expected_count ?? null,
@@ -307,6 +466,18 @@ export function toDatasetInfoCoverageEntry(
     cid: row.cid ?? null,
     ipnsLabel: row.ipns_label ?? null,
   };
+  const publishedScopeNote = row.scope_note ?? null;
+  if (publishedScopeNote !== null) {
+    entry.scopeNote = publishedScopeNote;
+  } else if (row.source === "corporate") {
+    entry.scopeNote = CORPORATE_SCOPE_NOTE;
+  } else if (
+    row.source === "permits" &&
+    normalizeCountyKey(row.county) === ROCK_ISLAND_PERMIT_COUNTY_KEY
+  ) {
+    entry.scopeNote = ROCK_ISLAND_PERMIT_SCOPE_NOTE;
+  }
+  return entry;
 }
 
 /**

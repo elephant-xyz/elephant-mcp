@@ -39,10 +39,13 @@ const getServer = () => {
 let serverRef: McpServer | undefined;
 
 async function main() {
-  logger.info("Starting MCP server with stdio transport", {
-    serverName: SERVER_NAME,
-    version: SERVER_VERSION,
-  });
+  logger.info(
+    {
+      serverName: SERVER_NAME,
+      version: SERVER_VERSION,
+    },
+    "Starting MCP server with stdio transport",
+  );
 
   // Verify embedding provider credentials at startup
   const embeddingProviderResult = await verifyEmbeddingProvider();
@@ -161,9 +164,12 @@ async function main() {
 }
 
 main().catch((error) => {
-  logger.error("Server startup error", {
-    error: error instanceof Error ? error.message : String(error),
-  });
+  logger.error(
+    {
+      error: error instanceof Error ? error.message : String(error),
+    },
+    "Server startup error",
+  );
   // Best-effort MCP logging of startup error if connected
   if (serverRef?.isConnected()) {
     void serverRef

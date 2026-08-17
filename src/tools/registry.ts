@@ -26,11 +26,16 @@ import {
   getPermitCoverageHandler,
 } from "./permitQuery.ts";
 import {
+  queryCorporationsHandler,
+  getCorporateQuerySchemaHandler,
+} from "./corporateQuery.ts";
+import {
   queryPlacesHandler,
   getPlaceQuerySchemaHandler,
 } from "./placeQuery.ts";
 import { listPublishedCountiesHandler } from "./publishedCounties.ts";
 import { MAX_ROW_LIMIT, DEFAULT_ROW_LIMIT } from "../lib/duckdbQuery.ts";
+import { ROCK_ISLAND_PERMIT_SCOPE_NOTE } from "../lib/rockIslandPermit.ts";
 import {
   DEFAULT_PLACE_LIMIT,
   MAX_PLACE_OFFSET,
@@ -226,7 +231,7 @@ export function registerAllTools(
     {
       title: "Get Oracle open-data dataset info",
       description:
-        "Returns dataset-level metadata for a county: county, propertyCount (live row count when served from the query table), state, and provenance/CID fields on the legacy path. When per-source coverage is configured, also returns datasets[] with, per source (appraisal, permits, sunbiz, bbb), ingestedCount, expectedCount, completionPercent, and first/last loaded timestamps — so callers can qualify partial answers by coverage. For a coverage-only county (no property dataset served) propertyCount is null and propertyDatasetAvailable is false, so callers can distinguish a missing property table from a county with zero properties.",
+        "Returns dataset-level metadata for a county: county, propertyCount, state, and provenance/CID fields on the open-property path. When per-source coverage is configured, also returns datasets[] for appraisal, permits, corporate registration, BBB, and other published sources. Corporate county scope means registered-agent office county; it is not business operating location evidence and does not establish tenancy, occupancy, ownership, or property association/linkage. For a coverage-only county propertyCount is null and propertyDatasetAvailable is false.",
       inputSchema: {
         county: z
           .string()
@@ -568,7 +573,7 @@ export function registerAllTools(
       title: "Query permits (SQL)",
       description:
         "Run a read-only SQL SELECT against a county's flat permit query table (view name 'permits', one row per building permit) backed by embedded DuckDB. Use getPermitQuerySchema first to see available columns and getPermitCoverage to qualify aggregate answers by source. SAFETY: a single SELECT statement only (a leading WITH/CTE is allowed); multiple statements and any mutating or file/extension keyword (INSERT/UPDATE/DELETE/COPY/ATTACH/INSTALL/LOAD/PRAGMA/CALL/SET …) are rejected; results are always capped at " +
-        `${MAX_ROW_LIMIT} rows.`,
+        `${MAX_ROW_LIMIT} rows. For Rock Island: ${ROCK_ISLAND_PERMIT_SCOPE_NOTE}`,
       inputSchema: {
         county: z
           .string()
@@ -602,7 +607,8 @@ export function registerAllTools(
     {
       title: "Get permit query schema",
       description:
-        "Returns the column list, DuckDB types, and a one-line description of each column of the 'permits' query table for a county, so queryPermits can be written without guessing. Notes that date/value fields are frequently NULL depending on the permit source.",
+        "Returns the column list, DuckDB types, and a one-line description of each column of the 'permits' query table for a county, so queryPermits can be written without guessing. Notes that date/value fields are frequently NULL depending on the permit source. For Rock Island: " +
+        ROCK_ISLAND_PERMIT_SCOPE_NOTE,
       inputSchema: {
         county: z
           .string()
@@ -620,7 +626,8 @@ export function registerAllTools(
     {
       title: "Get permit coverage by source",
       description:
-        "Returns per-source-system permit coverage for a county from the 'permits' query table: each source_system with its permit_count and completion_date range (earliest/latest), plus the overall total. The donphan agent uses this to QUALIFY aggregate permit answers (permit data lags appraisals and some sources may have NULL dates).",
+        "Returns per-source-system permit coverage for a county from the 'permits' query table: each source_system with its permit_count and relevant date range (earliest/latest), plus the overall total. The donphan agent uses this to QUALIFY aggregate permit answers. For Rock Island the range is based on permit_issue_date: " +
+        ROCK_ISLAND_PERMIT_SCOPE_NOTE,
       inputSchema: {
         county: z
           .string()
@@ -632,6 +639,63 @@ export function registerAllTools(
     },
     async (args: { county: string }) => {
       return getPermitCoverageHandler(args);
+    },
+  );
+
+  server.registerTool(
+    "queryCorporations",
+    {
+      title: "Query corporate registrations (SQL)",
+      description:
+        "Run one read-only SQL SELECT or leading WITH/CTE against the exact privacy-approved 'corporations' view for an allowlisted county. County scope means registered-agent office county; it is not a business operating location and does not establish tenancy, occupancy, ownership, or any property association/linkage. Use getCorporateQuerySchema first. Other relations, external table functions, multiple statements, and mutating/file/extension operations are rejected; results are capped at " +
+        `${MAX_ROW_LIMIT} rows.`,
+      inputSchema: {
+        county: z
+          .string()
+          .min(1, "county is required")
+          .describe(
+            "Registered-agent office county to query (case-insensitive); currently Rock Island.",
+          ),
+        sql: z
+          .string()
+          .min(1, "sql is required")
+          .describe(
+            "One read-only SELECT or leading WITH/CTE over the 'corporations' view.",
+          ),
+        limit: z
+          .number()
+          .int()
+          .positive()
+          .max(MAX_ROW_LIMIT)
+          .optional()
+          .default(DEFAULT_ROW_LIMIT)
+          .describe(
+            `Max rows to return (default ${DEFAULT_ROW_LIMIT}, max ${MAX_ROW_LIMIT}). Always enforced.`,
+          ),
+      },
+    },
+    async (args: { county: string; sql: string; limit?: number }) => {
+      return queryCorporationsHandler(args);
+    },
+  );
+
+  server.registerTool(
+    "getCorporateQuerySchema",
+    {
+      title: "Get corporate-registration query schema",
+      description:
+        "Returns the exact allowlisted columns, DuckDB types, mixed-date availability, SQL safety rules, and privacy semantics for the 'corporations' view. County scope means registered-agent office county; it is not a business operating location and does not establish tenancy, occupancy, ownership, or any property association/linkage.",
+      inputSchema: {
+        county: z
+          .string()
+          .min(1, "county is required")
+          .describe(
+            "Registered-agent office county to describe (case-insensitive); currently Rock Island.",
+          ),
+      },
+    },
+    async (args: { county: string }) => {
+      return getCorporateQuerySchemaHandler(args);
     },
   );
 }
