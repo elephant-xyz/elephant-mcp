@@ -28,6 +28,9 @@ describe("config", () => {
   beforeEach(() => {
     // Reset environment to clean state
     process.env = { ...originalEnv };
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.AI_GATEWAY_API_KEY;
+    delete process.env.VERCEL_OIDC_TOKEN;
     // Clear any cached config
     vi.clearAllMocks();
   });
@@ -137,6 +140,24 @@ describe("config", () => {
       expect(hasEmbeddingProvider()).toBe(true);
     });
 
+    it("should return true when AI_GATEWAY_API_KEY is set", async () => {
+      process.env.AI_GATEWAY_API_KEY = "gateway-test-key";
+      vi.mocked(existsSync).mockReturnValue(false);
+
+      const { hasEmbeddingProvider } = await resetConfigModule();
+
+      expect(hasEmbeddingProvider()).toBe(true);
+    });
+
+    it("should return true when VERCEL_OIDC_TOKEN is set", async () => {
+      process.env.VERCEL_OIDC_TOKEN = "oidc-test-token";
+      vi.mocked(existsSync).mockReturnValue(false);
+
+      const { hasEmbeddingProvider } = await resetConfigModule();
+
+      expect(hasEmbeddingProvider()).toBe(true);
+    });
+
     it("should return false when neither OpenAI nor AWS credentials are available", async () => {
       vi.mocked(existsSync).mockReturnValue(false);
 
@@ -147,6 +168,7 @@ describe("config", () => {
 
     it("should prefer OpenAI when both are available", async () => {
       process.env.OPENAI_API_KEY = "sk-test-key";
+      process.env.AI_GATEWAY_API_KEY = "gateway-test-key";
       process.env.AWS_ACCESS_KEY_ID = "AKIAIOSFODNN7EXAMPLE";
       process.env.AWS_SECRET_ACCESS_KEY =
         "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
@@ -156,6 +178,18 @@ describe("config", () => {
 
       expect(hasEmbeddingProvider()).toBe(true);
       expect(getEmbeddingProvider()).toBe("openai");
+    });
+
+    it("should prefer Gateway over Bedrock credentials", async () => {
+      process.env.AI_GATEWAY_API_KEY = "gateway-test-key";
+      process.env.AWS_ACCESS_KEY_ID = "AKIAIOSFODNN7EXAMPLE";
+      process.env.AWS_SECRET_ACCESS_KEY = "secret";
+
+      const { hasEmbeddingProvider, getEmbeddingProvider } =
+        await resetConfigModule();
+
+      expect(hasEmbeddingProvider()).toBe(true);
+      expect(getEmbeddingProvider()).toBe("vercel-ai-gateway");
     });
   });
 
@@ -174,6 +208,22 @@ describe("config", () => {
       const { getEmbeddingProvider } = await resetConfigModule();
 
       expect(getEmbeddingProvider()).toBe("bedrock");
+    });
+
+    it("should return Gateway for an explicit Gateway API key", async () => {
+      process.env.AI_GATEWAY_API_KEY = "gateway-test-key";
+
+      const { getEmbeddingProvider } = await resetConfigModule();
+
+      expect(getEmbeddingProvider()).toBe("vercel-ai-gateway");
+    });
+
+    it("should return Gateway for a Vercel OIDC token", async () => {
+      process.env.VERCEL_OIDC_TOKEN = "oidc-test-token";
+
+      const { getEmbeddingProvider } = await resetConfigModule();
+
+      expect(getEmbeddingProvider()).toBe("vercel-ai-gateway");
     });
   });
 
@@ -197,6 +247,26 @@ describe("config", () => {
       expect(getEmbeddingProviderDescription()).toBe(
         "AWS Bedrock (environment credentials)",
       );
+    });
+
+    it("should describe Gateway API-key authentication without exposing it", async () => {
+      process.env.AI_GATEWAY_API_KEY = "gateway-secret-value";
+
+      const { getEmbeddingProviderDescription } = await resetConfigModule();
+      const description = getEmbeddingProviderDescription();
+
+      expect(description).toBe("Vercel AI Gateway (AI_GATEWAY_API_KEY)");
+      expect(description).not.toContain("gateway-secret-value");
+    });
+
+    it("should describe Vercel OIDC without exposing the token", async () => {
+      process.env.VERCEL_OIDC_TOKEN = "oidc-secret-value";
+
+      const { getEmbeddingProviderDescription } = await resetConfigModule();
+      const description = getEmbeddingProviderDescription();
+
+      expect(description).toBe("Vercel AI Gateway (Vercel OIDC)");
+      expect(description).not.toContain("oidc-secret-value");
     });
 
     it("should describe AWS container credentials", async () => {
@@ -370,6 +440,38 @@ describe("config", () => {
       expect(result.source).toContain("AWS Bedrock");
     });
 
+    it("should return Gateway when its API key is configured", async () => {
+      process.env.AI_GATEWAY_API_KEY = "gateway-secret-value";
+      process.env.AWS_ACCESS_KEY_ID = "AKIAIOSFODNN7EXAMPLE";
+      process.env.AWS_SECRET_ACCESS_KEY = "secret";
+
+      const { verifyEmbeddingProvider } = await resetConfigModule();
+      const result = await verifyEmbeddingProvider();
+
+      expect(result).toEqual({
+        available: true,
+        provider: "vercel-ai-gateway",
+        source: "Vercel AI Gateway API key",
+      });
+      expect(JSON.stringify(result)).not.toContain("gateway-secret-value");
+      expect(mockCredentialProvider).not.toHaveBeenCalled();
+    });
+
+    it("should return Gateway when Vercel OIDC is available", async () => {
+      process.env.VERCEL_OIDC_TOKEN = "oidc-secret-value";
+
+      const { verifyEmbeddingProvider } = await resetConfigModule();
+      const result = await verifyEmbeddingProvider();
+
+      expect(result).toEqual({
+        available: true,
+        provider: "vercel-ai-gateway",
+        source: "Vercel OIDC identity",
+      });
+      expect(JSON.stringify(result)).not.toContain("oidc-secret-value");
+      expect(mockCredentialProvider).not.toHaveBeenCalled();
+    });
+
     it("should return not available when no provider is configured", async () => {
       mockCredentialProvider.mockRejectedValue(
         new Error("Could not load credentials"),
@@ -385,6 +487,7 @@ describe("config", () => {
 
     it("should prefer OpenAI over Bedrock", async () => {
       process.env.OPENAI_API_KEY = "sk-test-key";
+      process.env.AI_GATEWAY_API_KEY = "gateway-test-key";
       process.env.AWS_ACCESS_KEY_ID = "AKIAIOSFODNN7EXAMPLE";
       process.env.AWS_SECRET_ACCESS_KEY = "secret";
 

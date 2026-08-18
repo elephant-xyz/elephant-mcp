@@ -7,6 +7,7 @@ import { logger } from "../logger.ts";
 import { normalizeCountyKey } from "./countyIpnsRegistry.ts";
 import { fetchPublishedCountyCatalog } from "./publishedCountyCatalog.ts";
 import { MAX_ROW_LIMIT } from "./duckdbQuery.ts";
+import type { ImmutablePlacesTableProvenance } from "./immutablePlacesProvenance.ts";
 
 /** Stable DuckDB view exposed only to internally-authored places queries. */
 export const PLACES_VIEW = "places";
@@ -102,6 +103,7 @@ export interface PlaceProvenance {
   readonly source: "Overture Maps Foundation Places";
   readonly catalogUpdatedAt: string;
   readonly placesTableUrl: string;
+  readonly immutablePlacesTable: ImmutablePlacesTableProvenance | null;
   readonly publicationIndexUrl: string;
   readonly noticeUrl: string;
   readonly completionPercent: null;
@@ -228,7 +230,10 @@ export function validatePublishedPlacesUrl(raw: string): URL {
     (url.port !== "" && !isTestLoopback) ||
     url.search !== "" ||
     url.hash !== "" ||
-    lowerRaw.includes("%2e") ||
+    /%2e|%2f|%5c/i.test(lowerRaw) ||
+    /(?:^|\/)(?:\.{1,2})(?:\/|$)/.test(raw) ||
+    decodedPath.includes("\\") ||
+    /[\u0000-\u001f\u007f]/.test(decodedPath) ||
     pathSegments.includes("..") ||
     !url.pathname.endsWith("/places-table.parquet")
   ) {
@@ -430,26 +435,52 @@ function toCount(value: Json | undefined): number {
  * @returns Operation result.
  * @throws {Error} With a clear timeout message after the deadline.
  */
-async function runWithTimeout<Result>(
+export async function runWithTimeout<Result>(
   connection: DuckDBConnection,
   operation: () => Promise<Result>,
+  timeoutMs = QUERY_TIMEOUT_MS,
+  abortSignal?: AbortSignal,
 ): Promise<Result> {
   let timedOut = false;
+  let aborted = abortSignal?.aborted === true;
+  const interrupt = () => {
+    try {
+      connection.interrupt();
+    } catch {
+      // The operation's own rejection remains authoritative.
+    }
+  };
+  const handleAbort = () => {
+    aborted = true;
+    interrupt();
+  };
+  if (aborted) {
+    throw new Error("Places query was aborted before execution.");
+  }
+  abortSignal?.addEventListener("abort", handleAbort, { once: true });
   const timeout = setTimeout(() => {
     timedOut = true;
-    connection.interrupt();
-  }, QUERY_TIMEOUT_MS);
+    interrupt();
+  }, timeoutMs);
   try {
-    return await operation();
+    const result = await operation();
+    if (aborted) {
+      throw new Error("Places query was aborted during execution.");
+    }
+    return result;
   } catch (error) {
     if (timedOut) {
       throw new Error(
-        `Places query exceeded the ${QUERY_TIMEOUT_MS / 1000}-second timeout.`,
+        `Places query exceeded the ${timeoutMs / 1000}-second timeout.`,
       );
+    }
+    if (aborted) {
+      throw new Error("Places query was aborted during execution.");
     }
     throw error;
   } finally {
     clearTimeout(timeout);
+    abortSignal?.removeEventListener("abort", handleAbort);
   }
 }
 
@@ -461,31 +492,59 @@ async function runWithTimeout<Result>(
  */
 async function openPlaceConnection(
   dataset: PublishedPlacesDataset,
+  options: {
+    readonly timeoutMs?: number;
+  } = {},
 ): Promise<DuckDBConnection> {
   const instance = await DuckDBInstance.create(":memory:");
   const connection = await instance.connect();
-  const homeDir = process.env.DUCKDB_HOME_DIRECTORY ?? tmpdir();
-  await runWithTimeout(connection, () =>
-    connection.run(`SET home_directory='${homeDir.replace(/'/g, "''")}'`),
-  );
-  await runWithTimeout(connection, () => connection.run("INSTALL httpfs"));
-  await runWithTimeout(connection, () => connection.run("LOAD httpfs"));
-  await runWithTimeout(connection, () =>
-    connection.run("SET memory_limit='256MB'"),
-  );
-  await runWithTimeout(connection, () => connection.run("SET threads=2"));
+  try {
+    const homeDir = process.env.DUCKDB_HOME_DIRECTORY ?? tmpdir();
+    await runWithTimeout(
+      connection,
+      () =>
+        connection.run(`SET home_directory='${homeDir.replace(/'/g, "''")}'`),
+      options.timeoutMs,
+    );
+    await runWithTimeout(
+      connection,
+      () => connection.run("INSTALL httpfs"),
+      options.timeoutMs,
+    );
+    await runWithTimeout(
+      connection,
+      () => connection.run("LOAD httpfs"),
+      options.timeoutMs,
+    );
+    await runWithTimeout(
+      connection,
+      () => connection.run("SET memory_limit='256MB'"),
+      options.timeoutMs,
+    );
+    await runWithTimeout(
+      connection,
+      () => connection.run("SET threads=2"),
+      options.timeoutMs,
+    );
 
-  const escaped = dataset.tableUrl.replace(/'/g, "''");
-  await runWithTimeout(connection, () =>
-    connection.run(
-      `CREATE VIEW ${PLACES_VIEW} AS SELECT * FROM read_parquet('${escaped}')`,
-    ),
-  );
-  logger.info(
-    { county: dataset.countyKey, location: dataset.tableUrl },
-    "Opened catalog-authorized places query view",
-  );
-  return connection;
+    const escaped = dataset.tableUrl.replace(/'/g, "''");
+    await runWithTimeout(
+      connection,
+      () =>
+        connection.run(
+          `CREATE VIEW ${PLACES_VIEW} AS SELECT * FROM read_parquet('${escaped}')`,
+        ),
+      options.timeoutMs,
+    );
+    logger.info(
+      { county: dataset.countyKey, location: dataset.tableUrl },
+      "Opened catalog-authorized places query view",
+    );
+    return connection;
+  } catch (error) {
+    connection.closeSync();
+    throw error;
+  }
 }
 
 /**
@@ -522,6 +581,9 @@ function evictOldestConnection(): void {
  */
 function getConnectionEntry(
   dataset: PublishedPlacesDataset,
+  options: {
+    readonly timeoutMs?: number;
+  } = {},
 ): PlaceConnectionEntry {
   const cacheKey = `${dataset.countyKey}::${dataset.tableUrl}`;
   const existing = connectionCache.get(cacheKey);
@@ -531,7 +593,10 @@ function getConnectionEntry(
   }
 
   evictOldestConnection();
-  const pending = openPlaceConnection(dataset);
+  // Connection setup is shared by every queued request for this exact
+  // county/release URL. A single caller's cancellation must not reject that
+  // shared promise and fail unrelated callers waiting on the same entry.
+  const pending = openPlaceConnection(dataset, options);
   const entry: PlaceConnectionEntry = {
     pending,
     tail: Promise.resolve(),
@@ -554,11 +619,17 @@ function getConnectionEntry(
  * @param operation - Exclusive operation.
  * @returns Operation result.
  */
-async function withPlaceConnection<Result>(
+export async function withPlaceConnection<Result>(
   dataset: PublishedPlacesDataset,
   operation: (connection: DuckDBConnection) => Promise<Result>,
+  options: {
+    readonly connectionTimeoutMs?: number;
+    readonly abortSignal?: AbortSignal;
+  } = {},
 ): Promise<Result> {
-  const entry = getConnectionEntry(dataset);
+  const entry = getConnectionEntry(dataset, {
+    timeoutMs: options.connectionTimeoutMs,
+  });
   const predecessor = entry.tail;
   let release: (() => void) | undefined;
   entry.tail = new Promise<void>((resolve) => {
@@ -566,7 +637,13 @@ async function withPlaceConnection<Result>(
   });
   await predecessor;
   try {
+    if (options.abortSignal?.aborted === true) {
+      throw new Error("Places query was aborted before execution.");
+    }
     const connection = await entry.pending;
+    if (options.abortSignal?.aborted === true) {
+      throw new Error("Places query was aborted before execution.");
+    }
     entry.lastUsedAt = Date.now();
     return await operation(connection);
   } finally {
@@ -582,13 +659,20 @@ async function withPlaceConnection<Result>(
  * @param params - Bound scalar values.
  * @returns JSON-safe DuckDB rows.
  */
-async function readPlaceRows(
+export async function readPlaceRows(
   connection: DuckDBConnection,
   sql: string,
   params: DuckDBValue[],
+  options: {
+    readonly timeoutMs?: number;
+    readonly abortSignal?: AbortSignal;
+  } = {},
 ): Promise<Array<Record<string, Json>>> {
-  const reader = await runWithTimeout(connection, () =>
-    connection.runAndReadAll(sql, params),
+  const reader = await runWithTimeout(
+    connection,
+    () => connection.runAndReadAll(sql, params),
+    options.timeoutMs,
+    options.abortSignal,
   );
   return reader.getRowObjectsJson();
 }
@@ -773,11 +857,13 @@ export function sanitizePublicationMetadata(
  */
 export async function getPlaceProvenance(
   dataset: PublishedPlacesDataset,
+  immutablePlacesTable: ImmutablePlacesTableProvenance | null = null,
 ): Promise<PlaceProvenance> {
   return {
     source: "Overture Maps Foundation Places",
     catalogUpdatedAt: dataset.updatedAt,
     placesTableUrl: dataset.tableUrl,
+    immutablePlacesTable,
     publicationIndexUrl: dataset.indexUrl,
     noticeUrl: dataset.noticeUrl,
     completionPercent: null,

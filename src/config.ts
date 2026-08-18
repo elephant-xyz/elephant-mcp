@@ -8,6 +8,8 @@ const configSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("production"),
   LOG_LEVEL: z.enum(["error", "warn", "info", "debug"]).default("info"),
   OPENAI_API_KEY: z.string().min(1).optional(),
+  AI_GATEWAY_API_KEY: z.string().min(1).optional(),
+  VERCEL_OIDC_TOKEN: z.string().min(1).optional(),
   AWS_REGION: z.string().min(1).default("us-east-1"),
   // AWS credential environment variables (optional, can also use IAM roles)
   AWS_ACCESS_KEY_ID: z.string().min(1).optional(),
@@ -140,7 +142,8 @@ export async function verifyAwsCredentials(): Promise<{
 
 /**
  * Checks if at least one embedding provider is configured (sync, fast check).
- * Returns true if either OpenAI API key or AWS credentials appear to be available.
+ * Returns true if direct OpenAI, Vercel AI Gateway, or AWS credentials appear
+ * to be available.
  * For actual validation, use verifyEmbeddingProvider().
  */
 export function hasEmbeddingProvider(): boolean {
@@ -148,6 +151,10 @@ export function hasEmbeddingProvider(): boolean {
 
   // OpenAI is available if API key is set
   if (cfg.OPENAI_API_KEY) {
+    return true;
+  }
+
+  if (cfg.AI_GATEWAY_API_KEY || cfg.VERCEL_OIDC_TOKEN) {
     return true;
   }
 
@@ -160,14 +167,15 @@ export function hasEmbeddingProvider(): boolean {
 }
 
 /**
- * Verifies that at least one embedding provider is properly configured.
- * This performs actual credential validation for AWS Bedrock.
+ * Detects configured OpenAI/Gateway authentication and verifies the AWS
+ * credential chain when Bedrock is selected. Provider requests remain the
+ * authoritative authentication check for OpenAI and Gateway.
  *
  * Returns details about the available provider or error information.
  */
 export async function verifyEmbeddingProvider(): Promise<{
   available: boolean;
-  provider?: "openai" | "bedrock";
+  provider?: EmbeddingProvider;
   source?: string;
   error?: string;
 }> {
@@ -179,6 +187,16 @@ export async function verifyEmbeddingProvider(): Promise<{
       available: true,
       provider: "openai",
       source: "OPENAI_API_KEY environment variable",
+    };
+  }
+
+  if (cfg.AI_GATEWAY_API_KEY || cfg.VERCEL_OIDC_TOKEN) {
+    return {
+      available: true,
+      provider: "vercel-ai-gateway",
+      source: cfg.AI_GATEWAY_API_KEY
+        ? "Vercel AI Gateway API key"
+        : "Vercel OIDC identity",
     };
   }
 
@@ -197,17 +215,23 @@ export async function verifyEmbeddingProvider(): Promise<{
     available: false,
     error:
       awsResult.error ||
-      "No embedding provider configured. Set OPENAI_API_KEY or configure AWS credentials.",
+      "No embedding provider configured. Set OPENAI_API_KEY, configure Vercel AI Gateway authentication, or configure AWS credentials.",
   };
 }
 
-export type EmbeddingProvider = "openai" | "bedrock";
+export type EmbeddingProvider =
+  | "openai"
+  | "vercel-ai-gateway"
+  | "bedrock";
 
 export function getEmbeddingProvider(): EmbeddingProvider {
   const cfg = getConfig();
   // Prefer OpenAI if API key is explicitly provided
   if (cfg.OPENAI_API_KEY) {
     return "openai";
+  }
+  if (cfg.AI_GATEWAY_API_KEY || cfg.VERCEL_OIDC_TOKEN) {
+    return "vercel-ai-gateway";
   }
   // Fall back to AWS Bedrock (uses IAM roles for auth)
   return "bedrock";
@@ -221,6 +245,14 @@ export function getEmbeddingProviderDescription(): string {
 
   if (cfg.OPENAI_API_KEY) {
     return "OpenAI (OPENAI_API_KEY)";
+  }
+
+  if (cfg.AI_GATEWAY_API_KEY) {
+    return "Vercel AI Gateway (AI_GATEWAY_API_KEY)";
+  }
+
+  if (cfg.VERCEL_OIDC_TOKEN) {
+    return "Vercel AI Gateway (Vercel OIDC)";
   }
 
   if (cfg.AWS_ACCESS_KEY_ID && cfg.AWS_SECRET_ACCESS_KEY) {
