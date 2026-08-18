@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DuckDBInstance } from "@duckdb/node-api";
 import {
   listOraclePropertiesHandler,
   getOraclePropertyHandler,
@@ -23,6 +22,12 @@ vi.mock("../lib/oracleManifest.ts", () => ({
   getOpenDataIpnsName: vi.fn(),
 }));
 
+vi.mock("../lib/duckdbQuery.ts", () => ({
+  isCountyServedByQueryTable: vi.fn(),
+  runInternalPropertyQuery: vi.fn(),
+  PROPERTIES_VIEW: "properties",
+}));
+
 const { getJsonByCid, fetchShardByCid } = await import("../lib/ipfs.ts");
 const {
   fetchOracleManifest,
@@ -31,6 +36,10 @@ const {
   getIndexCid,
   getOpenDataIpnsName,
 } = await import("../lib/oracleManifest.ts");
+const { isCountyServedByQueryTable, runInternalPropertyQuery } = await import(
+  "../lib/duckdbQuery.ts"
+);
+
 const mockGetJsonByCid = vi.mocked(getJsonByCid);
 const mockFetchShardByCid = vi.mocked(fetchShardByCid);
 const mockFetchOracleManifest = vi.mocked(fetchOracleManifest);
@@ -38,6 +47,8 @@ const mockGetManifestCid = vi.mocked(getManifestCid);
 const mockFetchOracleIndex = vi.mocked(fetchOracleIndex);
 const mockGetIndexCid = vi.mocked(getIndexCid);
 const mockGetOpenDataIpnsName = vi.mocked(getOpenDataIpnsName);
+const mockIsCountyServedByQueryTable = vi.mocked(isCountyServedByQueryTable);
+const mockRunInternalPropertyQuery = vi.mocked(runInternalPropertyQuery);
 
 const buildEntry = (
   propertyId: string,
@@ -741,34 +752,18 @@ describe("multi-county routing", () => {
   });
 });
 
-describe("open-data handlers remain independent from DuckDB", () => {
+// === Query-table PRIMARY path (retired sharded/geo indexes) ===
+describe("query-table primary path", () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    mockGetIndexCid.mockReturnValue("index-cid");
-    mockGetOpenDataIpnsName.mockReturnValue("ipns-name");
-    clearDatasetCoverageCache();
+    // County is served by the per-county query table → primary path is taken.
+    mockIsCountyServedByQueryTable.mockReturnValue(true);
   });
 
-  afterEach(() => {
-    delete process.env.DATASET_COVERAGE_MAP;
-    delete process.env.DATASET_COVERAGE_MAP_ADDITIONS;
-    clearDatasetCoverageCache();
-    vi.restoreAllMocks();
-  });
-
-  it("[getProperty] resolves through the sharded index without opening DuckDB", async () => {
-    const createSpy = vi.spyOn(DuckDBInstance, "create");
-    const shards = [buildShardRef(0, "1234567890", "1234567890", 1)];
-    mockFetchOracleIndex.mockResolvedValue(buildIndex(shards));
-    mockFetchShardByCid.mockResolvedValue(
-      buildShardFile(0, [
-        {
-          propertyId: "uuid-1",
-          parcelIdentifier: "1234567890",
-          cid: "cid-from-index",
-        },
-      ]),
-    );
+  it("[getProperty] resolves parcelIdentifier via SQL then fetches by CID", async () => {
+    mockRunInternalPropertyQuery.mockResolvedValue([
+      { property_cid: "cid-from-query-table" },
+    ]);
     mockGetJsonByCid.mockResolvedValue({ appraisal: { value: 425000 } });
 
     const result = await getOraclePropertyHandler({
@@ -777,26 +772,81 @@ describe("open-data handlers remain independent from DuckDB", () => {
     });
     const parsed = JSON.parse(result.content[0].text);
 
-    expect(createSpy).not.toHaveBeenCalled();
-    expect(mockFetchOracleIndex).toHaveBeenCalledWith("Lee");
+    // CID lookup went through the query table, not the sharded index.
+    expect(mockFetchOracleIndex).not.toHaveBeenCalled();
     expect(mockFetchOracleManifest).not.toHaveBeenCalled();
-    expect(mockGetJsonByCid).toHaveBeenCalledWith("cid-from-index");
+    const [, sql, params] = mockRunInternalPropertyQuery.mock.calls[0];
+    expect(sql).toContain("parcel_identifier = $1");
+    expect(params).toEqual(["1234567890"]);
+    // Full record still comes from IPFS by CID.
+    expect(mockGetJsonByCid).toHaveBeenCalledWith("cid-from-query-table");
     expect(parsed.appraisal.value).toBe(425000);
   });
 
-  it("[list] paginates through the sharded index without opening DuckDB", async () => {
-    const createSpy = vi.spyOn(DuckDBInstance, "create");
-    const shards = [buildShardRef(0, "1000", "1000", 1)];
-    mockFetchOracleIndex.mockResolvedValue(buildIndex(shards));
-    mockFetchShardByCid.mockResolvedValue(
-      buildShardFile(0, [
+  it("[getProperty] resolves propertyId via SQL on the property_id column", async () => {
+    mockRunInternalPropertyQuery.mockResolvedValue([
+      { property_cid: "cid-uuid" },
+    ]);
+    mockGetJsonByCid.mockResolvedValue({ ok: true });
+
+    await getOraclePropertyHandler({ propertyId: "uuid-xyz", county: "Lee" });
+
+    const [, sql, params] = mockRunInternalPropertyQuery.mock.calls[0];
+    expect(sql).toContain("property_id = $1");
+    expect(params).toEqual(["uuid-xyz"]);
+  });
+
+  it("[getProperty] returns not-found when the query table has no such parcel", async () => {
+    mockRunInternalPropertyQuery.mockResolvedValue([]);
+
+    const result = await getOraclePropertyHandler({
+      parcelIdentifier: "9999999999",
+      county: "Lee",
+    });
+    const parsed = JSON.parse(result.content[0].text);
+
+    expect(parsed.error).toContain("9999999999");
+    expect(mockGetJsonByCid).not.toHaveBeenCalled();
+  });
+
+  it("[getProperty] errors when the row has a null property_cid", async () => {
+    mockRunInternalPropertyQuery.mockResolvedValue([{ property_cid: null }]);
+
+    const result = await getOraclePropertyHandler({
+      parcelIdentifier: "1234567890",
+      county: "Lee",
+    });
+    const parsed = JSON.parse(result.content[0].text);
+
+    expect(parsed.error).toContain("property_cid");
+    expect(mockGetJsonByCid).not.toHaveBeenCalled();
+  });
+
+  it("[getProperty] cid input path never touches the query table", async () => {
+    mockGetJsonByCid.mockResolvedValue({ direct: true });
+
+    await getOraclePropertyHandler({ cid: "cid-direct", county: "Lee" });
+
+    expect(mockRunInternalPropertyQuery).not.toHaveBeenCalled();
+    expect(mockGetJsonByCid).toHaveBeenCalledWith("cid-direct");
+  });
+
+  it("[list] paginates from the query table with summary fields", async () => {
+    mockRunInternalPropertyQuery
+      .mockResolvedValueOnce([{ c: 511695 }])
+      .mockResolvedValueOnce([
         {
-          propertyId: "uuid-1",
-          parcelIdentifier: "1000",
-          cid: "cid-1000",
+          property_id: "uuid-1",
+          parcel_identifier: "1000",
+          property_cid: "cid-1000",
+          county_name: "Lee",
+          address_street: "123 Main St",
+          address_city: "Fort Myers",
+          address_zip: "33901",
+          market_value: 350000,
+          owner_name: "Jane Doe",
         },
-      ]),
-    );
+      ]);
 
     const result = await listOraclePropertiesHandler({
       county: "Lee",
@@ -805,68 +855,39 @@ describe("open-data handlers remain independent from DuckDB", () => {
     });
     const parsed = JSON.parse(result.content[0].text);
 
-    expect(createSpy).not.toHaveBeenCalled();
-    expect(parsed.total).toBe(1);
+    expect(mockFetchOracleIndex).not.toHaveBeenCalled();
+    expect(parsed.total).toBe(511695);
     expect(parsed.properties).toHaveLength(1);
     expect(parsed.properties[0]).toMatchObject({
       propertyId: "uuid-1",
       parcelIdentifier: "1000",
       cid: "cid-1000",
       county: "Lee",
-      fileSizeBytes: 1024,
+      fileSizeBytes: null,
+      address: "123 Main St, Fort Myers, 33901",
+      marketValue: 350000,
+      ownerName: "Jane Doe",
     });
+    // The page query binds the caller's limit/offset.
+    const [, sql, params] = mockRunInternalPropertyQuery.mock.calls[1];
+    expect(sql).toContain("LIMIT $1 OFFSET $2");
+    expect(params).toEqual([1, 0]);
   });
 
-  it("[datasetInfo] cold coverage reads index metadata without opening DuckDB", async () => {
-    const createSpy = vi.spyOn(DuckDBInstance, "create");
-    const dir = mkdtempSync(join(tmpdir(), "cold-coverage-"));
-    const coverageFile = join(dir, "rock-island.json");
-    writeFileSync(
-      coverageFile,
-      JSON.stringify({
-        county: "rock-island",
-        exportedAt: "2026-08-12T17:22:20.507Z",
-        datasets: [
-          {
-            county: "rock-island",
-            source: "appraisal",
-            ingested_count: 65806,
-            expected_count: 65806,
-            first_loaded_at: null,
-            last_loaded_at: null,
-            cid: null,
-            ipns_label: null,
-          },
-        ],
-      }),
-    );
-    process.env.DATASET_COVERAGE_MAP = JSON.stringify({
-      "rock-island": coverageFile,
-    });
-    mockFetchOracleIndex.mockResolvedValue(
-      buildIndex([buildShardRef(0, "1000", "9999", 65806)], "rock-island"),
-    );
+  it("[datasetInfo] reports the live row count, not the stale manifest", async () => {
+    mockRunInternalPropertyQuery.mockResolvedValue([
+      { c: 511695, county: "Lee", state: "FL" },
+    ]);
 
-    try {
-      const result = await getOracleDatasetInfoHandler({
-        county: "Rock Island",
-      });
-      const parsed = JSON.parse(result.content[0].text);
+    const result = await getOracleDatasetInfoHandler({ county: "Lee" });
+    const parsed = JSON.parse(result.content[0].text);
 
-      expect(createSpy).not.toHaveBeenCalled();
-      expect(parsed.propertyCount).toBe(65806);
-      expect(parsed.county).toBe("rock-island");
-      expect(parsed.datasets).toEqual([
-        expect.objectContaining({
-          source: "appraisal",
-          ingestedCount: 65806,
-          expectedCount: 65806,
-          completionPercent: 100,
-        }),
-      ]);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
+    expect(mockFetchOracleIndex).not.toHaveBeenCalled();
+    expect(mockFetchOracleManifest).not.toHaveBeenCalled();
+    expect(parsed.propertyCount).toBe(511695);
+    expect(parsed.county).toBe("Lee");
+    expect(parsed.stateCode).toBe("FL");
+    expect(parsed.source).toBe("query-table");
   });
 });
 
@@ -891,22 +912,21 @@ describe("getOracleDatasetInfo per-source coverage merge", () => {
     clearDatasetCoverageCache();
     dir = mkdtempSync(join(tmpdir(), "cov-handler-"));
     delete process.env.DATASET_COVERAGE_MAP;
-    delete process.env.DATASET_COVERAGE_MAP_ADDITIONS;
     delete process.env.DATASET_COVERAGE;
   });
 
   afterEach(() => {
     delete process.env.DATASET_COVERAGE_MAP;
-    delete process.env.DATASET_COVERAGE_MAP_ADDITIONS;
     delete process.env.DATASET_COVERAGE;
     clearDatasetCoverageCache();
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it("attaches datasets[] alongside the open-data index property count", async () => {
-    mockFetchOracleIndex.mockResolvedValue(
-      buildIndex([buildShardRef(0, "1000", "9999", 933087)], "miami-dade"),
-    );
+  it("attaches datasets[] alongside the query-table property count", async () => {
+    mockIsCountyServedByQueryTable.mockReturnValue(true);
+    mockRunInternalPropertyQuery.mockResolvedValue([
+      { c: 933087, county: "Miami-Dade", state: "FL" },
+    ]);
     const file = writeCoverage("miami-dade", [
       {
         county: "miami-dade",
@@ -935,6 +955,7 @@ describe("getOracleDatasetInfo per-source coverage merge", () => {
     const parsed = JSON.parse(result.content[0].text);
 
     expect(parsed.propertyCount).toBe(933087);
+    expect(parsed.source).toBe("query-table");
     expect(parsed.datasets).toHaveLength(2);
     expect(parsed.datasets[0]).toMatchObject({
       source: "appraisal",
@@ -949,88 +970,8 @@ describe("getOracleDatasetInfo per-source coverage merge", () => {
     });
   });
 
-  it("combines Rock Island property and corporate coverage without conflating scope", async () => {
-    mockFetchOracleIndex.mockResolvedValue(
-      buildIndex([buildShardRef(0, "1000", "9999", 65806)], "rock-island"),
-    );
-    const file = writeCoverage("rock-island", [
-      {
-        county: "rock-island",
-        source: "appraisal",
-        ingested_count: 65806,
-        expected_count: 65806,
-        first_loaded_at: null,
-        last_loaded_at: null,
-        cid: null,
-        ipns_label: null,
-      },
-      {
-        county: "rock-island",
-        source: "corporate",
-        ingested_count: 11741,
-        expected_count: null,
-        first_loaded_at: "2026-07-28T00:00:00.000Z",
-        last_loaded_at: "2026-07-29T00:00:00.000Z",
-        cid: "QmXcB1Z4NMtrb96MWnyckE3mS9x7jLXLVCorBDBMcAkxGh",
-        ipns_label: "oracle-corporate-registration-rock-island",
-      },
-      {
-        county: "rock-island",
-        source: "permits",
-        ingested_count: 0,
-        expected_count: null,
-        first_loaded_at: null,
-        last_loaded_at: null,
-        cid: null,
-        ipns_label: null,
-      },
-      {
-        county: "rock-island",
-        source: "bbb",
-        ingested_count: 0,
-        expected_count: null,
-        first_loaded_at: null,
-        last_loaded_at: null,
-        cid: null,
-        ipns_label: null,
-      },
-    ]);
-    process.env.DATASET_COVERAGE_MAP = JSON.stringify({
-      "rock-island": file,
-    });
-
-    const result = await getOracleDatasetInfoHandler({
-      county: "Rock Island",
-    });
-    const parsed = JSON.parse(result.content[0].text);
-    const bySource = Object.fromEntries(
-      parsed.datasets.map((entry: { source: string }) => [entry.source, entry]),
-    );
-
-    expect(parsed.propertyCount).toBe(65806);
-    expect(bySource.appraisal).toMatchObject({
-      ingestedCount: 65806,
-      expectedCount: 65806,
-      completionPercent: 100,
-    });
-    expect(bySource.corporate).toMatchObject({
-      ingestedCount: 11741,
-      expectedCount: null,
-      completionPercent: null,
-      firstLoadedAt: "2026-07-28T00:00:00.000Z",
-      lastLoadedAt: "2026-07-29T00:00:00.000Z",
-    });
-    expect(bySource.corporate.scopeNote).toContain(
-      "registered-agent office county",
-    );
-    expect(bySource.permits.ingestedCount).toBe(0);
-    expect(bySource.bbb.ingestedCount).toBe(0);
-    expect(parsed.corporateScopeNote).toContain(
-      "not a business operating location",
-    );
-  });
-
   it("reports coverage for a permits-only county with no property dataset", async () => {
+    mockIsCountyServedByQueryTable.mockReturnValue(false);
     const file = writeCoverage("orange", [
       {
         county: "orange",
@@ -1059,6 +1000,8 @@ describe("getOracleDatasetInfo per-source coverage merge", () => {
   });
 
   it("still reports not-served when neither property dataset nor coverage exist", async () => {
+    mockIsCountyServedByQueryTable.mockReturnValue(false);
+
     const result = await getOracleDatasetInfoHandler({ county: "Nowhere" });
     const parsed = JSON.parse(result.content[0].text);
 

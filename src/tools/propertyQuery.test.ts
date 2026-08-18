@@ -8,14 +8,13 @@
  * run.
  */
 
-import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { existsSync } from "node:fs";
 import {
   queryPropertiesHandler,
   getPropertyQuerySchemaHandler,
 } from "./propertyQuery.ts";
 import { registerAllTools } from "./registry.ts";
-import * as duckdbQuery from "../lib/duckdbQuery.ts";
 import { clearPropertyQueryConnections } from "../lib/duckdbQuery.ts";
 
 const LEE_PARQUET =
@@ -66,49 +65,6 @@ describe("queryPropertiesHandler — safety (no Parquet needed)", () => {
       sql: "SELECT 1; SELECT 2",
     });
     expect(parse(result).error).toBeDefined();
-  });
-});
-
-describe("getPropertyQuerySchemaHandler — adjacency fields (no Parquet needed)", () => {
-  it("describes eligibility, neighbor count, threshold, and snapshot semantics", async () => {
-    const columnsSpy = vi
-      .spyOn(duckdbQuery, "getPropertyColumns")
-      .mockResolvedValue([
-        { name: "parcel_adjacency_eligible", type: "BOOLEAN" },
-        { name: "data_center_adjacent_parcel_count", type: "BIGINT" },
-        { name: "adjacency_min_shared_boundary_feet", type: "DOUBLE" },
-        { name: "adjacency_snapshot_at", type: "VARCHAR" },
-      ]);
-
-    try {
-      const result = await getPropertyQuerySchemaHandler({ county: "Lee" });
-      const parsed = parse(result);
-      const columns = Object.fromEntries(
-        parsed.columns.map((column: { name: string; description: string }) => [
-          column.name,
-          column,
-        ]),
-      );
-
-      expect(parsed.error).toBeUndefined();
-      expect(columns.parcel_adjacency_eligible.description).toContain(
-        "validated parcel-boundary screening population",
-      );
-      expect(columns.data_center_adjacent_parcel_count.description).toContain(
-        "no centroid inference",
-      );
-      expect(columns.adjacency_min_shared_boundary_feet.description).toContain(
-        "threshold in feet",
-      );
-      expect(columns.adjacency_snapshot_at.description).toContain(
-        "validated adjacency snapshot",
-      );
-      expect(parsed.nullabilityNote).toContain(
-        "no validated adjacency snapshot covers",
-      );
-    } finally {
-      columnsSpy.mockRestore();
-    }
   });
 });
 

@@ -42,14 +42,11 @@ export async function listPropertiesByClassNameHandler(className: string) {
     try {
       schema = await getJsonByCid<ClassSchema>(resolved.cid);
     } catch (error) {
-      logger.error(
-        {
-          className,
-          cid: resolved.cid,
-          error: error instanceof Error ? error.message : String(error),
-        },
-        "Failed to fetch class schema",
-      );
+      logger.error("Failed to fetch class schema", {
+        className,
+        cid: resolved.cid,
+        error: error instanceof Error ? error.message : String(error),
+      });
       return createTextResult({ error: "Failed to fetch class schema" });
     }
 
@@ -94,13 +91,10 @@ export async function listPropertiesByClassNameHandler(className: string) {
 
     return createTextResult({ properties });
   } catch (error) {
-    logger.error(
-      {
-        className,
-        error: error instanceof Error ? error.message : String(error),
-      },
-      "listPropertiesByClassName failed",
-    );
+    logger.error("listPropertiesByClassName failed", {
+      className,
+      error: error instanceof Error ? error.message : String(error),
+    });
     return createTextResult({
       error: "Internal error while listing properties",
     });
@@ -162,14 +156,11 @@ export async function getPropertySchemaByClassNameHandler(
     try {
       schema = await getJsonByCid<ClassSchema>(resolved.cid);
     } catch (error) {
-      logger.error(
-        {
-          className,
-          cid: resolved.cid,
-          error: error instanceof Error ? error.message : String(error),
-        },
-        "Failed to fetch class schema",
-      );
+      logger.error("Failed to fetch class schema", {
+        className,
+        cid: resolved.cid,
+        error: error instanceof Error ? error.message : String(error),
+      });
       return createTextResult({ error: "Failed to fetch class schema" });
     }
 
@@ -209,14 +200,11 @@ export async function getPropertySchemaByClassNameHandler(
 
     return createTextResult({ schema: filteredSchema });
   } catch (error) {
-    logger.error(
-      {
-        className,
-        propertyName,
-        error: error instanceof Error ? error.message : String(error),
-      },
-      "getPropertySchema failed",
-    );
+    logger.error("getPropertySchema failed", {
+      className,
+      propertyName,
+      error: error instanceof Error ? error.message : String(error),
+    });
     return createTextResult({
       error: "Internal error while getting property schema",
     });

@@ -39,13 +39,10 @@ const getServer = () => {
 let serverRef: McpServer | undefined;
 
 async function main() {
-  logger.info(
-    {
-      serverName: SERVER_NAME,
-      version: SERVER_VERSION,
-    },
-    "Starting MCP server with stdio transport",
-  );
+  logger.info("Starting MCP server with stdio transport", {
+    serverName: SERVER_NAME,
+    version: SERVER_VERSION,
+  });
 
   // Detect direct/Gateway auth or verify the AWS credential chain at startup
   const embeddingProviderResult = await verifyEmbeddingProvider();
@@ -164,12 +161,9 @@ async function main() {
 }
 
 main().catch((error) => {
-  logger.error(
-    {
-      error: error instanceof Error ? error.message : String(error),
-    },
-    "Server startup error",
-  );
+  logger.error("Server startup error", {
+    error: error instanceof Error ? error.message : String(error),
+  });
   // Best-effort MCP logging of startup error if connected
   if (serverRef?.isConnected()) {
     void serverRef

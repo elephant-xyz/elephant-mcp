@@ -53,17 +53,14 @@ export async function getJsonByCid<T>(cidString: string): Promise<T> {
       const data = await json.get(cid);
       return data as T;
     } catch (error) {
-      logger.error(
-        {
-          cid: cidString,
-          heliaError: error instanceof Error ? error.message : String(error),
-          gatewayError:
-            gatewayError instanceof Error
-              ? gatewayError.message
-              : String(gatewayError),
-        },
-        "Failed to fetch JSON by CID from both Helia and gateways",
-      );
+      logger.error("Failed to fetch JSON by CID from both Helia and gateways", {
+        cid: cidString,
+        heliaError: error instanceof Error ? error.message : String(error),
+        gatewayError:
+          gatewayError instanceof Error
+            ? gatewayError.message
+            : String(gatewayError),
+      });
       throw gatewayError;
     }
   }

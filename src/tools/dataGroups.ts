@@ -81,7 +81,7 @@ export async function listClassesFromDataGroup(
     );
 
     if (!manifestKey) {
-      logger.warn({ className }, "Class name not found in manifest");
+      logger.warn("Class name not found in manifest", { className });
       continue;
     }
 
@@ -94,14 +94,11 @@ export async function listClassesFromDataGroup(
     try {
       schema = await getJsonByCid<ClassSchema>(entry.ipfsCid);
     } catch (error) {
-      logger.warn(
-        {
-          classKey: manifestKey,
-          cid: entry.ipfsCid,
-          error: error instanceof Error ? error.message : String(error),
-        },
-        "Failed to fetch class schema",
-      );
+      logger.warn("Failed to fetch class schema", {
+        classKey: manifestKey,
+        cid: entry.ipfsCid,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
 
     const displayName = schema?.name ?? schema?.title ?? manifestKey;
@@ -126,13 +123,10 @@ export async function listClassesByDataGroupHandler(groupName: string) {
     const classes = await listClassesFromDataGroup(manifest, resolved.cid);
     return createTextResult({ classes });
   } catch (error) {
-    logger.error(
-      {
-        groupName,
-        error: error instanceof Error ? error.message : String(error),
-      },
-      "listClassesByDataGroup failed",
-    );
+    logger.error("listClassesByDataGroup failed", {
+      groupName,
+      error: error instanceof Error ? error.message : String(error),
+    });
     return createTextResult({ error: "Internal error while listing classes" });
   }
 }

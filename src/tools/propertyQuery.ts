@@ -62,21 +62,12 @@ const COLUMN_DESCRIPTIONS: Record<string, string> = {
   has_bbb_contractor:
     "Whether a BBB-listed contractor is linked to the property.",
   hoa_flag: "Whether the property is flagged as being in an HOA.",
-  parcel_adjacency_eligible:
-    "Whether the property is in the validated parcel-boundary screening population (matched official non-condominium boundary); NULL means no validated adjacency coverage.",
-  data_center_adjacent_parcel_count:
-    "Count of adjacent parcels whose official boundaries share at least adjacency_min_shared_boundary_feet; corner-only contact is excluded and no centroid inference is used.",
-  adjacency_min_shared_boundary_feet:
-    "Snapshot threshold in feet used to qualify each counted neighbor; this is not the minimum observed edge length.",
-  adjacency_snapshot_at:
-    "Completion time of the validated adjacency snapshot supplying the adjacency fields.",
 };
 
 const NULLABILITY_NOTE =
   "Coverage varies by county — fields such as hoa_flag, exterior_wall_material, " +
   "roof_covering_material, lot_size_acre, and the enrichment flags may be NULL " +
-  "where the county's source data does not provide them. Parcel adjacency fields " +
-  "are NULL when no validated adjacency snapshot covers the property or county.";
+  "where the county's source data does not provide them.";
 
 const SAFETY_NOTE =
   "Read-only: pass a single SELECT statement (a leading WITH/CTE is allowed). " +

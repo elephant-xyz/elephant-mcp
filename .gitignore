@@ -23,9 +23,6 @@ lib-cov
 
 # Coverage directory used by tools like istanbul
 coverage
-!public/
-!public/coverage/
-!public/coverage/rock-island.json
 *.lcov
 
 # nyc test coverage
@@ -152,4 +149,3 @@ test-results.json
 .nitro/
 .vercel/
 .vercel
-.env*

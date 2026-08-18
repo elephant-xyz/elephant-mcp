@@ -69,9 +69,6 @@ describe("getPropertyPermits SQS enqueue", () => {
 
     // On-demand harvests must carry onDemand:true so the worker relaxes the
     // eligibility and appraiser-link gates and the permits land in Neon.
-    if (typeof input.MessageBody !== "string") {
-      throw new Error("Expected an SQS string MessageBody");
-    }
     const body = JSON.parse(input.MessageBody) as {
       type: string;
       parcelIdentifier: string;

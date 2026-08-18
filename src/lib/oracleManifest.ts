@@ -4,7 +4,6 @@ import {
   resolveCountyIpns,
   type CountyIpnsResolution,
 } from "./countyIpnsRegistry.ts";
-import { parseCountyCidFallbackMap } from "./cidFallback.ts";
 import {
   OracleManifestSchema,
   OracleIndexSchema,
@@ -29,8 +28,6 @@ interface ManifestCacheEntry {
 const manifestCache = new Map<string, ManifestCacheEntry>();
 
 const INDEX_CACHE_TTL_MS = 5 * 60 * 1000; // 5 min
-const IPNS_RESOLVE_TIMEOUT_MS = 5_000;
-const INDEX_CID_FALLBACK_MAP_ENV = "ORACLE_OPEN_DATA_INDEX_CID_MAP_ADDITIONS";
 
 type IndexCacheEntry = { index: OracleIndex; fetchedAt: number };
 const indexCache = new Map<string, IndexCacheEntry>();
@@ -61,50 +58,6 @@ export function getOpenDataIpnsName(county?: string): string | null {
   return resolveOpenDataCounty(county).ipnsName;
 }
 
-/** Parse reviewed per-county index CIDs used only while an IPNS gateway is stale. */
-export function parseOpenDataIndexCidFallbackMap(
-  raw: string | undefined,
-): Record<string, string> {
-  return parseCountyCidFallbackMap(raw, INDEX_CID_FALLBACK_MAP_ENV);
-}
-
-/**
- * Resolve a county's stable IPNS and apply a reviewed immutable fallback only
- * when configured for that same county.
- */
-async function resolveCountyIndexCid(
-  resolution: CountyIpnsResolution,
-  legacyFallback: () => string | null,
-): Promise<string | null> {
-  const expectedByCounty = parseOpenDataIndexCidFallbackMap(
-    process.env[INDEX_CID_FALLBACK_MAP_ENV],
-  );
-  const expectedCid =
-    resolution.countyKey === null
-      ? null
-      : (expectedByCounty[resolution.countyKey] ?? null);
-  const resolvedCid = resolution.ipnsName
-    ? await resolveIpnsToCid(resolution.ipnsName)
-    : null;
-
-  if (expectedCid !== null) {
-    if (resolvedCid !== expectedCid) {
-      logger.warn(
-        {
-          county: resolution.countyKey,
-          ipnsName: resolution.ipnsName,
-          resolvedCid,
-          fallbackCid: expectedCid,
-        },
-        "Open-data IPNS is stale or unavailable; using reviewed county CID fallback",
-      );
-    }
-    return expectedCid;
-  }
-  if (resolvedCid !== null) return resolvedCid;
-  return resolution.allowFixedFallback ? legacyFallback() : null;
-}
-
 /**
  * Resolve the CID the manifest read path should use for the given county. The
  * county's IPNS (from the registry, or the legacy single IPNS) is resolved to a
@@ -119,7 +72,14 @@ export async function resolveManifestCid(
     return null;
   }
 
-  return resolveCountyIndexCid(resolution, getManifestCid);
+  if (resolution.ipnsName) {
+    const cid = await resolveIpnsToCid(resolution.ipnsName);
+    if (cid) {
+      return cid;
+    }
+  }
+
+  return resolution.allowFixedFallback ? getManifestCid() : null;
 }
 
 /**
@@ -191,11 +151,7 @@ export async function resolveIpnsToCid(
 
   for (const url of endpoints) {
     try {
-      const response = await fetch(url, {
-        method: "HEAD",
-        redirect: "follow",
-        signal: AbortSignal.timeout(IPNS_RESOLVE_TIMEOUT_MS),
-      });
+      const response = await fetch(url, { method: "HEAD", redirect: "follow" });
       if (!response.ok) {
         logger.warn(
           { url, status: response.status },
@@ -245,8 +201,15 @@ export async function fetchOracleIndex(
   }
 
   try {
-    // Resolve stable IPNS first, then use only a same-county reviewed fallback.
-    const cid = await resolveCountyIndexCid(resolution, getIndexCid);
+    // Resolve this county's IPNS to a CID. The fixed env-var CID is only used
+    // as a fallback for the legacy/default county (never cross-county).
+    let cid = resolution.ipnsName
+      ? await resolveIpnsToCid(resolution.ipnsName)
+      : null;
+
+    if (!cid && resolution.allowFixedFallback) {
+      cid = getIndexCid();
+    }
 
     if (!cid) {
       return null;
