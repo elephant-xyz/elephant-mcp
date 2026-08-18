@@ -144,6 +144,29 @@ runs the server locally via `npx`, see below):
 
 `PROPERTY_QUERY_TABLE_MAP` maps each county to its published query-table Parquet on IPFS. It powers `queryProperties` (arbitrary SQL) and is the primary source for `getOracleProperty`, `listOracleProperties`, `getOracleDatasetInfo`, and the geo tools — so a county listed there needs no `ORACLE_*` vars. `getOracleDatasetInfo` has built-in public coverage snapshots for Lee, Miami-Dade, Orange, and Palm Beach. `DATASET_COVERAGE_MAP` can override those URLs or add more counties by mapping each county to its small hourly `dataset-coverage.json` snapshot on Filebase/IPNS. Donphan uses this coverage to qualify answers, while Miranda's website can read the same public JSON URL directly. Do not configure this to an AWS S3 URL for public users. The `ORACLE_OPEN_DATA_*` / `ORACLE_GEO_INDEX_*` vars are optional fallback for counties not yet in the map.
 
+### Rock Island additive configuration
+
+Rock Island uses the existing county maps; it does not add or change shared
+routing. Merge the following `rock-island` entry into each deployment's
+existing JSON object. Preserve every existing county entry and default county:
+
+```text
+PROPERTY_QUERY_TABLE_MAP
+{"rock-island":"https://ipfs.filebase.io/ipns/k51qzi5uqu5djbtswq6lb4p7xbf3nu8bzdzokdtcdld1r2vx6asn7lgfuk54wt"}
+
+PERMIT_QUERY_TABLE_MAP
+{"rock-island":"https://ipfs.filebase.io/ipns/k51qzi5uqu5di42nblo5nuk94aj7af393d9y5vhqxp5dtxikzso0wt14v3p0wa"}
+
+DATASET_COVERAGE_MAP
+{"rock-island":"https://elephant-mcp-two.vercel.app/coverage/rock-island.json"}
+```
+
+These snippets show the Rock Island entries only, not replacement values for
+the full maps. This configuration supports the existing property SQL, property
+lookup/listing, permit SQL/schema, and dataset-info paths. Generic corporate SQL
+and Rock Island `getPermitCoverage` are deferred and unsupported by this
+publication.
+
 > **Note:** the query-table tools (`queryProperties`, `getPropertyQuerySchema`) are on `main`. Until the next npm release, install the current build from GitHub — replace the args with `["-y", "github:elephant-xyz/elephant-mcp"]` (first launch builds from source; give it a minute).
 
 3. Save and toggle the Elephant connection inside Cursor's MCP panel.
@@ -265,6 +288,7 @@ The stdio transport means no port or server identity flags are required. Environ
 | `PROPERTY_QUERY_TABLE_MAP`                                     | **Recommended.** JSON object mapping county → query-table Parquet location (an IPNS gateway URL or a local path), e.g. `{"lee":"https://ipfs.filebase.io/ipns/k51…"}`. County keys are lowercased and hyphenated (`palm-beach`, not `palm_beach`). When a requested `county` is here, all data tools read the query-table via DuckDB; the `ORACLE_*` vars below are unused.                                                                                                                                                                                                                                          | _(optional)_              |
 | `PROPERTY_QUERY_TABLE`                                         | Single-county query-table location (fallback when the map is unset).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | _(optional)_              |
 | `PROPERTY_QUERY_TABLE_DEFAULT_COUNTY`                          | County the single `PROPERTY_QUERY_TABLE` serves.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | _(optional)_              |
+| `PERMIT_QUERY_TABLE_MAP`                                       | JSON object mapping county → permit query-table Parquet location. Merge new county entries into the existing object so configured counties keep their current routes.                                                                                                                                                                                                                                                                                                                                                                                                                                                   | _(optional)_              |
 | `DATASET_COVERAGE_MAP`                                         | Optional JSON object mapping county → published `dataset-coverage.json` location (a Filebase/IPNS gateway URL or a local path for development), e.g. `{"lee":"https://ipfs.filebase.io/ipns/k51…"}`. Lee, Miami-Dade, Orange, and Palm Beach are built in; this env var overrides those URLs or adds more counties. `getOracleDatasetInfo` returns `datasets[]` with per-source (appraisal/permits/sunbiz/bbb) `ingestedCount`, `expectedCount`, `completionPercent`, and load timestamps. Coverage is additive — a read failure or slow gateway never breaks dataset-info. Do not use AWS S3 URLs for public users. | _(optional)_              |
 | `DATASET_COVERAGE`                                             | Single-county coverage snapshot location (fallback when the map is unset).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | _(optional)_              |
 | `DATASET_COVERAGE_DEFAULT_COUNTY`                              | County the single `DATASET_COVERAGE` serves.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | _(optional)_              |
