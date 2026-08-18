@@ -33,6 +33,10 @@ import {
   queryPlacesHandler,
   getPlaceQuerySchemaHandler,
 } from "./placeQuery.ts";
+import {
+  analyzePlaceColocationHandler,
+  discoverPlaceColocationCandidatesHandler,
+} from "./placeColocation.ts";
 import { listPublishedCountiesHandler } from "./publishedCounties.ts";
 import { MAX_ROW_LIMIT, DEFAULT_ROW_LIMIT } from "../lib/duckdbQuery.ts";
 import { ROCK_ISLAND_PERMIT_SCOPE_NOTE } from "../lib/rockIslandPermit.ts";
@@ -41,6 +45,87 @@ import {
   MAX_PLACE_OFFSET,
   type PlaceQueryRequest,
 } from "../lib/placeQuery.ts";
+import {
+  DEFAULT_GRID_CELL_SIZE_METERS,
+  type PlaceColocationRequest,
+} from "../lib/placeColocation.ts";
+import type { PlaceColocationDiscoveryRequest } from "../lib/placeColocationDiscovery.ts";
+
+const boundedCountySchema = z
+  .string()
+  .trim()
+  .min(1, "county is required")
+  .max(64, "county is too long")
+  .regex(
+    /^[A-Za-z0-9]+(?:[ -][A-Za-z0-9]+)*$/,
+    "county must be a name or lowercase hyphenated key",
+  );
+
+const taxonomyPrimaryIdentifierSchema = z
+  .string()
+  .trim()
+  .min(1, "category is required")
+  .max(100, "category is too long")
+  .regex(
+    /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/,
+    "category must be an exact lowercase snake-case taxonomy_primary identifier",
+  );
+
+/** Strict caller contract for deterministic place co-location evidence. */
+export const placeColocationInputSchema = z
+  .object({
+    county: boundedCountySchema.describe(
+      "One published county key/name, e.g. 'lee' or 'Lee'.",
+    ),
+    categoryA: taxonomyPrimaryIdentifierSchema.describe(
+      "First exact taxonomy_primary identifier.",
+    ),
+    categoryB: taxonomyPrimaryIdentifierSchema.describe(
+      "Second distinct exact taxonomy_primary identifier.",
+    ),
+    gridCellSizeMeters: z
+      .union([z.literal(400), z.literal(800), z.literal(1600)])
+      .optional()
+      .default(DEFAULT_GRID_CELL_SIZE_METERS)
+      .describe("Fixed grid-cell ground-meter approximation."),
+    hostedService: z
+      .enum(["include", "exclude", "only"])
+      .optional()
+      .default("exclude")
+      .describe(
+        "Include all places, exclude hosted services by default, or include only hosted services.",
+      ),
+    operatingStatus: z
+      .string()
+      .trim()
+      .min(1, "operatingStatus cannot be empty")
+      .max(64, "operatingStatus is too long")
+      .regex(
+        /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/,
+        "operatingStatus must be an exact lowercase snake-case identifier",
+      )
+      .optional(),
+    minConfidence: z.number().min(0).max(1).optional(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.categoryA === value.categoryB) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["categoryB"],
+        message: "categoryA and categoryB must be distinct",
+      });
+    }
+  });
+
+/** County-only contract for fixed-method automatic candidate discovery. */
+export const placeColocationDiscoveryInputSchema = z
+  .object({
+    county: boundedCountySchema.describe(
+      "One published county key/name, e.g. 'lee' or 'Lee'.",
+    ),
+  })
+  .strict();
 
 /**
  * Registers all MCP tools onto the given server instance.
@@ -543,6 +628,40 @@ export function registerAllTools(
       },
     },
     async (args: PlaceQueryRequest) => queryPlacesHandler(args),
+  );
+
+  server.registerTool(
+    "analyzePlaceColocation",
+    {
+      title: "Analyze Overture place co-location",
+      description:
+        "Return bounded diagnostic occupied-grid-cell evidence for one exact unordered taxonomy_primary pair in one published county. Spatial evidence is deterministic and uses a fixed-global-origin equirectangular grid plus 199 geography-and-density-conditioned permutations. Semantic evidence uses raw cosine distance over canonical category/hierarchy gloss embeddings, but this single-pair tool does not fabricate the full eligible-universe calibrated percentile. discoverPlaceColocationCandidates is the publishable Class H source unless separate auditable percentile evidence exists. Embedding failure preserves spatial evidence with semanticDistance.value=null. This tool never makes a publish decision.",
+      inputSchema: placeColocationInputSchema,
+    },
+    async (args: PlaceColocationRequest, { signal }) =>
+      analyzePlaceColocationHandler(args, {
+        signal:
+          requestSignal === undefined
+            ? signal
+            : AbortSignal.any([signal, requestSignal]),
+      }),
+  );
+
+  server.registerTool(
+    "discoverPlaceColocationCandidates",
+    {
+      title: "Discover Overture place co-location candidates",
+      description:
+        "Discover a bounded county-wide family of Overture taxonomy_primary co-location candidates using a fixed 800m non-hosted occupied-cell universe and release-derived stratified discovery/validation split. Every eligible category is embedded; all eligible unordered pairs define an outcome-independent semantic reference distribution. Spatial pairs require raw cosine distance >=0.35 and inclusive empirical percentile >=0.80 before the top-32 analytic rank cap, then receive exact stratified hypergeometric validation and Holm adjustment. The county only response includes bounded evidence and canonical corpus/distribution/spatial-ledger digests. Percentile means relative semantic distance, not statistical improbability or a publish decision.",
+      inputSchema: placeColocationDiscoveryInputSchema,
+    },
+    async (args: PlaceColocationDiscoveryRequest, { signal }) =>
+      discoverPlaceColocationCandidatesHandler(args, {
+        signal:
+          requestSignal === undefined
+            ? signal
+            : AbortSignal.any([signal, requestSignal]),
+      }),
   );
 
   server.registerTool(

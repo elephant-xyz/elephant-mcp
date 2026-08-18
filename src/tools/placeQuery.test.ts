@@ -6,21 +6,61 @@ import type { AddressInfo } from "node:net";
 
 import { DuckDBInstance } from "@duckdb/node-api";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
   clearPlaceQueryCaches,
   runPlacesQuery,
   validatePublishedPlacesUrl,
 } from "../lib/placeQuery.ts";
+import {
+  runPlaceColocationAnalysis,
+  type PlaceColocationEmbeddingRuntime,
+  type PlaceColocationRequest,
+} from "../lib/placeColocation.ts";
+import { runPlaceColocationDiscovery } from "../lib/placeColocationDiscovery.ts";
 import { clearPublishedCountyCatalogCache } from "../lib/publishedCountyCatalog.ts";
 import { registerAllTools } from "./registry.ts";
+import {
+  placeColocationDiscoveryInputSchema,
+  placeColocationInputSchema,
+} from "./registry.ts";
+import {
+  analyzePlaceColocationHandler,
+  discoverPlaceColocationCandidatesHandler,
+} from "./placeColocation.ts";
 import {
   getPlaceQuerySchemaHandler,
   queryPlacesHandler,
 } from "./placeQuery.ts";
 
 const LIVE_LEE_ROW_COUNT = 40_191;
+const TEST_IPNS_NAME =
+  "k51qzi5uqu5djfa3kbhcxedqlh7kiuyi22bd60he1nsa0wr2jrseo6vvxvwke5";
+const TEST_ROOT_CID =
+  "bafybeicfvfm5reer2ugipirxufpu6u3tmseoezsdfyhseysoo6p5r2mj4a";
+const TEST_DIRECTORY_CID =
+  "bafybeiamme7bzagrsfmqmvglnq3tzum5n76xfkbns54zu2oc3gmukffmze";
+const TEST_LEAF_CID = "QmU8DpFQVWgKESeLqKPk8uFGcn8tmLWThXixib2wazBdV5";
+
+const mockColocationEmbedMany = vi.fn(async (texts: string[]) =>
+  texts.map((text, index) => ({
+    text,
+    embedding: index === 0 ? [1, 0] : [0, 1],
+  })),
+);
+const TEST_EMBEDDING_RUNTIME: PlaceColocationEmbeddingRuntime = {
+  available: true,
+  provider: "openai",
+  model: "test-embedding-model",
+  embedMany: mockColocationEmbedMany,
+};
+
+function runTestColocation(request: PlaceColocationRequest) {
+  return runPlaceColocationAnalysis(request, {
+    embedding: TEST_EMBEDDING_RUNTIME,
+  });
+}
 
 /**
  * Parse the first text block from an MCP tool result.
@@ -102,6 +142,7 @@ describe("published places query tools", () => {
   let server: Server;
   let baseUrl: string;
   let savedCatalogLocation: string | undefined;
+  let immutableHeadersEnabled = true;
 
   beforeAll(async () => {
     directory = mkdtempSync(join(tmpdir(), "places-query-"));
@@ -144,7 +185,7 @@ describe("published places query tools", () => {
         ('gers-1', 'lee', '12071', 'Sunset Nail Spa', 'nail_salon', 'shopping/beauty_and_spa/nail_salon', 'beauty_and_spa', NULL, 'open', 0.95, -81.87, 26.64, '100 Main St', 'Fort Myers', '33901', 'FL', 'US', NULL, NULL, false, NULL, '2026-07-22.0', 'https://sunset.example', '2395550001', 'hello@sunset.example'),
         ('gers-2', 'lee', '12071', 'Nails by Lee', 'nail_salon', 'shopping/beauty_and_spa/nail_salon', 'beauty_and_spa', NULL, 'open', 0.80, -81.88, 26.63, '101 Main St', 'Fort Myers', '33901', 'FL', 'US', NULL, NULL, true, 'hosted-v1', '2026-07-22.0', NULL, NULL, NULL),
         ('gers-3', 'lee', '12071', 'Bay Restaurant', 'restaurant', 'dining/restaurant/seafood_restaurant', 'restaurant', NULL, 'open', 0.90, -81.89, 26.62, '102 Main St', 'Fort Myers', '33901', 'FL', 'US', NULL, NULL, false, NULL, '2026-07-22.0', NULL, NULL, NULL),
-        ('gers-4', 'lee', '12071', 'Closed Diner', 'restaurant', 'dining/restaurant/diner', 'restaurant', NULL, 'permanently_closed', 0.70, -81.95, 26.60, '200 Pine St', 'Cape Coral', '33904', 'FL', 'US', NULL, NULL, false, NULL, '2026-07-22.0', NULL, NULL, NULL),
+        ('gers-4', 'lee', '12071', 'Closed Diner', 'restaurant', 'dining/restaurant/diner', 'restaurant', NULL, 'permanently_closed', 0.70, NULL, 26.60, '200 Pine St', 'Cape Coral', '33904', 'FL', 'US', NULL, NULL, false, NULL, '2026-07-22.0', NULL, NULL, NULL),
         ('gers-5', 'lee', '12071', 'Harbor Cafe', 'cafe', 'dining/restaurant/cafe', 'restaurant', NULL, NULL, 0.60, -81.86, 26.61, '103 Main St', 'Fort Myers', '33901', 'FL', 'US', NULL, NULL, false, NULL, '2026-07-22.0', NULL, NULL, NULL),
         ('gers-6', 'lee', '12071', 'Lobby ATM', 'atm', 'services_and_business/financial_service/atm', 'financial_service', NULL, 'open', 0.50, -81.85, 26.65, '104 Main St', 'Fort Myers', '33901', 'FL', 'US', NULL, NULL, true, 'hosted-v1', '2026-07-22.0', NULL, NULL, NULL),
         ('gers-7', 'lee', '12071', 'Big Retail', 'retail_store', 'shopping/retail_store', 'retail', NULL, 'open', 0.85, -81.94, 26.59, '201 Pine St', 'Cape Coral', '33904', 'FL', 'US', NULL, NULL, false, NULL, '2026-07-22.0', NULL, NULL, NULL),
@@ -185,7 +226,7 @@ describe("published places query tools", () => {
     const notice = Buffer.from("Overture Maps Foundation Places\n");
 
     server = createServer((request, response) => {
-      if (request.url === "/lee/index.json") {
+      if (request.url === `/ipns/${TEST_IPNS_NAME}/lee/index.json`) {
         response.writeHead(200, {
           "Content-Length": String(index.length),
           "Content-Type": "application/json",
@@ -193,7 +234,7 @@ describe("published places query tools", () => {
         response.end(index);
         return;
       }
-      if (request.url === "/NOTICE.txt") {
+      if (request.url === `/ipns/${TEST_IPNS_NAME}/NOTICE.txt`) {
         response.writeHead(200, {
           "Content-Length": String(notice.length),
           "Content-Type": "text/plain",
@@ -201,7 +242,14 @@ describe("published places query tools", () => {
         response.end(notice);
         return;
       }
-      if (request.url !== "/lee/places-table.parquet") {
+      const mutableTablePath = `/ipns/${TEST_IPNS_NAME}/lee/places-table.parquet`;
+      const immutableTablePath = `/ipfs/${TEST_ROOT_CID}/lee/places-table.parquet`;
+      const immutableContentPath = `/ipfs/${TEST_LEAF_CID}`;
+      if (
+        request.url !== mutableTablePath &&
+        request.url !== immutableTablePath &&
+        request.url !== immutableContentPath
+      ) {
         response.writeHead(404);
         response.end();
         return;
@@ -210,6 +258,12 @@ describe("published places query tools", () => {
       response.writeHead(request.method === "HEAD" ? 200 : ranged.status, {
         ...ranged.headers,
         "Content-Type": "application/vnd.apache.parquet",
+        ...(request.url === mutableTablePath && immutableHeadersEnabled
+          ? {
+              "X-Ipfs-Path": mutableTablePath,
+              "X-Ipfs-Roots": `${TEST_ROOT_CID},${TEST_DIRECTORY_CID},${TEST_LEAF_CID}`,
+            }
+          : {}),
       });
       response.end(request.method === "HEAD" ? undefined : ranged.body);
     });
@@ -234,7 +288,7 @@ describe("published places query tools", () => {
             queryTableUrl: "https://example.com/lee-properties.parquet",
             datasetCoverageUrl: "https://example.com/lee-coverage.json",
             permitQueryTableUrl: null,
-            placesTableUrl: `${baseUrl}/lee/places-table.parquet`,
+            placesTableUrl: `${baseUrl}/ipns/${TEST_IPNS_NAME}/lee/places-table.parquet`,
             updatedAt: "2026-08-13T03:59:11.000Z",
           },
           {
@@ -287,11 +341,87 @@ describe("published places query tools", () => {
     registerAllTools(recordingServer as unknown as McpServer);
 
     expect(registrations.map((entry) => entry.name)).toEqual(
-      expect.arrayContaining(["queryPlaces", "getPlaceQuerySchema"]),
+      expect.arrayContaining([
+        "queryPlaces",
+        "analyzePlaceColocation",
+        "discoverPlaceColocationCandidates",
+        "getPlaceQuerySchema",
+      ]),
     );
     expect(
       registrations.find((entry) => entry.name === "queryPlaces")?.description,
     ).toMatch(/cannot provide SQL or data URLs/i);
+    expect(
+      registrations.find((entry) => entry.name === "analyzePlaceColocation")
+        ?.description,
+    ).toMatch(/never makes a publish decision/i);
+    expect(
+      registrations.find(
+        (entry) => entry.name === "discoverPlaceColocationCandidates",
+      )?.description,
+    ).toMatch(/county only/i);
+  });
+
+  it("enforces the county-only discovery input contract", () => {
+    expect(
+      placeColocationDiscoveryInputSchema.parse({ county: "lee" }),
+    ).toEqual({ county: "lee" });
+    for (const forbidden of [
+      { sql: "SELECT *" },
+      { gridCellSizeMeters: 800 },
+      { categoryCap: 10 },
+      { resultLimit: 5 },
+      { alpha: 0.05 },
+      { seed: "caller-seed" },
+    ]) {
+      expect(
+        placeColocationDiscoveryInputSchema.safeParse({
+          county: "lee",
+          ...forbidden,
+        }).success,
+      ).toBe(false);
+    }
+  });
+
+  it("enforces the strict co-location input contract", () => {
+    const valid = {
+      county: "lee",
+      categoryA: "nail_salon",
+      categoryB: "restaurant",
+    };
+    expect(placeColocationInputSchema.parse(valid)).toMatchObject({
+      ...valid,
+      gridCellSizeMeters: 800,
+      hostedService: "exclude",
+    });
+    expect(
+      placeColocationInputSchema.safeParse({ ...valid, sql: "SELECT *" })
+        .success,
+    ).toBe(false);
+    expect(
+      placeColocationInputSchema.safeParse({
+        ...valid,
+        placesTableUrl: "https://evil.example/places-table.parquet",
+      }).success,
+    ).toBe(false);
+    expect(
+      placeColocationInputSchema.safeParse({
+        ...valid,
+        categoryB: "nail_salon",
+      }).success,
+    ).toBe(false);
+    expect(
+      placeColocationInputSchema.safeParse({
+        ...valid,
+        gridCellSizeMeters: 600,
+      }).success,
+    ).toBe(false);
+    expect(
+      placeColocationInputSchema.safeParse({
+        ...valid,
+        minConfidence: 1.01,
+      }).success,
+    ).toBe(false);
   });
 
   it("returns real columns, contract, release, licence gate, and null completion", async () => {
@@ -332,6 +462,316 @@ describe("published places query tools", () => {
       overtureRelease: "2026-07-22.0",
       licenceGate: { passed: true, osmPresent: false },
     });
+    expect(payload.queryContract).toMatchObject({
+      analyses: {
+        analyzePlaceColocation: {
+          unit: expect.stringMatching(/occupied fixed grid cells/i),
+          permutations: 199,
+          hardLimits: {
+            validCoordinatePlaces: 100_000,
+            occupiedCells: 20_000,
+          },
+        },
+        discoverPlaceColocationCandidates: {
+          input: "{ county } only",
+          hardLimits: {
+            eligibleCategories: 256,
+            declaredPairs: 32_640,
+            semanticFrontier: 32,
+            validationFamily: 5,
+          },
+        },
+      },
+    });
+  });
+
+  it("returns deterministic county-only discovery provenance and an explicit empty family", async () => {
+    const first = await runPlaceColocationDiscovery(
+      { county: "lee" },
+      { embedding: TEST_EMBEDDING_RUNTIME },
+    );
+    const repeated = await runPlaceColocationDiscovery(
+      { county: "Lee" },
+      { embedding: TEST_EMBEDDING_RUNTIME },
+    );
+
+    expect(repeated.seed).toBe(first.seed);
+    expect(repeated.counts).toEqual(first.counts);
+    expect(first).toMatchObject({
+      county: {
+        key: "lee",
+        stateCode: "FL",
+        fips: "12071",
+      },
+      universe: {
+        hostedService: "exclude",
+        occupiedCells: 5,
+      },
+      provenance: {
+        source: "Overture Maps Foundation Places",
+        catalogUpdatedAt: "2026-08-13T03:59:11.000Z",
+        completionPercent: null,
+        releaseIdentity: expect.stringContaining(
+          "min=2026-07-22.0;max=2026-07-22.0",
+        ),
+      },
+      counts: {
+        eligibleCategories: 0,
+        declaredPairFrontier: 0,
+        validationFamilyPairs: 0,
+      },
+      failure: {
+        failedClosed: true,
+        truncated: false,
+      },
+    });
+    expect(first.failure.reason).toMatch(/Fewer than two categories/);
+    expect(first.decisionNote).toMatch(/no publish decision/i);
+  });
+
+  it("keeps analyzer evidence diagnostic and fails discovery publication closed without immutable headers", async () => {
+    immutableHeadersEnabled = false;
+    try {
+      const [analysis, discovery] = await Promise.all([
+        runTestColocation({
+          county: "lee",
+          categoryA: "nail_salon",
+          categoryB: "restaurant",
+        }),
+        runPlaceColocationDiscovery(
+          { county: "lee" },
+          { embedding: TEST_EMBEDDING_RUNTIME },
+        ),
+      ]);
+
+      expect(analysis.provenance.immutablePlacesTable).toMatchObject({
+        status: "unavailable",
+        publishable: false,
+        immutableTableUrl: null,
+      });
+      expect(analysis.rerunContract).toMatch(/Exact rerun is unavailable/);
+      expect(analysis.decisionNote).toMatch(/non-publishable/);
+      expect(discovery.failure).toMatchObject({
+        failedClosed: true,
+        truncated: false,
+      });
+      expect(discovery.failure.reason).toMatch(
+        /Immutable places-table provenance is unavailable/,
+      );
+    } finally {
+      immutableHeadersEnabled = true;
+    }
+  });
+
+  it("returns pair-order-symmetric bounded co-location evidence", async () => {
+    const forward = await runTestColocation({
+      county: "lee",
+      categoryA: "nail_salon",
+      categoryB: "restaurant",
+    });
+    const reversed = await runTestColocation({
+      county: "lee",
+      categoryA: "restaurant",
+      categoryB: "nail_salon",
+    });
+
+    expect(reversed).toEqual(forward);
+    expect(forward.inputs).toMatchObject({
+      county: "lee",
+      categoryA: "nail_salon",
+      categoryB: "restaurant",
+      gridCellSizeMeters: 800,
+      hostedService: "exclude",
+    });
+    expect(forward.universe).toMatchObject({
+      unit: "occupied fixed grid cells",
+      totalFilteredPlaces: 6,
+      validCoordinatePlaces: 5,
+      coordinateCoverage: 5 / 6,
+    });
+    expect(forward.categories.a).toMatchObject({
+      id: "nail_salon",
+      totalPlaces: 1,
+      coordinatePlaces: 1,
+      coordinateCoverage: 1,
+      hierarchy: {
+        path: "shopping/beauty_and_spa/nail_salon",
+        supportCount: 1,
+        coverage: 1,
+        ambiguityCount: 0,
+      },
+    });
+    expect(forward.categories.b).toMatchObject({
+      id: "restaurant",
+      totalPlaces: 2,
+      coordinatePlaces: 1,
+      coordinateCoverage: 0.5,
+      hierarchy: {
+        path: "dining/restaurant/seafood_restaurant",
+        supportCount: 1,
+        coverage: 1,
+        ambiguityCount: 0,
+      },
+    });
+    expect(forward.taxonomyDistance).toMatchObject({
+      value: 1,
+      version: "taxonomy-longest-common-prefix-v1",
+    });
+    expect(forward.semanticDistance).toMatchObject({
+      value: 1,
+      reason: null,
+      provider: "openai",
+      model: "test-embedding-model",
+      glossVersion: "category-label-hierarchy-gloss-v1",
+      glossInputs: {
+        categoryA:
+          "Overture category label: nail salon. Full taxonomy hierarchy: shopping/beauty_and_spa/nail_salon.",
+        categoryB:
+          "Overture category label: restaurant. Full taxonomy hierarchy: dining/restaurant/seafood_restaurant.",
+      },
+      dimensions: 2,
+    });
+    expect(forward.semanticDistance.vectorHashes.categoryA).toMatch(
+      /^[a-f0-9]{64}$/,
+    );
+    expect(forward.semanticDistance.vectorHashes.categoryB).toMatch(
+      /^[a-f0-9]{64}$/,
+    );
+    expect(forward.semanticCalibration).toMatchObject({
+      empiricalPercentile: null,
+      discoverySourceRequiredForClassH: true,
+      reason: expect.stringMatching(/complete eligible category universe/i),
+    });
+    expect(forward.densityConditionedNull.permutations).toBe(199);
+    expect(forward.densityConditionedNull.seed).toMatch(/^[a-f0-9]{64}$/);
+    expect(forward.decisionNote).toMatch(/does not apply/i);
+  });
+
+  it("preserves spatial and taxonomy evidence when semantic embedding fails", async () => {
+    const evidence = await runPlaceColocationAnalysis(
+      {
+        county: "lee",
+        categoryA: "nail_salon",
+        categoryB: "restaurant",
+      },
+      {
+        embedding: {
+          available: true,
+          provider: "bedrock",
+          model: "test-failing-model",
+          embedMany: async () => {
+            throw new Error("credentials unavailable");
+          },
+        },
+      },
+    );
+
+    expect(evidence.universe).toMatchObject({
+      totalFilteredPlaces: 6,
+      validCoordinatePlaces: 5,
+    });
+    expect(evidence.observed.jointCells).toBeTypeOf("number");
+    expect(evidence.taxonomyDistance.value).toBe(1);
+    expect(evidence.semanticDistance).toMatchObject({
+      value: null,
+      reason: "Semantic embedding failed: credentials unavailable",
+      provider: "bedrock",
+      model: "test-failing-model",
+      dimensions: null,
+      vectorHashes: {
+        categoryA: null,
+        categoryB: null,
+      },
+    });
+  });
+
+  it("aborts analyzer DuckDB work before execution when requested", async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      runPlaceColocationAnalysis(
+        {
+          county: "lee",
+          categoryA: "nail_salon",
+          categoryB: "restaurant",
+        },
+        {
+          embedding: TEST_EMBEDDING_RUNTIME,
+          abortSignal: controller.signal,
+        },
+      ),
+    ).rejects.toThrow(/Places query was aborted before execution/);
+  });
+
+  it("applies hosted-service defaults and optional status/confidence filters to the entire universe", async () => {
+    const included = await runTestColocation({
+      county: "lee",
+      categoryA: "nail_salon",
+      categoryB: "restaurant",
+      hostedService: "include",
+    });
+    const filtered = await runTestColocation({
+      county: "lee",
+      categoryA: "nail_salon",
+      categoryB: "restaurant",
+      operatingStatus: "open",
+      minConfidence: 0.85,
+    });
+
+    expect(included.universe).toMatchObject({
+      totalFilteredPlaces: 8,
+      validCoordinatePlaces: 7,
+    });
+    expect(included.categories.a).toMatchObject({
+      totalPlaces: 2,
+      coordinatePlaces: 2,
+    });
+    expect(filtered.universe).toMatchObject({
+      totalFilteredPlaces: 3,
+      validCoordinatePlaces: 3,
+      coordinateCoverage: 1,
+    });
+    expect(filtered.categories.a.totalPlaces).toBe(1);
+    expect(filtered.categories.b.totalPlaces).toBe(1);
+  });
+
+  it("preserves release, licence, catalog, completion, and source provenance", async () => {
+    const evidence = await runTestColocation({
+      county: "lee",
+      categoryA: "nail_salon",
+      categoryB: "restaurant",
+    });
+    expect(evidence.provenance).toMatchObject({
+      source: "Overture Maps Foundation Places",
+      catalogUpdatedAt: "2026-08-13T03:59:11.000Z",
+      completionPercent: null,
+      publication: {
+        overtureRelease: "2026-07-22.0",
+        themeLicence: "CDLA-Permissive-2.0 and Apache-2.0",
+        licenceGate: { passed: true },
+      },
+    });
+    expect(evidence.provenance.placesTableUrl).toBe(
+      `${baseUrl}/ipns/${TEST_IPNS_NAME}/lee/places-table.parquet`,
+    );
+    expect(evidence.provenance.immutablePlacesTable).toMatchObject({
+      status: "resolved",
+      publishable: true,
+      rootCid: TEST_ROOT_CID,
+      contentCid: TEST_LEAF_CID,
+      immutableTableUrl: `${baseUrl}/ipfs/${TEST_ROOT_CID}/lee/places-table.parquet`,
+      immutableContentUrl: `${baseUrl}/ipfs/${TEST_LEAF_CID}`,
+    });
+    expect(evidence.provenance.publicationIndexUrl).toBe(
+      `${baseUrl}/ipns/${TEST_IPNS_NAME}/lee/index.json`,
+    );
+    expect(evidence.provenance.noticeUrl).toBe(
+      `${baseUrl}/ipns/${TEST_IPNS_NAME}/NOTICE.txt`,
+    );
+    expect(evidence.provenance.releaseIdentity).toContain(
+      `rootCid=${TEST_ROOT_CID};contentCid=${TEST_LEAF_CID}`,
+    );
   });
 
   it("supports exact primary-category and hierarchy roll-up counts", async () => {
@@ -445,6 +885,42 @@ describe("published places query tools", () => {
     );
     expect(payload.error).toBe("Failed to query published places");
     expect(payload.details).toMatch(/placesTableUrl is null/);
+
+    const colocationPayload = parseResult(
+      await analyzePlaceColocationHandler({
+        county: "palm-beach",
+        categoryA: "nail_salon",
+        categoryB: "restaurant",
+      }),
+    );
+    expect(colocationPayload.error).toBe(
+      "Failed to analyze published place co-location",
+    );
+    expect(colocationPayload.details).toMatch(/placesTableUrl is null/);
+  });
+
+  it("fails closed when the canonical catalog is unavailable", async () => {
+    process.env.PUBLISHED_COUNTY_CATALOG_URL = join(
+      directory,
+      "missing-catalog.json",
+    );
+    clearPublishedCountyCatalogCache();
+    try {
+      const payload = parseResult(
+        await analyzePlaceColocationHandler({
+          county: "lee",
+          categoryA: "nail_salon",
+          categoryB: "restaurant",
+        }),
+      );
+      expect(payload.error).toBe(
+        "Failed to analyze published place co-location",
+      );
+      expect(payload.details).toMatch(/ENOENT|no such file/i);
+    } finally {
+      process.env.PUBLISHED_COUNTY_CATALOG_URL = catalogPath;
+      clearPublishedCountyCatalogCache();
+    }
   });
 
   it("binds injection-like filter text instead of treating it as SQL", async () => {
@@ -479,6 +955,16 @@ describe("published places query tools", () => {
     ).toThrow(/path traversal/);
     expect(() =>
       validatePublishedPlacesUrl(
+        "https://ipfs.filebase.io/ipns/name/lee/../places-table.parquet",
+      ),
+    ).toThrow(/path traversal/);
+    expect(() =>
+      validatePublishedPlacesUrl(
+        "https://ipfs.filebase.io/ipns/name/lee%2fhidden/places-table.parquet",
+      ),
+    ).toThrow(/path traversal/);
+    expect(() =>
+      validatePublishedPlacesUrl(
         "https://ipfs.filebase.io/ipns/name/lee/index.json",
       ),
     ).toThrow(/places-table.parquet/);
@@ -509,5 +995,260 @@ describe.skipIf(process.env.RUN_LIVE_PLACES_TEST !== "1")(
         await clearPlaceQueryCaches();
       }
     }, 120_000);
+
+    it.each([
+      {
+        categoryA: "marina",
+        categoryB: "seafood_restaurant",
+      },
+      {
+        categoryA: "fishing_charter",
+        categoryB: "marina",
+      },
+    ])(
+      "runs live semantic canary for $categoryA + $categoryB",
+      async ({ categoryA, categoryB }) => {
+        const saved = process.env.PUBLISHED_COUNTY_CATALOG_URL;
+        delete process.env.PUBLISHED_COUNTY_CATALOG_URL;
+        clearPublishedCountyCatalogCache();
+        await clearPlaceQueryCaches();
+        try {
+          const evidence = await runPlaceColocationAnalysis({
+            county: "lee",
+            categoryA,
+            categoryB,
+          });
+          console.info(
+            JSON.stringify({
+              canary: `${categoryA}+${categoryB}`,
+              jointCells: evidence.observed.jointCells,
+              globalLift: evidence.observed.globalLift,
+              conditionedPValue: evidence.densityConditionedNull.pValue,
+              taxonomyDistance: evidence.taxonomyDistance.value,
+              semanticDistance: evidence.semanticDistance,
+            }),
+          );
+          expect(evidence.inputs).toMatchObject({
+            categoryA: [categoryA, categoryB].sort()[0],
+            categoryB: [categoryA, categoryB].sort()[1],
+          });
+        } finally {
+          if (saved === undefined) {
+            delete process.env.PUBLISHED_COUNTY_CATALOG_URL;
+          } else {
+            process.env.PUBLISHED_COUNTY_CATALOG_URL = saved;
+          }
+          clearPublishedCountyCatalogCache();
+          await clearPlaceQueryCaches();
+        }
+      },
+      120_000,
+    );
+  },
+);
+
+describe.skipIf(process.env.RUN_LIVE_PLACE_DISCOVERY !== "1")(
+  "live Lee place co-location discovery",
+  () => {
+    it("completes the real county-only tool canary within the 120-second web budget", async () => {
+      delete process.env.PUBLISHED_COUNTY_CATALOG_URL;
+      clearPublishedCountyCatalogCache();
+      await clearPlaceQueryCaches();
+      const startedAt = performance.now();
+      try {
+        const payload = parseResult(
+          await discoverPlaceColocationCandidatesHandler({
+            county: "lee",
+          }),
+        );
+        const elapsedMilliseconds = Math.round(performance.now() - startedAt);
+        console.info(
+          JSON.stringify({
+            canary: "live-lee-place-colocation-discovery",
+            elapsedMilliseconds,
+            county: payload.county,
+            universe: payload.universe,
+            counts: payload.counts,
+            failure: payload.failure,
+            semanticAudit: payload.semanticAudit,
+            semanticFrontier: (
+              payload.semanticFrontier as
+                | Array<Record<string, unknown>>
+                | undefined
+            )?.map((entry) => ({
+              rank: entry.rank,
+              categoryA: (
+                entry.categoryA as Record<string, unknown> | undefined
+              )?.id,
+              categoryB: (
+                entry.categoryB as Record<string, unknown> | undefined
+              )?.id,
+              semanticDistance: (
+                entry.semantic as Record<string, unknown> | undefined
+              )?.value,
+              semanticPercentile: (
+                entry.semantic as Record<string, unknown> | undefined
+              )?.empiricalPercentile,
+              semanticPassed: (
+                entry.semantic as Record<string, unknown> | undefined
+              )?.passed,
+            })),
+            validationFamily: (
+              payload.validationFamily as
+                | Array<Record<string, unknown>>
+                | undefined
+            )?.map((entry) => ({
+              discoveryRank: entry.discoveryRank,
+              categoryA: (
+                entry.categoryA as Record<string, unknown> | undefined
+              )?.id,
+              categoryB: (
+                entry.categoryB as Record<string, unknown> | undefined
+              )?.id,
+              semanticDistance: (
+                entry.semantic as Record<string, unknown> | undefined
+              )?.value,
+              semanticPercentile: (
+                entry.semantic as Record<string, unknown> | undefined
+              )?.empiricalPercentile,
+              validation: {
+                jointCells: (
+                  entry.validation as Record<string, unknown> | undefined
+                )?.jointCells,
+                rawLift: (
+                  entry.validation as Record<string, unknown> | undefined
+                )?.rawLift,
+                guards: (
+                  entry.validation as Record<string, unknown> | undefined
+                )?.guards,
+                null: (entry.validation as Record<string, unknown> | undefined)
+                  ?.null,
+              },
+              fullUniverse: {
+                jointCells: (
+                  entry.fullUniverse as Record<string, unknown> | undefined
+                )?.jointCells,
+                rawLift: (
+                  entry.fullUniverse as Record<string, unknown> | undefined
+                )?.rawLift,
+                magnitudeFloor: (
+                  entry.fullUniverse as Record<string, unknown> | undefined
+                )?.magnitudeFloor,
+                guards: (
+                  entry.fullUniverse as Record<string, unknown> | undefined
+                )?.guards,
+              },
+            })),
+          }),
+        );
+        expect(payload.error).toBeUndefined();
+        expect(elapsedMilliseconds).toBeLessThan(120_000);
+        expect(payload.universe).toMatchObject({
+          hostedService: "exclude",
+        });
+        const controls = await Promise.all(
+          [
+            ["convenience_store", "gas_station"],
+            ["hair_salon", "nail_salon"],
+            ["marina", "seafood_restaurant"],
+            ["fishing_charter", "marina"],
+          ].map(async ([categoryA, categoryB]) => {
+            const evidence = parseResult(
+              await analyzePlaceColocationHandler({
+                county: "lee",
+                categoryA: categoryA!,
+                categoryB: categoryB!,
+              }),
+            );
+            return {
+              categoryA,
+              categoryB,
+              semanticDistance: (
+                evidence.semanticDistance as Record<string, unknown>
+              ).value,
+              calibratedPercentile: (
+                evidence.semanticCalibration as Record<string, unknown>
+              ).empiricalPercentile,
+            };
+          }),
+        );
+        console.info(
+          JSON.stringify({
+            canary: "live-lee-semantic-controls",
+            controls,
+          }),
+        );
+        for (const control of controls) {
+          expect(control.semanticDistance).toBeLessThan(0.35);
+          expect(control.calibratedPercentile).toBeNull();
+        }
+      } finally {
+        clearPublishedCountyCatalogCache();
+        await clearPlaceQueryCaches();
+      }
+    }, 180_000);
+
+    it("repeats immutable Lee candidates and audit digests deterministically", async () => {
+      delete process.env.PUBLISHED_COUNTY_CATALOG_URL;
+      clearPublishedCountyCatalogCache();
+      await clearPlaceQueryCaches();
+      try {
+        const firstStartedAt = performance.now();
+        const first = await runPlaceColocationDiscovery(
+          { county: "lee" },
+          { embedding: TEST_EMBEDDING_RUNTIME },
+        );
+        const firstElapsedMilliseconds = Math.round(
+          performance.now() - firstStartedAt,
+        );
+        const repeatedStartedAt = performance.now();
+        const repeated = await runPlaceColocationDiscovery(
+          { county: "lee" },
+          { embedding: TEST_EMBEDDING_RUNTIME },
+        );
+        const repeatedElapsedMilliseconds = Math.round(
+          performance.now() - repeatedStartedAt,
+        );
+        const candidates = first.semanticFrontier.map((entry) => [
+          entry.categoryA.id,
+          entry.categoryB.id,
+        ]);
+        console.info(
+          JSON.stringify({
+            canary: "live-lee-immutable-provenance-repeat",
+            firstElapsedMilliseconds,
+            repeatedElapsedMilliseconds,
+            immutablePlacesTable: first.provenance.immutablePlacesTable,
+            seed: first.seed,
+            candidates,
+            auditDigests: {
+              corpus: first.semanticAudit.corpus.digest,
+              referenceDistribution:
+                first.semanticAudit.referenceDistribution.digest,
+              spatialLedger: first.semanticAudit.spatialLedger.digest,
+            },
+          }),
+        );
+        expect(firstElapsedMilliseconds).toBeLessThan(120_000);
+        expect(repeatedElapsedMilliseconds).toBeLessThan(120_000);
+        expect(first.provenance.immutablePlacesTable).toMatchObject({
+          status: "resolved",
+          publishable: true,
+          rootCid: expect.any(String),
+          immutableTableUrl: expect.stringContaining("/ipfs/"),
+        });
+        expect(repeated.seed).toBe(first.seed);
+        expect(
+          repeated.semanticFrontier.map((entry) => [
+            entry.categoryA.id,
+            entry.categoryB.id,
+          ]),
+        ).toEqual(candidates);
+        expect(repeated.semanticAudit).toEqual(first.semanticAudit);
+      } finally {
+        clearPublishedCountyCatalogCache();
+        await clearPlaceQueryCaches();
+      }
+    }, 240_000);
   },
 );

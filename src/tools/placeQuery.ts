@@ -89,6 +89,48 @@ const QUERY_CONTRACT = {
     directions: ["asc", "desc"],
     tieBreaker: "gers_id ascending",
   },
+  analyses: {
+    analyzePlaceColocation: {
+      unit: "Occupied fixed grid cells, never properties, parcels, or raw row pairs.",
+      categories:
+        "One distinct exact lowercase snake-case taxonomy_primary pair, canonicalized lexicographically.",
+      gridCellSizeMeters: {
+        allowed: [400, 800, 1600],
+        default: 800,
+      },
+      hostedServiceDefault: "exclude",
+      permutations: 199,
+      hardLimits: {
+        validCoordinatePlaces: 100_000,
+        occupiedCells: 20_000,
+      },
+      output:
+        "Bounded diagnostic counts, global lift, conditioned null statistics, taxonomy distance, and raw embedding cosine distance. This single-pair analysis has semanticCalibration.empiricalPercentile=null because it does not embed the complete eligible universe; discovery is the publishable Class H source unless separate auditable calibrated-percentile evidence exists.",
+    },
+    discoverPlaceColocationCandidates: {
+      input: "{ county } only",
+      universe:
+        "Valid-coordinate, non-hosted places in fixed 800m global-origin occupied cells.",
+      split:
+        "Release-derived SHA-256 approximately 50/50 split within 8x8 macro-grid plus floor(log2(cellDensity)) strata.",
+      selection:
+        "Every eligible category is embedded, and all eligible unordered pairs define the semantic reference distribution independently of spatial outcomes. Discovery pairs require raw cosine distance >=0.35 AND inclusive empirical CDF percentile >=0.80, then are ranked by analytic stratified-hypergeometric z-score; at most 32 are returned and 5 enter validation. Percentile is relative semantic distance, not statistical improbability.",
+      validation:
+        "Independent validation cells use exact convolution of stratum hypergeometric overlap distributions plus conservative epsilon and Holm family-wise adjustment across the full declared family.",
+      hardLimits: {
+        validCoordinatePlaces: 100_000,
+        occupiedCells: 20_000,
+        eligibleCategories: 256,
+        declaredPairs: 32_640,
+        semanticFrontier: 32,
+        validationFamily: 5,
+        exactNullStates: 20_001,
+        exactNullTransitions: 5_000_000,
+      },
+      output:
+        "Bounded census, split balance, compact semantic frontier, every declared validation pair, full-universe descriptive guards, method/provenance hashes, and explicit fail-closed reasons. No publish decision or cross-release alpha claim.",
+    },
+  },
 } as const;
 
 /**
@@ -147,7 +189,7 @@ export async function getPlaceQuerySchemaHandler(args: { county: string }) {
       nullabilityNote:
         "NULL values are preserved. In particular, a NULL operating_status is unspecified, and a NULL expected_count means completionPercent must remain null.",
       safetyNote:
-        "Structured read-only queries only: callers cannot submit SQL or URLs. The parquet URL is resolved from Oracle's canonical catalog, restricted to trusted HTTPS IPFS gateways, and results are parameterized, timed out, deterministically sorted, and capped.",
+        "Structured read-only queries and bounded co-location evidence only: callers cannot submit SQL, URLs, seeds, formulas, permutation counts, or result limits. The parquet URL is resolved from Oracle's canonical catalog and restricted to trusted HTTPS IPFS gateways. Spatial operations are parameterized, timed out, deterministic, and capped; provider-generated semantic vectors are traceable by exact gloss, provider/model, dimensions, and canonical vector hashes but are not claimed to be bit-reproducible across provider executions.",
       provenance,
     });
   } catch (error) {

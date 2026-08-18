@@ -1,16 +1,18 @@
-import { embedMany, embed } from "ai";
+import { embedMany, embed, gateway } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
 import { fromNodeProviderChain } from "@aws-sdk/credential-providers";
 import { getEmbeddingProvider, getConfig } from "../config.ts";
 
-// Both providers are configured to output 1024 dimensions
-// OpenAI text-embedding-3-small supports custom dimensions via API parameter
+// All providers are configured to output 1024 dimensions.
+// Direct OpenAI and Gateway's OpenAI model receive the same provider option;
+// the installed Gateway runtime forwards providerOptions to the upstream model.
 // Amazon Titan Embed Text V2 outputs 1024 dimensions by default
 export const EMBEDDING_DIM = 1024;
 
 // Model IDs
 const OPENAI_EMBEDDING_MODEL = "text-embedding-3-small";
+const GATEWAY_EMBEDDING_MODEL = "openai/text-embedding-3-small";
 const BEDROCK_EMBEDDING_MODEL = "amazon.titan-embed-text-v2:0";
 
 // Cached Bedrock client (lazy-initialized to avoid issues if AWS_REGION isn't set at import time)
@@ -33,19 +35,26 @@ export interface EmbeddingResult {
   text: string;
 }
 
+export interface EmbeddingCallOptions {
+  readonly abortSignal?: AbortSignal;
+}
+
 function getEmbeddingModel() {
   const provider = getEmbeddingProvider();
   if (provider === "openai") {
     return openai.textEmbeddingModel(OPENAI_EMBEDDING_MODEL);
+  }
+  if (provider === "vercel-ai-gateway") {
+    return gateway.textEmbeddingModel(GATEWAY_EMBEDDING_MODEL);
   }
   return getBedrockClient().embedding(BEDROCK_EMBEDDING_MODEL);
 }
 
 export function getActiveEmbeddingModel(): string {
   const provider = getEmbeddingProvider();
-  return provider === "openai"
-    ? OPENAI_EMBEDDING_MODEL
-    : BEDROCK_EMBEDDING_MODEL;
+  if (provider === "openai") return OPENAI_EMBEDDING_MODEL;
+  if (provider === "vercel-ai-gateway") return GATEWAY_EMBEDDING_MODEL;
+  return BEDROCK_EMBEDDING_MODEL;
 }
 
 export async function embedText(text: string): Promise<number[]> {
@@ -76,6 +85,7 @@ export async function embedText(text: string): Promise<number[]> {
 
 export async function embedManyTexts(
   texts: string[],
+  options: EmbeddingCallOptions = {},
 ): Promise<EmbeddingResult[]> {
   if (!texts || texts.length === 0) {
     throw new Error("Texts array cannot be empty");
@@ -93,6 +103,9 @@ export async function embedManyTexts(
       providerOptions: {
         openai: { dimensions: EMBEDDING_DIM },
       },
+      ...(options.abortSignal === undefined
+        ? {}
+        : { abortSignal: options.abortSignal }),
     });
 
     if (embeddings.embeddings.length !== texts.length) {

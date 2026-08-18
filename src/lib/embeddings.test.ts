@@ -1,9 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { embedText, embedManyTexts, EMBEDDING_DIM } from "./embeddings.ts";
+import {
+  embedText,
+  embedManyTexts,
+  getActiveEmbeddingModel,
+  EMBEDDING_DIM,
+} from "./embeddings.ts";
 
 vi.mock("ai", () => ({
   embed: vi.fn(),
   embedMany: vi.fn(),
+  gateway: {
+    textEmbeddingModel: vi.fn(() => "mocked-gateway-model"),
+  },
 }));
 
 vi.mock("@ai-sdk/openai", () => ({
@@ -28,7 +36,7 @@ vi.mock("../config.ts", () => ({
   })),
 }));
 
-const { embed, embedMany } = await import("ai");
+const { embed, embedMany, gateway } = await import("ai");
 
 const createEmbedding = (seed = 0) =>
   Array.from(
@@ -152,6 +160,28 @@ describe("embedManyTexts", () => {
       providerOptions: {
         openai: { dimensions: EMBEDDING_DIM },
       },
+    });
+  });
+
+  it("forwards an abort signal to the embedding provider call", async () => {
+    const inputTexts = ["text one", "text two"];
+    const mockEmbeddings = [createEmbedding(0.1), createEmbedding(0.2)];
+    const controller = new AbortController();
+    vi.mocked(embedMany).mockResolvedValue({
+      embeddings: mockEmbeddings,
+      values: inputTexts,
+      usage: { tokens: 4 },
+    });
+
+    await embedManyTexts(inputTexts, { abortSignal: controller.signal });
+
+    expect(embedMany).toHaveBeenCalledWith({
+      model: "mocked-openai-model",
+      values: inputTexts,
+      providerOptions: {
+        openai: { dimensions: EMBEDDING_DIM },
+      },
+      abortSignal: controller.signal,
     });
   });
 
@@ -289,5 +319,47 @@ describe("embedding provider selection", () => {
         openai: { dimensions: EMBEDDING_DIM },
       },
     });
+  });
+
+  it("should use the Gateway OpenAI model with 1024 dimensions and abort forwarding", async () => {
+    const { getEmbeddingProvider } = await import("../config.ts");
+    vi.mocked(getEmbeddingProvider).mockReturnValue("vercel-ai-gateway");
+    const abortController = new AbortController();
+    vi.mocked(embedMany).mockResolvedValue({
+      embeddings: [createEmbedding(0.1), createEmbedding(0.2)],
+      values: ["text one", "text two"],
+      usage: { tokens: 4 },
+    });
+
+    await expect(
+      embedManyTexts(["text one", "text two"], {
+        abortSignal: abortController.signal,
+      }),
+    ).resolves.toHaveLength(2);
+
+    expect(gateway.textEmbeddingModel).toHaveBeenCalledWith(
+      "openai/text-embedding-3-small",
+    );
+    expect(getActiveEmbeddingModel()).toBe("openai/text-embedding-3-small");
+    expect(embedMany).toHaveBeenCalledWith({
+      model: "mocked-gateway-model",
+      values: ["text one", "text two"],
+      providerOptions: {
+        openai: { dimensions: EMBEDDING_DIM },
+      },
+      abortSignal: abortController.signal,
+    });
+  });
+
+  it("should preserve Gateway failures without making a network call in the test", async () => {
+    const { getEmbeddingProvider } = await import("../config.ts");
+    vi.mocked(getEmbeddingProvider).mockReturnValue("vercel-ai-gateway");
+    vi.mocked(embedMany).mockRejectedValue(
+      new Error("Gateway authentication failed"),
+    );
+
+    await expect(embedManyTexts(["text one", "text two"])).rejects.toThrow(
+      "Failed to generate embeddings: Gateway authentication failed",
+    );
   });
 });

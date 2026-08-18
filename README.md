@@ -2,12 +2,13 @@
 
 Elephant MCP connects Claude-compatible clients to the Elephant data graph, exposing discoverable tools for listing data groups, classes, and individual property schemas. The server is published on npm as `@elephant-xyz/mcp`.
 
-> **Embedding Provider:** The `getVerifiedScriptExamples` tool uses text embeddings for semantic code search. The server supports two embedding providers:
+> **Embedding Provider:** The `getVerifiedScriptExamples` and place co-location tools use text embeddings. Provider selection follows this priority:
 >
-> - **OpenAI** (preferred when `OPENAI_API_KEY` is set) - Uses `text-embedding-3-small` with 1024 dimensions
-> - **AWS Bedrock** (automatic fallback) - Uses `amazon.titan-embed-text-v2` via IAM authentication
+> - **OpenAI** when `OPENAI_API_KEY` is set - Uses `text-embedding-3-small` with 1024 dimensions
+> - **Vercel AI Gateway** when `AI_GATEWAY_API_KEY` or `VERCEL_OIDC_TOKEN` is available - Uses `openai/text-embedding-3-small` with 1024 dimensions
+> - **AWS Bedrock** otherwise - Uses `amazon.titan-embed-text-v2` via the AWS credential chain
 >
-> When running on AWS, the server automatically uses Bedrock if no OpenAI key is provided.
+> Vercel deployments can use their automatically supplied OIDC identity without storing an OpenAI or AWS secret. Local and AWS runtimes continue to fall back to Bedrock when neither OpenAI nor Gateway authentication is configured.
 
 ## 🚀 Prompt Recommendations
 
@@ -45,6 +46,8 @@ This helps the AI understand which data context to use and ensures it leverages 
 - `queryProperties` – Runs a read-only SQL `SELECT`/`WITH` over a county's query-table (view `properties`) via embedded DuckDB, for arbitrary counts, filters, and aggregates over owner, address, zip, value, acreage, material, and more.
 - `getPropertyQuerySchema` – Returns the query-table's columns and types for a county so callers know what they can query.
 - `queryPlaces` – Runs a structured, read-only query over a county's catalog-authorized Overture places parquet. Supports category/hierarchy/name/location/status/hosted-service/confidence filters, count mode, deterministic pages, and grouped `taxonomy_primary` aggregates; callers cannot submit SQL or URLs.
+- `analyzePlaceColocation` – Returns diagnostic bounded occupied-cell evidence for one exact Overture category pair, including conditioned spatial evidence, raw embedding distance, and immutable places-table provenance when the catalog IPNS path resolves. It explicitly returns no calibrated semantic percentile and remains non-publishable; discovery is the publishable Class H source unless separate auditable percentile evidence exists.
+- `discoverPlaceColocationCandidates` – Accepts `{ county }` only, embeds every eligible category, and calibrates raw semantic distance against all eligible unordered category pairs before applying the `distance >= 0.35 AND inclusive percentile >= 0.80` guard. It returns bounded top-32/top-5 evidence plus corpus, full-distribution, spatial-ledger, and immutable table-identity digests. Discovery fails closed for publication if immutable table provenance is unavailable or inconsistent. The percentile is relative semantic distance—not statistical improbability or a publish decision.
 - `getPlaceQuerySchema` – Returns the real places columns, exact `queryPlaces` contract, safety limits, release/attribution/licence-gate provenance, and honest null completeness for a county.
 - `getOracleProperty` – Fetches the full consolidated record for one property (by parcel id, property id, or CID).
 - `listOracleProperties` – Paginated per-county property listing.
@@ -77,6 +80,21 @@ response. Overture has no authoritative total-business denominator, so
 `completionPercent` remains `null`; the schema/query provenance points to the
 published sibling index and notice carrying release and licence-gate evidence.
 
+The co-location analyzer and discovery additionally issue a bounded `HEAD` for
+the catalog's `/ipns/<name>/<relative-path>` table URL on trusted IPFS
+gateways. Per the IPFS Path Gateway specification, `X-Ipfs-Roots` is ordered
+from the resolved IPNS root through each logical path segment. The first CID is
+therefore the immutable root used to construct
+`/ipfs/<rootCid>/<relative-path>`; the last CID is recorded as the parquet leaf
+only when `X-Ipfs-Path` matches and the header contains one root for every
+segment. Analysis queries use the immutable URL when resolution succeeds.
+When a complete header also exposes the parquet leaf CID, execution uses its
+direct `/ipfs/<contentCid>` URL to avoid repeated directory traversal while the
+root-based path remains the path-aware rerun locator.
+Mutable IPNS alone never claims exact rerunnability. Analyzer evidence remains
+diagnostic when resolution fails; discovery returns bounded evidence with
+`failure.failedClosed: true` and cannot be used for publication.
+
 ### Geo tools and data sources
 
 These geo tools read two independent IPFS-published datasets, each resolved at
@@ -105,7 +123,9 @@ runs the server locally via `npx`, see below):
      "env": {
        // Option 1: Use OpenAI embeddings
        "OPENAI_API_KEY": "sk-your-openai-key",
-       // Option 2: Use AWS Bedrock (omit OPENAI_API_KEY)
+       // Option 2: Use Vercel AI Gateway
+       // "AI_GATEWAY_API_KEY": "your-gateway-key",
+       // Option 3: Use AWS Bedrock (omit OpenAI/Gateway variables)
        // "AWS_REGION": "us-east-1"  // optional, defaults to us-east-1
        // Recommended for SQL tools: the per-county query-table powers
        // queryProperties and getPropertyQuerySchema without affecting open data:
@@ -129,7 +149,7 @@ runs the server locally via `npx`, see below):
      },
    }
    ```
-   For OpenAI, replace the placeholder with your actual key. For AWS Bedrock, remove the `OPENAI_API_KEY` line and ensure your environment has valid AWS credentials (IAM role, environment variables, or AWS credentials file).
+   For OpenAI or AI Gateway, replace the corresponding placeholder with your actual key. Vercel production may instead use its automatically supplied OIDC identity. For AWS Bedrock, remove the OpenAI/Gateway variables and ensure your environment has valid AWS credentials (IAM role, environment variables, or AWS credentials file).
 
 `PROPERTY_QUERY_TABLE_MAP` maps each county to its published query-table Parquet on IPFS. It powers the SQL-specific `queryProperties` and `getPropertyQuerySchema` tools. Open-data and coverage tools remain independent: `listOracleProperties`, `getOracleProperty`, and `getOracleDatasetInfo` use `ORACLE_OPEN_DATA_*` plus coverage snapshots and never initialize DuckDB. `PROPERTY_QUERY_TABLE_MAP_ADDITIONS` provides a strict additive layer when the base map must remain untouched: additions must be absolute HTTP(S) URLs, same-value duplicates are idempotent, and conflicting duplicates fail closed instead of overriding the base. `getOracleDatasetInfo` has built-in public coverage snapshots for Lee, Miami-Dade, Orange, Palm Beach, and Rock Island. `DATASET_COVERAGE_MAP` can override those URLs or add more counties by mapping each county to its small hourly `dataset-coverage.json` snapshot on Filebase/IPNS. `DATASET_COVERAGE_MAP_ADDITIONS` is a validated public-URL layer with explicit highest precedence; it can supersede one stale county URL without reading, replacing, or dropping any other entry in a deployment's base map. `DATASET_COVERAGE_CID_FALLBACK_MAP_ADDITIONS` keeps stable county IPNS primary but selects a reviewed immutable CID after resolving that IPNS, which prevents stale gateway bytes from reaching the coverage tools. Donphan uses this coverage to qualify answers, while Miranda's website can read the same public JSON URL directly. Do not configure this to an AWS S3 URL for public users.
 
