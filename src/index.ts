@@ -44,7 +44,7 @@ async function main() {
     version: SERVER_VERSION,
   });
 
-  // Verify embedding provider credentials at startup
+  // Detect direct/Gateway auth or verify the AWS credential chain at startup
   const embeddingProviderResult = await verifyEmbeddingProvider();
   if (embeddingProviderResult.available) {
     logger.info(
@@ -52,14 +52,14 @@ async function main() {
         provider: embeddingProviderResult.provider,
         source: embeddingProviderResult.source,
       },
-      "Embedding provider verified",
+      "Embedding provider configured",
     );
   } else {
     logger.warn(
       {
         error: embeddingProviderResult.error,
       },
-      "No embedding provider available - getVerifiedScriptExamples will not work",
+      "No embedding provider available - embedding-backed tools will fail closed",
     );
   }
 

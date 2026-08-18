@@ -27,7 +27,7 @@ export async function transformExamplesHandler(text: string, topK?: number) {
     if (!hasEmbeddingProvider()) {
       return createTextResult({
         error:
-          "No embedding provider configured. Set OPENAI_API_KEY or configure AWS credentials for Bedrock.",
+          "No embedding provider configured. Set OPENAI_API_KEY, configure Vercel AI Gateway authentication, or configure AWS credentials for Bedrock.",
       });
     }
 
