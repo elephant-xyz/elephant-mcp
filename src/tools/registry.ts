@@ -311,7 +311,7 @@ export function registerAllTools(
     {
       title: "Get Oracle open-data dataset info",
       description:
-        "Returns dataset-level metadata for a county: county, propertyCount (live row count when served from the query table), state, and provenance/CID fields on the legacy path. When per-source coverage is configured, also returns datasets[] with, per source (appraisal, permits, sunbiz, bbb), ingestedCount, expectedCount, completionPercent, and first/last loaded timestamps — so callers can qualify partial answers by coverage. For a coverage-only county (no property dataset served) propertyCount is null and propertyDatasetAvailable is false, so callers can distinguish a missing property table from a county with zero properties.",
+        "Returns dataset-level metadata for a county: county, propertyCount (the catalog-bound appraisal row count when canonical coverage is available, otherwise a live query-table count), state, and provenance/CID fields on the legacy path. When per-source coverage is configured, also returns datasets[] with, per source (appraisal, permits, sunbiz, bbb), ingestedCount, expectedCount, completionPercent, and first/last loaded timestamps — so callers can qualify partial answers by coverage. For a coverage-only county (no property dataset served) propertyCount is null and propertyDatasetAvailable is false, so callers can distinguish a missing property table from a county with zero properties.",
       inputSchema: {
         county: z
           .string()
@@ -321,8 +321,13 @@ export function registerAllTools(
           ),
       },
     },
-    async (args: { county?: string }) => {
-      return getOracleDatasetInfoHandler(args);
+    async (args: { county?: string }, { signal }) => {
+      return getOracleDatasetInfoHandler(args, {
+        signal:
+          requestSignal === undefined
+            ? signal
+            : AbortSignal.any([signal, requestSignal]),
+      });
     },
   );
 

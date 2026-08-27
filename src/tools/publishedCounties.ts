@@ -1,6 +1,7 @@
-import { createHash } from "node:crypto";
-
-import { fetchPublishedCountyCatalog } from "../lib/publishedCountyCatalog.ts";
+import {
+  fetchPublishedCountyCatalog,
+  getPublishedCountyCatalogRevision,
+} from "../lib/publishedCountyCatalog.ts";
 import { createTextResult } from "../lib/utils.ts";
 import { logger } from "../logger.ts";
 
@@ -11,9 +12,7 @@ import { logger } from "../logger.ts";
 export async function listPublishedCountiesHandler() {
   try {
     const catalog = await fetchPublishedCountyCatalog();
-    const catalogRevision = createHash("sha256")
-      .update(JSON.stringify(catalog))
-      .digest("hex");
+    const catalogRevision = getPublishedCountyCatalogRevision(catalog);
     return createTextResult({
       schemaVersion: catalog.schemaVersion,
       generatedAt: catalog.generatedAt,

@@ -42,6 +42,8 @@ export const DEFAULT_DATASET_COVERAGE_MAP: Readonly<Record<string, string>> = {
 };
 
 interface CoverageCacheEntry {
+  readonly source: string;
+  readonly catalogRevision: string | null;
   readonly snapshot: OracleDatasetCoverageSnapshot | null;
   readonly fetchedAt: number;
 }
@@ -167,15 +169,34 @@ function isHttpLocation(location: string): boolean {
  * @param location - Snapshot location.
  * @returns Parsed JSON (unknown), or null on any read/parse failure.
  */
-async function readSnapshotJson(location: string): Promise<unknown> {
+export interface DatasetCoverageFetchOptions {
+  readonly signal?: AbortSignal;
+  readonly timeoutMs?: number;
+  readonly catalogRevision?: string;
+}
+
+async function readSnapshotJson(
+  location: string,
+  options: DatasetCoverageFetchOptions,
+): Promise<unknown> {
+  options.signal?.throwIfAborted();
   if (isHttpLocation(location)) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), SNAPSHOT_TIMEOUT_MS);
+    const timeoutMs = Math.max(
+      1,
+      Math.min(options.timeoutMs ?? SNAPSHOT_TIMEOUT_MS, SNAPSHOT_TIMEOUT_MS),
+    );
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    if (typeof timeout.unref === "function") timeout.unref();
+    const signal =
+      options.signal === undefined
+        ? controller.signal
+        : AbortSignal.any([controller.signal, options.signal]);
     let response: Response;
     try {
       response = await fetch(location, {
         redirect: "follow",
-        signal: controller.signal,
+        signal,
       });
     } finally {
       clearTimeout(timeout);
@@ -189,7 +210,10 @@ async function readSnapshotJson(location: string): Promise<unknown> {
     }
     return (await response.json()) as unknown;
   }
-  const text = await readFile(location, "utf8");
+  const text = await readFile(location, {
+    encoding: "utf8",
+    signal: options.signal,
+  });
   return JSON.parse(text) as unknown;
 }
 
@@ -203,7 +227,9 @@ async function readSnapshotJson(location: string): Promise<unknown> {
  */
 export async function fetchDatasetCoverage(
   county: string | undefined,
+  options: DatasetCoverageFetchOptions = {},
 ): Promise<OracleDatasetCoverageSnapshot | null> {
+  options.signal?.throwIfAborted();
   const resolution = resolveCoverageLocation(county);
   if (!resolution.served || resolution.location === null) {
     return null;
@@ -212,13 +238,19 @@ export async function fetchDatasetCoverage(
   const now = Date.now();
   const cacheKey = resolution.countyKey ?? DEFAULT_CACHE_KEY;
   const cached = coverageCache.get(cacheKey);
-  if (cached !== undefined && now - cached.fetchedAt < CACHE_TTL_MS) {
+  const catalogRevision = options.catalogRevision ?? null;
+  if (
+    cached !== undefined &&
+    cached.source === resolution.location &&
+    cached.catalogRevision === catalogRevision &&
+    now - cached.fetchedAt < CACHE_TTL_MS
+  ) {
     return cached.snapshot;
   }
 
   let snapshot: OracleDatasetCoverageSnapshot | null = null;
   try {
-    const raw = await readSnapshotJson(resolution.location);
+    const raw = await readSnapshotJson(resolution.location, options);
     if (raw !== null) {
       const parsed = OracleDatasetCoverageSnapshotSchema.safeParse(raw);
       if (parsed.success) {
@@ -249,6 +281,9 @@ export async function fetchDatasetCoverage(
       }
     }
   } catch (err) {
+    if (options.signal?.aborted) {
+      throw new Error("Dataset coverage fetch was cancelled.");
+    }
     logger.warn(
       {
         location: resolution.location,
@@ -262,7 +297,12 @@ export async function fetchDatasetCoverage(
   // DNS failure, missing file, or county mismatch) would suppress `datasets[]`
   // for the full TTL even once the underlying read recovers.
   if (snapshot !== null) {
-    coverageCache.set(cacheKey, { snapshot, fetchedAt: now });
+    coverageCache.set(cacheKey, {
+      source: resolution.location,
+      catalogRevision,
+      snapshot,
+      fetchedAt: now,
+    });
   }
   return snapshot;
 }
@@ -318,8 +358,9 @@ export function toDatasetInfoCoverageEntry(
  */
 export async function getDatasetCoverageEntries(
   county: string | undefined,
+  options: DatasetCoverageFetchOptions = {},
 ): Promise<OracleDatasetInfoCoverageEntry[] | null> {
-  const snapshot = await fetchDatasetCoverage(county);
+  const snapshot = await fetchDatasetCoverage(county, options);
   if (snapshot === null) {
     return null;
   }

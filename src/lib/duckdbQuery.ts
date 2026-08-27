@@ -628,9 +628,14 @@ async function runInternalDatasetQuery(
   county: string | undefined,
   sql: string,
   params: DuckDBValue[],
+  signal?: AbortSignal,
 ): Promise<Array<Record<string, Json>>> {
   return withCountyConnection(config, county, async (connection) => {
-    const reader = await connection.runAndReadAll(sql, params);
+    const reader = await runWithCancellation(
+      connection,
+      () => connection.runAndReadAll(sql, params),
+      signal,
+    );
     return reader.getRowObjectsJson();
   });
 }
@@ -687,8 +692,9 @@ export async function runInternalPropertyQuery(
   county: string | undefined,
   sql: string,
   params: DuckDBValue[] = [],
+  signal?: AbortSignal,
 ): Promise<Array<Record<string, Json>>> {
-  return runInternalDatasetQuery(PROPERTY_DATASET, county, sql, params);
+  return runInternalDatasetQuery(PROPERTY_DATASET, county, sql, params, signal);
 }
 
 /**
@@ -726,8 +732,9 @@ export async function runInternalPermitQuery(
   county: string | undefined,
   sql: string,
   params: DuckDBValue[] = [],
+  signal?: AbortSignal,
 ): Promise<Array<Record<string, Json>>> {
-  return runInternalDatasetQuery(PERMIT_DATASET, county, sql, params);
+  return runInternalDatasetQuery(PERMIT_DATASET, county, sql, params, signal);
 }
 
 /**
