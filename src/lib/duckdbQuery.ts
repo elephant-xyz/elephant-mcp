@@ -185,7 +185,13 @@ function resolveDatasetLocation(
   config: DatasetConfig,
   county: string | undefined,
 ): QueryTableResolution {
-  const map = parseDatasetMap(process.env[config.mapEnv], config.mapEnv);
+  // `*_MAP_ADDITIONS` lets ops add counties without rewriting a Secret base map
+  // (used on the hosted Vercel deploy for rock-island / hillsborough, etc.).
+  const additionsEnv = `${config.mapEnv}_ADDITIONS`;
+  const map = {
+    ...parseDatasetMap(process.env[config.mapEnv], config.mapEnv),
+    ...parseDatasetMap(process.env[additionsEnv], additionsEnv),
+  };
   const single = process.env[config.singleEnv]?.trim() || null;
   const defaultCountyKey = process.env[config.defaultCountyEnv]
     ? normalizeCountyKey(process.env[config.defaultCountyEnv] as string)
@@ -226,7 +232,11 @@ function resolveDatasetLocation(
  * one entry; the configured default county otherwise; null when neither applies.
  */
 function resolveDefaultDatasetCounty(config: DatasetConfig): string | null {
-  const map = parseDatasetMap(process.env[config.mapEnv], config.mapEnv);
+  const additionsEnv = `${config.mapEnv}_ADDITIONS`;
+  const map = {
+    ...parseDatasetMap(process.env[config.mapEnv], config.mapEnv),
+    ...parseDatasetMap(process.env[additionsEnv], additionsEnv),
+  };
   const keys = Object.keys(map);
   if (keys.length === 1) {
     return keys[0] ?? null;

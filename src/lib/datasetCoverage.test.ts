@@ -17,6 +17,7 @@ import type { OracleDatasetCoverageRow } from "../types/oracleOpenData.ts";
 
 const COVERAGE_ENV_KEYS = [
   "DATASET_COVERAGE_MAP",
+  "DATASET_COVERAGE_MAP_ADDITIONS",
   "DATASET_COVERAGE",
   "DATASET_COVERAGE_DEFAULT_COUNTY",
 ] as const;
@@ -118,6 +119,16 @@ describe("resolveCoverageLocation", () => {
     const res = resolveCoverageLocation("not-built-in");
     expect(res.served).toBe(true);
     expect(res.location).toBe("/tmp/single.json");
+  });
+
+  it("merges DATASET_COVERAGE_MAP_ADDITIONS over the base map", () => {
+    process.env.DATASET_COVERAGE_MAP = '{"lee":"/tmp/lee.json"}';
+    process.env.DATASET_COVERAGE_MAP_ADDITIONS =
+      '{"hillsborough":"/tmp/hillsborough.json"}';
+    const res = resolveCoverageLocation("Hillsborough");
+    expect(res.served).toBe(true);
+    expect(res.location).toBe("/tmp/hillsborough.json");
+    expect(res.countyKey).toBe("hillsborough");
   });
 });
 
