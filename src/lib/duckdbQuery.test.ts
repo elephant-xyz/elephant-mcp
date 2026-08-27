@@ -94,6 +94,7 @@ describe("resolveQueryTableLocation", () => {
   const ENV_KEYS = [
     "PROPERTY_QUERY_TABLE",
     "PROPERTY_QUERY_TABLE_MAP",
+    "PROPERTY_QUERY_TABLE_MAP_ADDITIONS",
     "PROPERTY_QUERY_TABLE_DEFAULT_COUNTY",
   ];
   const saved: Record<string, string | undefined> = {};
@@ -158,6 +159,25 @@ describe("resolveQueryTableLocation", () => {
     expect(resolveQueryTableLocation("Duval")).toMatchObject({
       served: true,
       location: "/single.parquet",
+    });
+  });
+
+  it("merges PROPERTY_QUERY_TABLE_MAP_ADDITIONS over the base map", () => {
+    setEnv({
+      PROPERTY_QUERY_TABLE_MAP: JSON.stringify({ lee: "/lee.parquet" }),
+      PROPERTY_QUERY_TABLE_MAP_ADDITIONS: JSON.stringify({
+        hillsborough: "https://gw/hillsborough.parquet",
+        lee: "/lee-override.parquet",
+      }),
+    });
+    expect(resolveQueryTableLocation("Hillsborough")).toMatchObject({
+      served: true,
+      location: "https://gw/hillsborough.parquet",
+      countyKey: "hillsborough",
+    });
+    expect(resolveQueryTableLocation("Lee")).toMatchObject({
+      served: true,
+      location: "/lee-override.parquet",
     });
   });
 });

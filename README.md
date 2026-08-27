@@ -148,7 +148,8 @@ runs the server locally via `npx`, see below):
 
 Rock Island uses the existing county maps; it does not add or change shared
 routing. Merge the following `rock-island` entry into each deployment's
-existing JSON object. Preserve every existing county entry and default county:
+existing JSON object (or into the matching `*_MAP_ADDITIONS` overlay). Preserve
+every existing county entry and default county:
 
 ```text
 PROPERTY_QUERY_TABLE_MAP
@@ -166,6 +167,26 @@ the full maps. This configuration supports the existing property SQL, property
 lookup/listing, permit SQL/schema, and dataset-info paths. Generic corporate SQL
 and Rock Island `getPermitCoverage` are deferred and unsupported by this
 publication.
+
+### Hillsborough additive configuration
+
+Hillsborough (FL pilot) is additive the same way. Merge these entries into the
+base maps or `*_MAP_ADDITIONS` overlays — do not replace other counties:
+
+```text
+PROPERTY_QUERY_TABLE_MAP
+{"hillsborough":"https://ipfs.filebase.io/ipns/k51qzi5uqu5diqz0l68gfi22qk0w8aqhsm7pcgje535uz8vhu8p37ynm2po0fh"}
+
+ORACLE_OPEN_DATA_IPNS_MAP
+{"hillsborough":"k51qzi5uqu5diznbms9qjkf8wrebeq7qwhc4jzy620k5bb44qqnibp7cl7nx1f"}
+
+DATASET_COVERAGE_MAP
+{"hillsborough":"https://ipfs.filebase.io/ipns/k51qzi5uqu5di5jghjwbpumnr2vt1crmaycqmtx673kw8pqp8dymecuig5x8jb"}
+```
+
+`*_MAP_ADDITIONS` values are merged on top of the corresponding base map at
+runtime (additions win on key collision). Use that overlay when the base
+`PROPERTY_QUERY_TABLE_MAP` is a Vercel Secret you cannot rewrite in place.
 
 > **Note:** the query-table tools (`queryProperties`, `getPropertyQuerySchema`) are on `main`. Until the next npm release, install the current build from GitHub — replace the args with `["-y", "github:elephant-xyz/elephant-mcp"]` (first launch builds from source; give it a minute).
 

@@ -121,6 +121,8 @@ export function resolveCoverageLocation(
   const map = {
     ...DEFAULT_DATASET_COVERAGE_MAP,
     ...parseCoverageMap(process.env.DATASET_COVERAGE_MAP),
+    // Additive ops overlay (same pattern as PROPERTY_QUERY_TABLE_MAP_ADDITIONS).
+    ...parseCoverageMap(process.env.DATASET_COVERAGE_MAP_ADDITIONS),
   };
   const single = process.env.DATASET_COVERAGE?.trim() || null;
   const defaultCountyKey = process.env.DATASET_COVERAGE_DEFAULT_COUNTY
