@@ -10,19 +10,33 @@ import {
 } from "../lib/oracleManifest.ts";
 import {
   isCountyServedByQueryTable,
+  resolveQueryTableLocation,
   runInternalPropertyQuery,
   PROPERTIES_VIEW,
 } from "../lib/duckdbQuery.ts";
-import { getDatasetCoverageEntries } from "../lib/datasetCoverage.ts";
+import {
+  fetchDatasetCoverage,
+  resolveCoverageLocation,
+  toDatasetInfoCoverageEntry,
+} from "../lib/datasetCoverage.ts";
+import {
+  fetchPublishedCountyCatalog,
+  getPublishedCountyCatalogRevision,
+} from "../lib/publishedCountyCatalog.ts";
+import { normalizeCountyKey } from "../lib/countyIpnsRegistry.ts";
 import type { Json } from "@duckdb/node-api";
 import type {
+  OracleDatasetCoverageSnapshot,
   SlimPropertyEntry,
   ListOraclePropertiesResult,
   ShardRef,
 } from "../types/oracleOpenData.ts";
+import type { PublishedCountyCatalog } from "../types/publishedCountyCatalog.ts";
 
 const MAX_LIMIT = 500;
 const DEFAULT_LIMIT = 50;
+const DATASET_INFO_CATALOG_TIMEOUT_MS = 3_000;
+const DATASET_INFO_COVERAGE_TIMEOUT_MS = 5_000;
 
 /** Coerce a DuckDB Json scalar to a finite number, or null. */
 function toNumberOrNull(value: Json | undefined): number | null {
@@ -539,6 +553,7 @@ export async function getOraclePropertyHandler(args: {
  */
 async function buildBaseDatasetInfo(
   county: string | undefined,
+  signal?: AbortSignal,
 ): Promise<Record<string, unknown> | null> {
   // Query-table PRIMARY path: report county + live row count from the Parquet
   // so the tool no longer returns the stale pilot manifest count.
@@ -547,6 +562,8 @@ async function buildBaseDatasetInfo(
       county,
       `SELECT count(*) AS c, any_value(county_name) AS county,
               any_value(state_code) AS state FROM ${PROPERTIES_VIEW}`,
+      [],
+      signal,
     );
     const row = rows[0] ?? {};
     return {
@@ -608,17 +625,148 @@ async function buildBaseDatasetInfo(
   };
 }
 
+interface DatasetInfoCatalogContext {
+  readonly catalog: PublishedCountyCatalog;
+  readonly revision: string;
+}
+
+async function fetchDatasetInfoCatalog(
+  signal?: AbortSignal,
+): Promise<DatasetInfoCatalogContext | null> {
+  try {
+    const catalog = await fetchPublishedCountyCatalog({
+      signal,
+      timeoutMs: DATASET_INFO_CATALOG_TIMEOUT_MS,
+    });
+    return {
+      catalog,
+      revision: getPublishedCountyCatalogRevision(catalog),
+    };
+  } catch (error) {
+    if (signal?.aborted) {
+      throw new Error("Dataset info request was cancelled.");
+    }
+    logger.warn(
+      {
+        error: error instanceof Error ? error.message : String(error),
+      },
+      "Dataset-info catalog metadata unavailable; using query-table fallback",
+    );
+    return null;
+  }
+}
+
+/**
+ * Normalize the two trusted public IPNS URL forms to one artifact identity.
+ * Non-IPNS locations remain exact (apart from a trailing slash), so local and
+ * custom deployments only use the fast path when catalog/config truly match.
+ */
+function artifactIdentity(location: string): string {
+  try {
+    const url = new URL(location);
+    const hostname = url.hostname.toLowerCase();
+    const pathSegments = url.pathname.split("/").filter(Boolean);
+    if (
+      hostname === "ipfs.filebase.io" &&
+      pathSegments[0]?.toLowerCase() === "ipns" &&
+      pathSegments[1]
+    ) {
+      return `ipns:${pathSegments.slice(1).join("/")}`;
+    }
+    const dwebSuffix = ".ipns.dweb.link";
+    if (hostname.endsWith(dwebSuffix)) {
+      const ipnsName = hostname.slice(0, -dwebSuffix.length);
+      return `ipns:${[ipnsName, ...pathSegments].join("/")}`;
+    }
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    return location.replace(/\/$/, "");
+  }
+}
+
+function buildCatalogCoverageDatasetInfo(
+  county: string | undefined,
+  catalogContext: DatasetInfoCatalogContext | null,
+  coverageSnapshot: OracleDatasetCoverageSnapshot | null,
+): Record<string, unknown> | null {
+  if (
+    county === undefined ||
+    catalogContext === null ||
+    coverageSnapshot === null
+  ) {
+    return null;
+  }
+
+  const countyKey = normalizeCountyKey(county);
+  const publishedCounty = catalogContext.catalog.counties.find(
+    (entry) => entry.countyKey === countyKey,
+  );
+  const queryTable = resolveQueryTableLocation(county);
+  const coverage = resolveCoverageLocation(county);
+  if (
+    publishedCounty === undefined ||
+    !queryTable.served ||
+    queryTable.location === null ||
+    !coverage.served ||
+    coverage.location === null ||
+    artifactIdentity(queryTable.location) !==
+      artifactIdentity(publishedCounty.queryTableUrl) ||
+    artifactIdentity(coverage.location) !==
+      artifactIdentity(publishedCounty.datasetCoverageUrl)
+  ) {
+    return null;
+  }
+
+  const appraisal = coverageSnapshot.datasets.find(
+    (dataset) => dataset.source.toLowerCase() === "appraisal",
+  );
+  if (appraisal === undefined) {
+    return null;
+  }
+
+  return {
+    county: publishedCounty.countyName,
+    stateCode: publishedCounty.stateCode,
+    propertyCount: appraisal.ingested_count,
+    propertyDatasetAvailable: true,
+    source: "query-table",
+    countSource: "catalog-bound-dataset-coverage",
+    exportedAt: coverageSnapshot.exportedAt ?? null,
+    ipnsName: getOpenDataIpnsName(county) ?? null,
+    catalogRevision: catalogContext.revision,
+  };
+}
+
 export async function getOracleDatasetInfoHandler(
   args: { county?: string } = {},
+  options: { signal?: AbortSignal } = {},
 ) {
   try {
-    // Per-source coverage (appraisal, permits, sunbiz, bbb) is additive and
-    // resolved independently of the property dataset, so a permits-only county
-    // still reports coverage even without an appraisal query table.
-    const [base, coverage] = await Promise.all([
-      buildBaseDatasetInfo(args.county),
-      getDatasetCoverageEntries(args.county),
-    ]);
+    options.signal?.throwIfAborted();
+    const catalogContext = await fetchDatasetInfoCatalog(options.signal);
+    const coverageSnapshot = await fetchDatasetCoverage(args.county, {
+      signal: options.signal,
+      timeoutMs: DATASET_INFO_COVERAGE_TIMEOUT_MS,
+      catalogRevision: catalogContext?.revision,
+    });
+    const coverage =
+      coverageSnapshot === null
+        ? null
+        : [...coverageSnapshot.datasets]
+            .map(toDatasetInfoCoverageEntry)
+            .sort((a, b) => a.source.localeCompare(b.source));
+
+    // The canonical catalog binds the query table and its tiny coverage
+    // snapshot. The appraisal row is the publisher's exact row-count metadata,
+    // so dataset-info need not scan a 200–380 MB remote Parquet merely to repeat
+    // that count. Any identity mismatch fails closed to the existing query path.
+    const metadataBase = buildCatalogCoverageDatasetInfo(
+      args.county,
+      catalogContext,
+      coverageSnapshot,
+    );
+    const base =
+      metadataBase ?? (await buildBaseDatasetInfo(args.county, options.signal));
 
     // County served by neither a property dataset nor coverage → not served.
     if (base === null && (coverage === null || coverage.length === 0)) {
