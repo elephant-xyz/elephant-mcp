@@ -52,7 +52,7 @@ This helps the AI understand which data context to use and ensures it leverages 
 - `getOracleProperty` – Fetches the full consolidated record for one property (by parcel id, property id, or CID).
 - `listOracleProperties` – Paginated per-county property listing.
 - `listPublishedCounties` – Enumerates Oracle's canonical catalog of published counties, stable county FIPS identities, public data URLs (including nullable `placesTableUrl`), update timestamps, and catalog revision. Use this for county and places-availability discovery instead of a hard-coded list.
-- `getOracleDatasetInfo` – Per-county dataset summary (property count, export time, source) plus per-source coverage `datasets[]` (count, %, date range) when `DATASET_COVERAGE_MAP` is configured.
+- `getOracleDatasetInfo` – Per-county dataset summary (property count, export time, source) plus per-source coverage `datasets[]` (count, %, date range). When the configured query-table and coverage artifacts match the canonical county catalog, the exact appraisal row count comes from that small catalog-bound coverage snapshot; mismatches fail closed to the existing query-table count.
 - `getPropertyPermits` – On-demand permit harvest for a parcel.
 
 ### Overture places queries

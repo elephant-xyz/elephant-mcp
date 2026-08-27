@@ -42,6 +42,7 @@ vi.mock("../logger.ts", () => ({
 
 import {
   clearPropertyQueryConnections,
+  runInternalPropertyQuery,
   runPropertyQuery,
 } from "./duckdbQuery.ts";
 
@@ -94,5 +95,25 @@ describe("DuckDB property query cancellation", () => {
     ).rejects.toThrow("Property query was cancelled before execution.");
     expect(duckdbMocks.runAndReadAll).not.toHaveBeenCalled();
     expect(duckdbMocks.interrupt).not.toHaveBeenCalled();
+  });
+
+  it("interrupts the internal dataset-info aggregate when aborted", async () => {
+    const controller = new AbortController();
+    const queryPromise = runInternalPropertyQuery(
+      "lee",
+      "SELECT count(*) AS c FROM properties",
+      [],
+      controller.signal,
+    );
+
+    await vi.waitFor(() => {
+      expect(duckdbMocks.runAndReadAll).toHaveBeenCalledOnce();
+    });
+    controller.abort();
+
+    await expect(queryPromise).rejects.toThrow(
+      "Property query was cancelled during execution.",
+    );
+    expect(duckdbMocks.interrupt).toHaveBeenCalledOnce();
   });
 });

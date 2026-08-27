@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
 import { logger } from "../logger.ts";
@@ -33,21 +34,51 @@ export function getPublishedCountyCatalogLocation(): string {
   );
 }
 
+/** Stable content identity used to bind downstream caches to one catalog. */
+export function getPublishedCountyCatalogRevision(
+  catalog: PublishedCountyCatalog,
+): string {
+  return createHash("sha256").update(JSON.stringify(catalog)).digest("hex");
+}
+
 function isHttpLocation(location: string): boolean {
   return /^https?:\/\//i.test(location);
 }
 
-async function readCatalogJson(location: string): Promise<unknown> {
+export interface PublishedCountyCatalogFetchOptions {
+  readonly signal?: AbortSignal;
+  readonly timeoutMs?: number;
+}
+
+async function readCatalogJson(
+  location: string,
+  options: PublishedCountyCatalogFetchOptions,
+): Promise<unknown> {
+  options.signal?.throwIfAborted();
   if (!isHttpLocation(location)) {
-    return JSON.parse(await readFile(location, "utf8")) as unknown;
+    return JSON.parse(
+      await readFile(location, {
+        encoding: "utf8",
+        signal: options.signal,
+      }),
+    ) as unknown;
   }
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const timeoutMs = Math.max(
+    1,
+    Math.min(options.timeoutMs ?? FETCH_TIMEOUT_MS, FETCH_TIMEOUT_MS),
+  );
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  if (typeof timeout.unref === "function") timeout.unref();
+  const signal =
+    options.signal === undefined
+      ? controller.signal
+      : AbortSignal.any([controller.signal, options.signal]);
   try {
     const response = await fetch(location, {
       redirect: "follow",
-      signal: controller.signal,
+      signal,
     });
     if (!response.ok) {
       throw new Error(`catalog fetch returned HTTP ${response.status}`);
@@ -97,7 +128,10 @@ function validateCatalog(raw: unknown): PublishedCountyCatalog {
  * Successful reads are cached briefly. Failures are not cached so a transient
  * GitHub/network error can recover on the next request.
  */
-export async function fetchPublishedCountyCatalog(): Promise<PublishedCountyCatalog> {
+export async function fetchPublishedCountyCatalog(
+  options: PublishedCountyCatalogFetchOptions = {},
+): Promise<PublishedCountyCatalog> {
+  options.signal?.throwIfAborted();
   const source = getPublishedCountyCatalogLocation();
   const now = Date.now();
   if (
@@ -109,7 +143,7 @@ export async function fetchPublishedCountyCatalog(): Promise<PublishedCountyCata
   }
 
   try {
-    const catalog = validateCatalog(await readCatalogJson(source));
+    const catalog = validateCatalog(await readCatalogJson(source, options));
     catalogCache = { source, catalog, fetchedAt: now };
     return catalog;
   } catch (error) {

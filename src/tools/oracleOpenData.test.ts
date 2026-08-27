@@ -24,8 +24,14 @@ vi.mock("../lib/oracleManifest.ts", () => ({
 
 vi.mock("../lib/duckdbQuery.ts", () => ({
   isCountyServedByQueryTable: vi.fn(),
+  resolveQueryTableLocation: vi.fn(),
   runInternalPropertyQuery: vi.fn(),
   PROPERTIES_VIEW: "properties",
+}));
+
+vi.mock("../lib/publishedCountyCatalog.ts", () => ({
+  fetchPublishedCountyCatalog: vi.fn(),
+  getPublishedCountyCatalogRevision: vi.fn(),
 }));
 
 const { getJsonByCid, fetchShardByCid } = await import("../lib/ipfs.ts");
@@ -36,9 +42,13 @@ const {
   getIndexCid,
   getOpenDataIpnsName,
 } = await import("../lib/oracleManifest.ts");
-const { isCountyServedByQueryTable, runInternalPropertyQuery } = await import(
-  "../lib/duckdbQuery.ts"
-);
+const {
+  isCountyServedByQueryTable,
+  resolveQueryTableLocation,
+  runInternalPropertyQuery,
+} = await import("../lib/duckdbQuery.ts");
+const { fetchPublishedCountyCatalog, getPublishedCountyCatalogRevision } =
+  await import("../lib/publishedCountyCatalog.ts");
 
 const mockGetJsonByCid = vi.mocked(getJsonByCid);
 const mockFetchShardByCid = vi.mocked(fetchShardByCid);
@@ -48,7 +58,12 @@ const mockFetchOracleIndex = vi.mocked(fetchOracleIndex);
 const mockGetIndexCid = vi.mocked(getIndexCid);
 const mockGetOpenDataIpnsName = vi.mocked(getOpenDataIpnsName);
 const mockIsCountyServedByQueryTable = vi.mocked(isCountyServedByQueryTable);
+const mockResolveQueryTableLocation = vi.mocked(resolveQueryTableLocation);
 const mockRunInternalPropertyQuery = vi.mocked(runInternalPropertyQuery);
+const mockFetchPublishedCountyCatalog = vi.mocked(fetchPublishedCountyCatalog);
+const mockGetPublishedCountyCatalogRevision = vi.mocked(
+  getPublishedCountyCatalogRevision,
+);
 
 const buildEntry = (
   propertyId: string,
@@ -114,9 +129,21 @@ const buildShardFile = (
   entries: entries.map((e) => ({ ...e, fileSizeBytes: 1024 })),
 });
 
+function resetOracleMocks(): void {
+  vi.resetAllMocks();
+  mockFetchPublishedCountyCatalog.mockRejectedValue(
+    new Error("catalog unavailable in legacy-path tests"),
+  );
+  mockResolveQueryTableLocation.mockReturnValue({
+    served: false,
+    location: null,
+    countyKey: null,
+  });
+}
+
 describe("listOraclePropertiesHandler", () => {
   beforeEach(() => {
-    vi.resetAllMocks();
+    resetOracleMocks();
     // Default: no index available → fall back to manifest
     mockFetchOracleIndex.mockResolvedValue(null);
     mockGetIndexCid.mockReturnValue(null);
@@ -316,7 +343,7 @@ describe("listOraclePropertiesHandler", () => {
 
 describe("getOraclePropertyHandler", () => {
   beforeEach(() => {
-    vi.resetAllMocks();
+    resetOracleMocks();
     mockFetchOracleIndex.mockResolvedValue(null);
     mockGetIndexCid.mockReturnValue(null);
   });
@@ -521,7 +548,7 @@ describe("getOraclePropertyHandler", () => {
 
 describe("getOracleDatasetInfoHandler", () => {
   beforeEach(() => {
-    vi.resetAllMocks();
+    resetOracleMocks();
     mockFetchOracleIndex.mockResolvedValue(null);
     mockGetIndexCid.mockReturnValue(null);
     mockGetOpenDataIpnsName.mockReturnValue(null);
@@ -623,7 +650,7 @@ describe("getOracleDatasetInfoHandler", () => {
 
 describe("multi-county routing", () => {
   beforeEach(() => {
-    vi.resetAllMocks();
+    resetOracleMocks();
     mockGetIndexCid.mockReturnValue(null);
     mockGetOpenDataIpnsName.mockReturnValue(null);
   });
@@ -755,7 +782,7 @@ describe("multi-county routing", () => {
 // === Query-table PRIMARY path (retired sharded/geo indexes) ===
 describe("query-table primary path", () => {
   beforeEach(() => {
-    vi.resetAllMocks();
+    resetOracleMocks();
     // County is served by the per-county query table → primary path is taken.
     mockIsCountyServedByQueryTable.mockReturnValue(true);
   });
@@ -904,7 +931,7 @@ describe("getOracleDatasetInfo per-source coverage merge", () => {
   };
 
   beforeEach(() => {
-    vi.resetAllMocks();
+    resetOracleMocks();
     mockFetchOracleIndex.mockResolvedValue(null);
     mockFetchOracleManifest.mockResolvedValue(null);
     mockGetIndexCid.mockReturnValue(null);
@@ -1008,5 +1035,198 @@ describe("getOracleDatasetInfo per-source coverage merge", () => {
     expect(parsed.propertyCount).toBe(0);
     expect(parsed.error).toContain("not served");
     expect(parsed.datasets).toBeUndefined();
+  });
+});
+
+describe("getOracleDatasetInfo catalog-bound metadata performance", () => {
+  const counties = [
+    {
+      countyKey: "lee",
+      countyName: "Lee",
+      stateCode: "FL",
+      countyFips: "12071",
+      propertyCount: 511695,
+    },
+    {
+      countyKey: "miami-dade",
+      countyName: "Miami-Dade",
+      stateCode: "FL",
+      countyFips: "12086",
+      propertyCount: 933087,
+    },
+    {
+      countyKey: "palm-beach",
+      countyName: "Palm Beach",
+      stateCode: "FL",
+      countyFips: "12099",
+      propertyCount: 653945,
+    },
+  ] as const;
+
+  const catalog = {
+    schemaVersion: "1.0" as const,
+    generatedAt: "2026-08-24T16:37:08.135Z",
+    counties: counties.map((county) => ({
+      countyKey: county.countyKey,
+      countyName: county.countyName,
+      stateCode: county.stateCode,
+      countyFips: county.countyFips,
+      status: "published" as const,
+      queryTableUrl: `https://catalog.example/${county.countyKey}.parquet`,
+      datasetCoverageUrl: `https://catalog.example/${county.countyKey}.json`,
+      permitQueryTableUrl: null,
+      placesTableUrl: null,
+      updatedAt: "2026-08-24T16:37:08.135Z",
+    })),
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    resetOracleMocks();
+    clearDatasetCoverageCache();
+    process.env.DATASET_COVERAGE_MAP = JSON.stringify(
+      Object.fromEntries(
+        catalog.counties.map((county) => [
+          county.countyKey,
+          county.datasetCoverageUrl,
+        ]),
+      ),
+    );
+    mockResolveQueryTableLocation.mockImplementation((requestedCounty) => {
+      const countyKey = requestedCounty?.toLowerCase().replaceAll(" ", "-");
+      const county = catalog.counties.find(
+        (entry) => entry.countyKey === countyKey,
+      );
+      return county === undefined
+        ? { served: false, location: null, countyKey: countyKey ?? null }
+        : {
+            served: true,
+            location: county.queryTableUrl,
+            countyKey: county.countyKey,
+          };
+    });
+    mockGetPublishedCountyCatalogRevision.mockReturnValue("catalog-revision-a");
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    delete process.env.DATASET_COVERAGE_MAP;
+    clearDatasetCoverageCache();
+  });
+
+  it("returns all three formerly slow counties before the Watchog budget", async () => {
+    mockFetchPublishedCountyCatalog.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          setTimeout(() => resolve(catalog), 4_000);
+        }),
+    );
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      (input) =>
+        new Promise((resolve) => {
+          const location = String(input);
+          const county = counties.find((entry) =>
+            location.endsWith(`/${entry.countyKey}.json`),
+          );
+          setTimeout(
+            () =>
+              resolve(
+                new Response(
+                  JSON.stringify({
+                    county: county?.countyKey,
+                    exportedAt: "2026-08-24T16:37:08.135Z",
+                    datasets: [
+                      {
+                        county: county?.countyKey,
+                        source: "appraisal",
+                        ingested_count: county?.propertyCount,
+                        expected_count: county?.propertyCount,
+                        first_loaded_at: "2026-08-20T00:00:00.000Z",
+                        last_loaded_at: "2026-08-24T00:00:00.000Z",
+                        cid: null,
+                        ipns_label: null,
+                      },
+                    ],
+                  }),
+                  { status: 200 },
+                ),
+              ),
+            7_000,
+          );
+        }),
+    );
+    mockRunInternalPropertyQuery.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          setTimeout(() => resolve([]), 90_000);
+        }),
+    );
+
+    const startedAt = Date.now();
+    const resultPromise = Promise.all(
+      counties.map((county) =>
+        getOracleDatasetInfoHandler({ county: county.countyName }),
+      ),
+    );
+    await vi.advanceTimersByTimeAsync(11_000);
+    const results = await resultPromise;
+
+    expect(Date.now() - startedAt).toBeLessThan(59_049);
+    expect(
+      results.map((result) => {
+        const content = result.content[0];
+        if (content?.type !== "text") {
+          throw new Error("Expected a text MCP result.");
+        }
+        const parsed = JSON.parse(content.text);
+        return {
+          county: parsed.county,
+          propertyCount: parsed.propertyCount,
+          countSource: parsed.countSource,
+        };
+      }),
+    ).toEqual(
+      counties.map((county) => ({
+        county: county.countyName,
+        propertyCount: county.propertyCount,
+        countSource: "catalog-bound-dataset-coverage",
+      })),
+    );
+    expect(mockRunInternalPropertyQuery).not.toHaveBeenCalled();
+  });
+
+  it("cancels while catalog metadata is delayed", async () => {
+    mockFetchPublishedCountyCatalog.mockImplementation(
+      (options) =>
+        new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => resolve(catalog), 30_000);
+          options?.signal?.addEventListener(
+            "abort",
+            () => {
+              clearTimeout(timeout);
+              reject(new Error("aborted"));
+            },
+            { once: true },
+          );
+        }),
+    );
+    const controller = new AbortController();
+    const resultPromise = getOracleDatasetInfoHandler(
+      { county: "Lee" },
+      { signal: controller.signal },
+    );
+
+    controller.abort();
+    await vi.advanceTimersByTimeAsync(1);
+    const content = (await resultPromise).content[0];
+    if (content?.type !== "text") {
+      throw new Error("Expected a text MCP result.");
+    }
+    const parsed = JSON.parse(content.text);
+
+    expect(parsed.error).toBe("Failed to fetch oracle dataset info");
+    expect(parsed.details).toContain("cancelled");
+    expect(mockRunInternalPropertyQuery).not.toHaveBeenCalled();
   });
 });

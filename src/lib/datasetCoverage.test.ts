@@ -255,6 +255,36 @@ describe("fetchDatasetCoverage / getDatasetCoverageEntries", () => {
     );
   });
 
+  it("cancels an in-flight coverage gateway read", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation((_input, init) => {
+        return new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            "abort",
+            () => reject(new Error("aborted")),
+            { once: true },
+          );
+        });
+      });
+    process.env.DATASET_COVERAGE_MAP = JSON.stringify({
+      lee: "https://gw/c.json",
+    });
+    const controller = new AbortController();
+    const coveragePromise = fetchDatasetCoverage("lee", {
+      signal: controller.signal,
+      catalogRevision: "revision-1",
+    });
+
+    controller.abort();
+
+    await expect(coveragePromise).rejects.toThrow(
+      "Dataset coverage fetch was cancelled.",
+    );
+    const requestSignal = fetchSpy.mock.calls[0]?.[1]?.signal;
+    expect(requestSignal?.aborted).toBe(true);
+  });
+
   it("caches the snapshot within the TTL (one read per county)", async () => {
     const snapshot = { county: "lee", datasets: [sampleRow()] };
     const fetchSpy = vi
@@ -269,6 +299,39 @@ describe("fetchDatasetCoverage / getDatasetCoverageEntries", () => {
     await fetchDatasetCoverage("lee");
     await fetchDatasetCoverage("lee");
     expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("never reuses coverage across catalog revisions", async () => {
+    const snapshot = (ingestedCount: number) => ({
+      county: "lee",
+      datasets: [sampleRow({ ingested_count: ingestedCount })],
+    });
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(snapshot(50)), { status: 200 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(snapshot(75)), { status: 200 }),
+      );
+    process.env.DATASET_COVERAGE_MAP = JSON.stringify({
+      lee: "https://gw/c.json",
+    });
+
+    const revisionOne = await fetchDatasetCoverage("lee", {
+      catalogRevision: "revision-1",
+    });
+    const cachedRevisionOne = await fetchDatasetCoverage("lee", {
+      catalogRevision: "revision-1",
+    });
+    const revisionTwo = await fetchDatasetCoverage("lee", {
+      catalogRevision: "revision-2",
+    });
+
+    expect(revisionOne?.datasets[0]?.ingested_count).toBe(50);
+    expect(cachedRevisionOne?.datasets[0]?.ingested_count).toBe(50);
+    expect(revisionTwo?.datasets[0]?.ingested_count).toBe(75);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
 
   it("ignores a snapshot whose county does not match the requested county", async () => {
