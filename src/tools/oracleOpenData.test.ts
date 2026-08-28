@@ -1064,7 +1064,7 @@ describe("getOracleDatasetInfo catalog-bound metadata performance", () => {
   ] as const;
 
   const catalog = {
-    schemaVersion: "1.0" as const,
+    schemaVersion: "1.1" as const,
     generatedAt: "2026-08-24T16:37:08.135Z",
     counties: counties.map((county) => ({
       countyKey: county.countyKey,
@@ -1072,6 +1072,11 @@ describe("getOracleDatasetInfo catalog-bound metadata performance", () => {
       stateCode: county.stateCode,
       countyFips: county.countyFips,
       status: "published" as const,
+      publicationScope: {
+        schemaVersion: "1.0" as const,
+        level: "full" as const,
+        denominatorBasis: "county_total" as const,
+      },
       queryTableUrl: `https://catalog.example/${county.countyKey}.parquet`,
       datasetCoverageUrl: `https://catalog.example/${county.countyKey}.json`,
       permitQueryTableUrl: null,
@@ -1136,6 +1141,11 @@ describe("getOracleDatasetInfo catalog-bound metadata performance", () => {
                   JSON.stringify({
                     county: county?.countyKey,
                     exportedAt: "2026-08-24T16:37:08.135Z",
+                    publicationScope: {
+                      schemaVersion: "1.0",
+                      level: "full",
+                      denominatorBasis: "county_total",
+                    },
                     datasets: [
                       {
                         county: county?.countyKey,
@@ -1184,6 +1194,8 @@ describe("getOracleDatasetInfo catalog-bound metadata performance", () => {
           county: parsed.county,
           propertyCount: parsed.propertyCount,
           countSource: parsed.countSource,
+          publicationScope: parsed.publicationScope,
+          publicationScopeSource: parsed.publicationScopeSource,
         };
       }),
     ).toEqual(
@@ -1191,8 +1203,50 @@ describe("getOracleDatasetInfo catalog-bound metadata performance", () => {
         county: county.countyName,
         propertyCount: county.propertyCount,
         countSource: "catalog-bound-dataset-coverage",
+        publicationScope: {
+          schemaVersion: "1.0",
+          level: "full",
+          denominatorBasis: "county_total",
+        },
+        publicationScopeSource: "catalog_and_coverage",
       })),
     );
+    expect(mockRunInternalPropertyQuery).not.toHaveBeenCalled();
+  });
+
+  it("rejects inconsistent catalog and coverage scope without scanning parquet", async () => {
+    mockFetchPublishedCountyCatalog.mockResolvedValue(catalog);
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          county: "lee",
+          publicationScope: {
+            schemaVersion: "1.0",
+            level: "pilot",
+            denominatorBasis: "published_subset",
+          },
+          datasets: [
+            {
+              county: "lee",
+              source: "appraisal",
+              ingested_count: 50,
+              expected_count: 50,
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const result = await getOracleDatasetInfoHandler({ county: "Lee" });
+    const content = result.content[0];
+    if (content?.type !== "text") {
+      throw new Error("Expected a text MCP result.");
+    }
+    const parsed = JSON.parse(content.text);
+
+    expect(parsed.error).toBe("Failed to fetch oracle dataset info");
+    expect(parsed.details).toContain("does not match the canonical catalog");
     expect(mockRunInternalPropertyQuery).not.toHaveBeenCalled();
   });
 

@@ -684,6 +684,21 @@ function artifactIdentity(location: string): string {
   }
 }
 
+function publicationScopesEqual(
+  left: NonNullable<
+    PublishedCountyCatalog["counties"][number]["publicationScope"]
+  >,
+  right: NonNullable<
+    PublishedCountyCatalog["counties"][number]["publicationScope"]
+  >,
+): boolean {
+  return (
+    left.schemaVersion === right.schemaVersion &&
+    left.level === right.level &&
+    left.denominatorBasis === right.denominatorBasis
+  );
+}
+
 function buildCatalogCoverageDatasetInfo(
   county: string | undefined,
   catalogContext: DatasetInfoCatalogContext | null,
@@ -701,10 +716,23 @@ function buildCatalogCoverageDatasetInfo(
   const publishedCounty = catalogContext.catalog.counties.find(
     (entry) => entry.countyKey === countyKey,
   );
+  if (
+    publishedCounty?.publicationScope !== undefined &&
+    coverageSnapshot.publicationScope !== undefined &&
+    !publicationScopesEqual(
+      publishedCounty.publicationScope,
+      coverageSnapshot.publicationScope,
+    )
+  ) {
+    throw new Error(
+      `coverage publicationScope for '${countyKey}' does not match the canonical catalog`,
+    );
+  }
   const queryTable = resolveQueryTableLocation(county);
   const coverage = resolveCoverageLocation(county);
   if (
     publishedCounty === undefined ||
+    publishedCounty.publicationScope === undefined ||
     !queryTable.served ||
     queryTable.location === null ||
     !coverage.served ||
@@ -734,6 +762,11 @@ function buildCatalogCoverageDatasetInfo(
     exportedAt: coverageSnapshot.exportedAt ?? null,
     ipnsName: getOpenDataIpnsName(county) ?? null,
     catalogRevision: catalogContext.revision,
+    publicationScope: publishedCounty.publicationScope,
+    publicationScopeSource:
+      coverageSnapshot.publicationScope === undefined
+        ? "catalog_legacy_coverage"
+        : "catalog_and_coverage",
   };
 }
 
@@ -783,6 +816,21 @@ export async function getOracleDatasetInfoHandler(
       propertyCount: null,
       propertyDatasetAvailable: false,
     };
+    const catalogCounty =
+      args.county === undefined || catalogContext === null
+        ? undefined
+        : catalogContext.catalog.counties.find(
+            (entry) =>
+              entry.countyKey === normalizeCountyKey(args.county as string),
+          );
+    if (
+      catalogCounty?.publicationScope !== undefined &&
+      result.publicationScope === undefined
+    ) {
+      result.publicationScope = catalogCounty.publicationScope;
+      result.publicationScopeSource = "catalog";
+      result.catalogRevision = catalogContext?.revision;
+    }
 
     if (coverage !== null && coverage.length > 0) {
       result.datasets = coverage;

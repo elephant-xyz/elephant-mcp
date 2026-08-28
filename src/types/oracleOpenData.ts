@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  PublicationScopeSchema,
+  type PublicationScope,
+} from "./publishedCountyCatalog.ts";
 
 export const OracleManifestEntrySchema = z.object({
   propertyId: z.string(),
@@ -124,12 +128,15 @@ export const OracleDatasetCoverageSnapshotSchema = z
   .object({
     county: z.string(),
     exportedAt: z.string().optional(),
+    publicationScope: PublicationScopeSchema.optional(),
     datasets: z.array(OracleDatasetCoverageRowSchema),
   })
   .passthrough();
 export type OracleDatasetCoverageSnapshot = z.infer<
   typeof OracleDatasetCoverageSnapshotSchema
 >;
+
+export type { PublicationScope };
 
 /**
  * Per-source coverage as reported in `getOracleDatasetInfo.datasets[]`
