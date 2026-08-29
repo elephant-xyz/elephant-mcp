@@ -1,3 +1,19 @@
+# [1.8.0](https://github.com/elephant-xyz/elephant-mcp/compare/v1.7.0...v1.8.0) (2026-08-27)
+
+
+### Bug Fixes
+
+* avoid dataset-info parquet timeouts ([#48](https://github.com/elephant-xyz/elephant-mcp/issues/48)) ([9688e88](https://github.com/elephant-xyz/elephant-mcp/commit/9688e887266e1e0f28d0aeb996333991e8d22d3e))
+* persist on-demand permit harvests to Neon (onDemand flag) ([#30](https://github.com/elephant-xyz/elephant-mcp/issues/30)) ([f306c79](https://github.com/elephant-xyz/elephant-mcp/commit/f306c791bc0f3c5e4561176a3201b2836be6ca42))
+* **query:** set DuckDB home_directory before INSTALL httpfs on serverless ([#28](https://github.com/elephant-xyz/elephant-mcp/issues/28)) ([275adc8](https://github.com/elephant-xyz/elephant-mcp/commit/275adc826ab49cfc6b5470c8b8d4154b7022ff11))
+
+
+### Features
+
+* add bounded Overture co-location discovery ([#45](https://github.com/elephant-xyz/elephant-mcp/issues/45)) ([5c085ca](https://github.com/elephant-xyz/elephant-mcp/commit/5c085ca2520f9b776eae29d8b88e48448129a934))
+* **getOracleDatasetInfo:** per-source coverage datasets[] ([#31](https://github.com/elephant-xyz/elephant-mcp/issues/31)) ([4e88d75](https://github.com/elephant-xyz/elephant-mcp/commit/4e88d7597235e8c0b08a79499acbff36db1c32bf))
+* publish Rock Island with additive configuration ([#43](https://github.com/elephant-xyz/elephant-mcp/issues/43)) ([0aca2c4](https://github.com/elephant-xyz/elephant-mcp/commit/0aca2c467ac731e0a35aa999b8c0a184e62f042e))
+
 # [1.7.0](https://github.com/elephant-xyz/elephant-mcp/compare/v1.6.0...v1.7.0) (2026-06-26)
 
 
