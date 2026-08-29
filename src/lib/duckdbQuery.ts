@@ -479,6 +479,7 @@ async function openCountyConnection(
     await connection.run(`SET home_directory='${homeDir.replace(/'/g, "''")}'`);
     await connection.run("INSTALL httpfs");
     await connection.run("LOAD httpfs");
+    await connection.run("SET unsafe_disable_etag_checks = true");
   }
 
   const escaped = location.replace(/'/g, "''");
