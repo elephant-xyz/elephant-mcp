@@ -8,6 +8,7 @@ import {
   getOracleDatasetInfoHandler,
 } from "./oracleOpenData.ts";
 import { clearDatasetCoverageCache } from "../lib/datasetCoverage.ts";
+import { logger } from "../logger.ts";
 
 vi.mock("../lib/ipfs.ts", () => ({
   getJsonByCid: vi.fn(),
@@ -1084,6 +1085,13 @@ describe("getOracleDatasetInfo catalog-bound metadata performance", () => {
       updatedAt: "2026-08-24T16:37:08.135Z",
     })),
   };
+  const legacyCatalog = {
+    ...catalog,
+    schemaVersion: "1.0" as const,
+    counties: catalog.counties.map(
+      ({ publicationScope: _publicationScope, ...county }) => county,
+    ),
+  };
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -1118,6 +1126,115 @@ describe("getOracleDatasetInfo catalog-bound metadata performance", () => {
     vi.restoreAllMocks();
     delete process.env.DATASET_COVERAGE_MAP;
     clearDatasetCoverageCache();
+  });
+
+  it("uses schema 1.0 catalog-bound metadata without inventing publication scope", async () => {
+    mockFetchPublishedCountyCatalog.mockResolvedValue(legacyCatalog);
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          county: "lee",
+          exportedAt: "2026-08-24T16:37:08.135Z",
+          datasets: [
+            {
+              county: "lee",
+              source: "appraisal",
+              ingested_count: 511695,
+              expected_count: 511695,
+              first_loaded_at: "2026-08-20T00:00:00.000Z",
+              last_loaded_at: "2026-08-24T00:00:00.000Z",
+              cid: null,
+              ipns_label: null,
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+    const logSpy = vi.spyOn(logger, "info").mockImplementation(() => undefined);
+
+    const result = await getOracleDatasetInfoHandler({ county: "Lee" });
+    const content = result.content[0];
+    if (content?.type !== "text") {
+      throw new Error("Expected a text MCP result.");
+    }
+    const parsed = JSON.parse(content.text);
+
+    expect(parsed).toMatchObject({
+      county: "Lee",
+      propertyCount: 511695,
+      countSource: "catalog-bound-dataset-coverage",
+      catalogRevision: "catalog-revision-a",
+      publicationScope: null,
+      publicationScopeSource: "legacy_schema_1_0_unscoped",
+    });
+    expect(mockRunInternalPropertyQuery).not.toHaveBeenCalled();
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: "catalog-bound-coverage",
+        reason: "catalog_bound_schema_1_0_legacy_scope",
+        catalogRevision: "catalog-revision-a",
+        catalogSchemaVersion: "1.0",
+      }),
+      "Selected dataset-info metadata path",
+    );
+  });
+
+  it("records an identity mismatch and uses the existing query-table fallback", async () => {
+    mockFetchPublishedCountyCatalog.mockResolvedValue(legacyCatalog);
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          county: "lee",
+          datasets: [
+            {
+              county: "lee",
+              source: "appraisal",
+              ingested_count: 511695,
+              expected_count: 511695,
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+    mockResolveQueryTableLocation.mockReturnValue({
+      served: true,
+      location: "https://different.example/lee.parquet",
+      countyKey: "lee",
+    });
+    mockIsCountyServedByQueryTable.mockReturnValue(true);
+    mockRunInternalPropertyQuery.mockResolvedValue([
+      { c: 511695, county: "Lee", state: "FL" },
+    ]);
+    const logSpy = vi.spyOn(logger, "info").mockImplementation(() => undefined);
+
+    const result = await getOracleDatasetInfoHandler({ county: "Lee" });
+    const content = result.content[0];
+    if (content?.type !== "text") {
+      throw new Error("Expected a text MCP result.");
+    }
+    const parsed = JSON.parse(content.text);
+
+    expect(parsed).toMatchObject({
+      county: "Lee",
+      propertyCount: 511695,
+      source: "query-table",
+    });
+    expect(parsed.countSource).toBeUndefined();
+    expect(mockRunInternalPropertyQuery).toHaveBeenCalledWith(
+      "Lee",
+      expect.stringContaining("SELECT count(*) AS c"),
+      [],
+      undefined,
+    );
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: "query-table-fallback",
+        reason: "query_table_catalog_identity_mismatch",
+      }),
+      "Selected dataset-info metadata path",
+    );
   });
 
   it("returns all three formerly slow counties before the Watchog budget", async () => {

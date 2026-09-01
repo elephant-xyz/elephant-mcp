@@ -699,17 +699,39 @@ function publicationScopesEqual(
   );
 }
 
+type CatalogCoverageDecisionReason =
+  | "catalog_bound_schema_1_0_legacy_scope"
+  | "catalog_bound_schema_1_1_scope"
+  | "county_not_provided"
+  | "catalog_unavailable"
+  | "coverage_unavailable"
+  | "catalog_county_missing"
+  | "query_table_unserved"
+  | "query_table_location_missing"
+  | "coverage_unserved"
+  | "coverage_location_missing"
+  | "query_table_catalog_identity_mismatch"
+  | "coverage_catalog_identity_mismatch"
+  | "appraisal_coverage_missing";
+
+interface CatalogCoverageDecision {
+  readonly base: Record<string, unknown> | null;
+  readonly reason: CatalogCoverageDecisionReason;
+}
+
 function buildCatalogCoverageDatasetInfo(
   county: string | undefined,
   catalogContext: DatasetInfoCatalogContext | null,
   coverageSnapshot: OracleDatasetCoverageSnapshot | null,
-): Record<string, unknown> | null {
-  if (
-    county === undefined ||
-    catalogContext === null ||
-    coverageSnapshot === null
-  ) {
-    return null;
+): CatalogCoverageDecision {
+  if (county === undefined) {
+    return { base: null, reason: "county_not_provided" };
+  }
+  if (catalogContext === null) {
+    return { base: null, reason: "catalog_unavailable" };
+  }
+  if (coverageSnapshot === null) {
+    return { base: null, reason: "coverage_unavailable" };
   }
 
   const countyKey = normalizeCountyKey(county);
@@ -730,43 +752,70 @@ function buildCatalogCoverageDatasetInfo(
   }
   const queryTable = resolveQueryTableLocation(county);
   const coverage = resolveCoverageLocation(county);
+  if (publishedCounty === undefined) {
+    return { base: null, reason: "catalog_county_missing" };
+  }
+  if (!queryTable.served) {
+    return { base: null, reason: "query_table_unserved" };
+  }
+  if (queryTable.location === null) {
+    return { base: null, reason: "query_table_location_missing" };
+  }
+  if (!coverage.served) {
+    return { base: null, reason: "coverage_unserved" };
+  }
+  if (coverage.location === null) {
+    return { base: null, reason: "coverage_location_missing" };
+  }
   if (
-    publishedCounty === undefined ||
-    publishedCounty.publicationScope === undefined ||
-    !queryTable.served ||
-    queryTable.location === null ||
-    !coverage.served ||
-    coverage.location === null ||
     artifactIdentity(queryTable.location) !==
-      artifactIdentity(publishedCounty.queryTableUrl) ||
-    artifactIdentity(coverage.location) !==
-      artifactIdentity(publishedCounty.datasetCoverageUrl)
+    artifactIdentity(publishedCounty.queryTableUrl)
   ) {
-    return null;
+    return {
+      base: null,
+      reason: "query_table_catalog_identity_mismatch",
+    };
+  }
+  if (
+    artifactIdentity(coverage.location) !==
+    artifactIdentity(publishedCounty.datasetCoverageUrl)
+  ) {
+    return {
+      base: null,
+      reason: "coverage_catalog_identity_mismatch",
+    };
   }
 
   const appraisal = coverageSnapshot.datasets.find(
     (dataset) => dataset.source.toLowerCase() === "appraisal",
   );
   if (appraisal === undefined) {
-    return null;
+    return { base: null, reason: "appraisal_coverage_missing" };
   }
 
   return {
-    county: publishedCounty.countyName,
-    stateCode: publishedCounty.stateCode,
-    propertyCount: appraisal.ingested_count,
-    propertyDatasetAvailable: true,
-    source: "query-table",
-    countSource: "catalog-bound-dataset-coverage",
-    exportedAt: coverageSnapshot.exportedAt ?? null,
-    ipnsName: getOpenDataIpnsName(county) ?? null,
-    catalogRevision: catalogContext.revision,
-    publicationScope: publishedCounty.publicationScope,
-    publicationScopeSource:
-      coverageSnapshot.publicationScope === undefined
-        ? "catalog_legacy_coverage"
-        : "catalog_and_coverage",
+    base: {
+      county: publishedCounty.countyName,
+      stateCode: publishedCounty.stateCode,
+      propertyCount: appraisal.ingested_count,
+      propertyDatasetAvailable: true,
+      source: "query-table",
+      countSource: "catalog-bound-dataset-coverage",
+      exportedAt: coverageSnapshot.exportedAt ?? null,
+      ipnsName: getOpenDataIpnsName(county) ?? null,
+      catalogRevision: catalogContext.revision,
+      publicationScope: publishedCounty.publicationScope ?? null,
+      publicationScopeSource:
+        publishedCounty.publicationScope === undefined
+          ? "legacy_schema_1_0_unscoped"
+          : coverageSnapshot.publicationScope === undefined
+            ? "catalog_legacy_coverage"
+            : "catalog_and_coverage",
+    },
+    reason:
+      catalogContext.catalog.schemaVersion === "1.0"
+        ? "catalog_bound_schema_1_0_legacy_scope"
+        : "catalog_bound_schema_1_1_scope",
   };
 }
 
@@ -793,13 +842,27 @@ export async function getOracleDatasetInfoHandler(
     // snapshot. The appraisal row is the publisher's exact row-count metadata,
     // so dataset-info need not scan a 200–380 MB remote Parquet merely to repeat
     // that count. Any identity mismatch fails closed to the existing query path.
-    const metadataBase = buildCatalogCoverageDatasetInfo(
+    const metadataDecision = buildCatalogCoverageDatasetInfo(
       args.county,
       catalogContext,
       coverageSnapshot,
     );
+    logger.info(
+      {
+        county: args.county ?? null,
+        path:
+          metadataDecision.base === null
+            ? "query-table-fallback"
+            : "catalog-bound-coverage",
+        reason: metadataDecision.reason,
+        catalogRevision: catalogContext?.revision ?? null,
+        catalogSchemaVersion: catalogContext?.catalog.schemaVersion ?? null,
+      },
+      "Selected dataset-info metadata path",
+    );
     const base =
-      metadataBase ?? (await buildBaseDatasetInfo(args.county, options.signal));
+      metadataDecision.base ??
+      (await buildBaseDatasetInfo(args.county, options.signal));
 
     // County served by neither a property dataset nor coverage → not served.
     if (base === null && (coverage === null || coverage.length === 0)) {

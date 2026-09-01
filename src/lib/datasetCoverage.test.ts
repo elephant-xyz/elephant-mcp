@@ -423,6 +423,41 @@ describe("fetchDatasetCoverage / getDatasetCoverageEntries", () => {
     expect(await fetchDatasetCoverage("lee")).toBeNull();
   });
 
+  it("treats a coverage 429 as a bounded fallback without poisoning the cache", async () => {
+    const snapshot = {
+      county: "lee",
+      exportedAt: "2026-07-08T00:00:00Z",
+      datasets: [sampleRow()],
+    };
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response("throttled", {
+          status: 429,
+          headers: { "retry-after": "60" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(snapshot), { status: 200 }),
+      );
+    process.env.DATASET_COVERAGE_MAP = JSON.stringify({
+      lee: "https://gw/c.json",
+    });
+
+    expect(
+      await fetchDatasetCoverage("lee", {
+        catalogRevision: "revision-1",
+      }),
+    ).toBeNull();
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+    const recovered = await fetchDatasetCoverage("lee", {
+      catalogRevision: "revision-1",
+    });
+    expect(recovered?.datasets).toHaveLength(1);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
   it("does not cache a failed read, so a later successful read still resolves", async () => {
     const snapshot = {
       county: "lee",
