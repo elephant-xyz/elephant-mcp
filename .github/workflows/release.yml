@@ -27,7 +27,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.RELEASE_TOKEN }}
+          token: ${{ github.token }}
           persist-credentials: false
 
       - name: Setup Node.js
@@ -44,7 +44,7 @@ jobs:
 
       - name: Version, changelog, and GitHub release
         env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: npx semantic-release
 
       - name: Upgrade npm for trusted publishing
