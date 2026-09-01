@@ -8,6 +8,7 @@ import {
   type OracleDatasetCoverageSnapshot,
   type OracleDatasetInfoCoverageEntry,
 } from "../types/oracleOpenData.ts";
+import { PublicationScopeSchema } from "../types/publishedCountyCatalog.ts";
 
 /**
  * Per-source dataset coverage reader.
@@ -49,6 +50,10 @@ interface CoverageCacheEntry {
 }
 
 const coverageCache = new Map<string, CoverageCacheEntry>();
+
+export class PublicationScopeContractError extends Error {
+  override readonly name = "PublicationScopeContractError";
+}
 
 /** Reset the coverage snapshot cache. Intended for tests. */
 export function clearDatasetCoverageCache(): void {
@@ -254,6 +259,21 @@ export async function fetchDatasetCoverage(
   try {
     const raw = await readSnapshotJson(resolution.location, options);
     if (raw !== null) {
+      if (
+        typeof raw === "object" &&
+        raw !== null &&
+        !Array.isArray(raw) &&
+        Object.hasOwn(raw, "publicationScope")
+      ) {
+        const scope = PublicationScopeSchema.safeParse(
+          (raw as Record<string, unknown>).publicationScope,
+        );
+        if (!scope.success) {
+          throw new PublicationScopeContractError(
+            `coverage publicationScope validation failed: ${scope.error.message}`,
+          );
+        }
+      }
       const parsed = OracleDatasetCoverageSnapshotSchema.safeParse(raw);
       if (parsed.success) {
         // Guard against a stale/misconfigured location serving another
@@ -283,6 +303,9 @@ export async function fetchDatasetCoverage(
       }
     }
   } catch (err) {
+    if (err instanceof PublicationScopeContractError) {
+      throw err;
+    }
     if (options.signal?.aborted) {
       throw new Error("Dataset coverage fetch was cancelled.");
     }

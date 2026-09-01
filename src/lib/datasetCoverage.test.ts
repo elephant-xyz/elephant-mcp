@@ -12,6 +12,7 @@ import {
   fetchDatasetCoverage,
   getDatasetCoverageEntries,
   clearDatasetCoverageCache,
+  PublicationScopeContractError,
 } from "./datasetCoverage.ts";
 import type { OracleDatasetCoverageRow } from "../types/oracleOpenData.ts";
 
@@ -200,6 +201,11 @@ describe("fetchDatasetCoverage / getDatasetCoverageEntries", () => {
       JSON.stringify({
         county: "lee",
         exportedAt: "2026-07-08T00:00:00Z",
+        publicationScope: {
+          schemaVersion: "1.0",
+          level: "full",
+          denominatorBasis: "county_total",
+        },
         datasets: [
           sampleRow(),
           sampleRow({
@@ -222,6 +228,42 @@ describe("fetchDatasetCoverage / getDatasetCoverageEntries", () => {
     expect(entries?.[1]?.completionPercent).toBeNull();
   });
 
+  it("preserves a 50-of-50 pilot as published-subset coverage", async () => {
+    const file = join(dir, "hillsborough.json");
+    writeFileSync(
+      file,
+      JSON.stringify({
+        county: "hillsborough",
+        publicationScope: {
+          schemaVersion: "1.0",
+          level: "pilot",
+          denominatorBasis: "published_subset",
+        },
+        datasets: [
+          sampleRow({
+            county: "hillsborough",
+            ingested_count: 50,
+            expected_count: 50,
+          }),
+        ],
+      }),
+    );
+    process.env.DATASET_COVERAGE_MAP = JSON.stringify({ hillsborough: file });
+
+    const snapshot = await fetchDatasetCoverage("hillsborough");
+
+    expect(snapshot?.publicationScope).toEqual({
+      schemaVersion: "1.0",
+      level: "pilot",
+      denominatorBasis: "published_subset",
+    });
+    expect(
+      snapshot === null
+        ? null
+        : toDatasetInfoCoverageEntry(snapshot.datasets[0]!).completionPercent,
+    ).toBe(100);
+  });
+
   it("returns null when the county has no configured snapshot", async () => {
     expect(await getDatasetCoverageEntries("not-built-in")).toBeNull();
   });
@@ -231,6 +273,27 @@ describe("fetchDatasetCoverage / getDatasetCoverageEntries", () => {
     writeFileSync(file, JSON.stringify({ county: "lee", datasets: "nope" }));
     process.env.DATASET_COVERAGE_MAP = JSON.stringify({ lee: file });
     expect(await fetchDatasetCoverage("lee")).toBeNull();
+  });
+
+  it("rejects an explicitly unsupported publication scope", async () => {
+    const file = join(dir, "unknown-scope.json");
+    writeFileSync(
+      file,
+      JSON.stringify({
+        county: "lee",
+        publicationScope: {
+          schemaVersion: "1.0",
+          level: "unknown",
+          denominatorBasis: "county_total",
+        },
+        datasets: [sampleRow()],
+      }),
+    );
+    process.env.DATASET_COVERAGE_MAP = JSON.stringify({ lee: file });
+
+    await expect(fetchDatasetCoverage("lee")).rejects.toBeInstanceOf(
+      PublicationScopeContractError,
+    );
   });
 
   it("returns null (not throw) when the file is missing", async () => {

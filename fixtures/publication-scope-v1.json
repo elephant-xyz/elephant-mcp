@@ -1,0 +1,41 @@
+{
+  "contractVersion": "1.0",
+  "scenarios": [
+    {
+      "id": "hillsborough-50-of-50-pilot",
+      "countyKey": "hillsborough",
+      "publicationScope": {
+        "schemaVersion": "1.0",
+        "level": "pilot",
+        "denominatorBasis": "published_subset"
+      },
+      "ingestedCount": 50,
+      "expectedCount": 50,
+      "factEligible": false
+    },
+    {
+      "id": "true-full-county",
+      "countyKey": "lee",
+      "publicationScope": {
+        "schemaVersion": "1.0",
+        "level": "full",
+        "denominatorBasis": "county_total"
+      },
+      "ingestedCount": 100,
+      "expectedCount": 100,
+      "factEligible": true
+    },
+    {
+      "id": "partial-county-count",
+      "countyKey": "orange",
+      "publicationScope": {
+        "schemaVersion": "1.0",
+        "level": "partial",
+        "denominatorBasis": "county_total"
+      },
+      "ingestedCount": 50,
+      "expectedCount": 100,
+      "factEligible": false
+    }
+  ]
+}
