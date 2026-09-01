@@ -1,3 +1,10 @@
+## [1.10.1](https://github.com/elephant-xyz/elephant-mcp/compare/v1.10.0...v1.10.1) (2026-09-01)
+
+
+### Bug Fixes
+
+* restore schema 1.0 dataset metadata fast path ([#54](https://github.com/elephant-xyz/elephant-mcp/issues/54)) ([fb904b6](https://github.com/elephant-xyz/elephant-mcp/commit/fb904b6dd4e369c923d8778655087eb2dfb0e328))
+
 # [1.10.0](https://github.com/elephant-xyz/elephant-mcp/compare/v1.9.0...v1.10.0) (2026-09-01)
 
 
