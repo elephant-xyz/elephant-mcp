@@ -1,3 +1,10 @@
+# [1.9.0](https://github.com/elephant-xyz/elephant-mcp/compare/v1.8.0...v1.9.0) (2026-08-29)
+
+
+### Features
+
+* honor map additions, wire Hillsborough, and disable duckdb httpfs etag checks ([#52](https://github.com/elephant-xyz/elephant-mcp/issues/52)) ([341d7f4](https://github.com/elephant-xyz/elephant-mcp/commit/341d7f41c184566b5aa90cb57428713cc9e3adc0))
+
 # [1.8.0](https://github.com/elephant-xyz/elephant-mcp/compare/v1.7.0...v1.8.0) (2026-08-27)
 
 
