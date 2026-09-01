@@ -1,3 +1,10 @@
+# [1.10.0](https://github.com/elephant-xyz/elephant-mcp/compare/v1.9.0...v1.10.0) (2026-09-01)
+
+
+### Features
+
+* expose county publication scope ([#51](https://github.com/elephant-xyz/elephant-mcp/issues/51)) ([9e8441f](https://github.com/elephant-xyz/elephant-mcp/commit/9e8441f535e7fad0ef99fb96641c5fa091d76861))
+
 # [1.9.0](https://github.com/elephant-xyz/elephant-mcp/compare/v1.8.0...v1.9.0) (2026-08-29)
 
 
