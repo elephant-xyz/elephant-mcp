@@ -203,7 +203,7 @@ describe("published county catalog", () => {
     expect(secondPayload.catalogRevision).toBe(firstPayload.catalogRevision);
   });
 
-  it("preserves the shared Hillsborough pilot scope fixture", async () => {
+  it("preserves a shared synthetic pilot scope fixture", async () => {
     const pilot = publicationScopeFixture.scenarios.find(
       (scenario) => scenario.id === "hillsborough-50-of-50-pilot",
     );

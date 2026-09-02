@@ -60,13 +60,14 @@ function syntheticRegistry(level: "full" | "partial" | "pilot" = "full") {
 }
 
 describe("Donphan publication-scope registry", () => {
-  it("contains the revalidated ten county identities and seven full counties", () => {
+  it("contains the revalidated ten county identities and eight full counties", () => {
     expect(registryJson.entries).toHaveLength(10);
     expect(
       registryJson.entries
         .filter((entry) => entry.publicationScope.level === "full")
         .map((entry) => entry.countyKey),
     ).toEqual([
+      "hillsborough",
       "lee",
       "miami-dade",
       "montgomery",
@@ -79,7 +80,7 @@ describe("Donphan publication-scope registry", () => {
       registryJson.entries
         .filter((entry) => entry.publicationScope.level === "pilot")
         .map((entry) => entry.countyKey),
-    ).toEqual(["chester", "hillsborough", "pinellas"]);
+    ).toEqual(["chester", "pinellas"]);
   });
 
   it("resolves a registry-bound full county across equivalent IPNS URL forms", () => {
@@ -91,7 +92,7 @@ describe("Donphan publication-scope registry", () => {
     });
     expect(result.resolution).toMatchObject({
       reason: "registry_match",
-      registryVersion: "2026-09-02.1",
+      registryVersion: "2026-09-02.2",
       registryRevision: getPublicationScopeRegistryRevision(),
       entryIdentity: expect.stringMatching(/^[a-f0-9]{64}$/),
       provenance: { owner: "elephant-mcp/donphan" },
