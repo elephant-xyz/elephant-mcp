@@ -1,8 +1,8 @@
 {
   "schemaVersion": "1.0",
-  "registryVersion": "2026-09-02.1",
+  "registryVersion": "2026-09-02.2",
   "owner": "elephant-mcp/donphan",
-  "reviewedAt": "2026-09-01T17:06:37.000Z",
+  "reviewedAt": "2026-09-02T19:03:16.000Z",
   "entries": [
     {
       "countyKey": "chester",
@@ -32,14 +32,14 @@
       "datasetCoverageIdentity": "ipns:k51qzi5uqu5di5jghjwbpumnr2vt1crmaycqmtx673kw8pqp8dymecuig5x8jb",
       "publicationScope": {
         "schemaVersion": "1.0",
-        "level": "pilot",
-        "denominatorBasis": "published_subset"
+        "level": "full",
+        "denominatorBasis": "county_total"
       },
       "provenance": {
         "owner": "elephant-mcp/donphan",
         "artifactCatalog": "https://raw.githubusercontent.com/elephant-xyz/oracle-node/main/catalog/published-counties.json",
         "classificationEvidence": "https://github.com/elephant-xyz/oracle-node/pull/195",
-        "reviewedAt": "2026-09-01T17:06:37.000Z"
+        "reviewedAt": "2026-09-02T19:03:16.000Z"
       }
     },
     {
