@@ -1,9 +1,28 @@
 {
   "schemaVersion": "1.0",
-  "registryVersion": "2026-09-02.2",
+  "registryVersion": "2026-09-02.3",
   "owner": "elephant-mcp/donphan",
-  "reviewedAt": "2026-09-02T19:03:16.000Z",
+  "reviewedAt": "2026-09-02T20:04:50.929Z",
   "entries": [
+    {
+      "countyKey": "broward",
+      "countyName": "Broward",
+      "stateCode": "FL",
+      "countyFips": "12011",
+      "queryTableIdentity": "ipns:k51qzi5uqu5dibuhwyztmkjgvz94v3mkpgfreryxwb3d4neta5e7tsxebfi09s",
+      "datasetCoverageIdentity": "ipns:k51qzi5uqu5dhx6yqczp6f9na3xa9g1iiizxtquer62x9wavh8gpbng524vrbp",
+      "publicationScope": {
+        "schemaVersion": "1.0",
+        "level": "partial",
+        "denominatorBasis": "published_subset"
+      },
+      "provenance": {
+        "owner": "elephant-mcp/donphan",
+        "artifactCatalog": "https://raw.githubusercontent.com/elephant-xyz/oracle-node/main/catalog/published-counties.json",
+        "classificationEvidence": "https://github.com/elephant-xyz/elephant-mcp/pull/55",
+        "reviewedAt": "2026-09-02T20:04:50.929Z"
+      }
+    },
     {
       "countyKey": "chester",
       "countyName": "Chester",

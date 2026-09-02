@@ -40,11 +40,10 @@ export const DEFAULT_DATASET_COVERAGE_MAP: Readonly<Record<string, string>> = {
     "https://k51qzi5uqu5dj8n2f8nowh8kts53rvpr62zfj0mz9izc11rfzv56q7m4161lg7.ipns.dweb.link/",
   "palm-beach":
     "https://k51qzi5uqu5djwga4mcd8nx1gbwy4o9rks3gkoe1u5py5wi9tieea7h44nh4g2.ipns.dweb.link/",
-  // Coverage-only: BBB harvest on IPFS. Reviewed CID (IPNS label
-  // oracle-dataset-coverage-broward) so the 12s snapshot fetch does not depend
-  // on IPNS gateway propagation. No appraisal/permit query table is published.
+  // Partial Broward appraisal, permit, and BBB coverage. The dedicated IPNS
+  // label advances as validated partial snapshots are published.
   broward:
-    "https://ipfs.filebase.io/ipfs/QmXueAqTV1e5qpBVhZA263KZzRqZCXAjFd8NwAvgQ45RS8",
+    "https://ipfs.filebase.io/ipns/k51qzi5uqu5dhx6yqczp6f9na3xa9g1iiizxtquer62x9wavh8gpbng524vrbp",
 };
 
 interface CoverageCacheEntry {
