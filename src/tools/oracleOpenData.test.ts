@@ -1092,6 +1092,27 @@ describe("getOracleDatasetInfo catalog-bound metadata performance", () => {
       ({ publicationScope: _publicationScope, ...county }) => county,
     ),
   };
+  const scopeRegistry = {
+    schemaVersion: "1.0",
+    registryVersion: "test-1",
+    owner: "elephant-mcp/donphan",
+    reviewedAt: "2026-08-24T16:37:08.135Z",
+    entries: catalog.counties.map((county) => ({
+      countyKey: county.countyKey,
+      countyName: county.countyName,
+      stateCode: county.stateCode,
+      countyFips: county.countyFips,
+      queryTableIdentity: county.queryTableUrl,
+      datasetCoverageIdentity: county.datasetCoverageUrl,
+      publicationScope: county.publicationScope,
+      provenance: {
+        owner: "elephant-mcp/donphan",
+        artifactCatalog: "https://example.com/catalog.json",
+        classificationEvidence: "https://example.com/review/1",
+        reviewedAt: "2026-08-24T16:37:08.135Z",
+      },
+    })),
+  };
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -1128,7 +1149,7 @@ describe("getOracleDatasetInfo catalog-bound metadata performance", () => {
     clearDatasetCoverageCache();
   });
 
-  it("uses schema 1.0 catalog-bound metadata without inventing publication scope", async () => {
+  it("keeps schema 1.0 metadata fast and resolves scope from the MCP registry", async () => {
     mockFetchPublishedCountyCatalog.mockResolvedValue(legacyCatalog);
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
@@ -1153,7 +1174,10 @@ describe("getOracleDatasetInfo catalog-bound metadata performance", () => {
     );
     const logSpy = vi.spyOn(logger, "info").mockImplementation(() => undefined);
 
-    const result = await getOracleDatasetInfoHandler({ county: "Lee" });
+    const result = await getOracleDatasetInfoHandler(
+      { county: "Lee" },
+      { scopeRegistry },
+    );
     const content = result.content[0];
     if (content?.type !== "text") {
       throw new Error("Expected a text MCP result.");
@@ -1165,8 +1189,16 @@ describe("getOracleDatasetInfo catalog-bound metadata performance", () => {
       propertyCount: 511695,
       countSource: "catalog-bound-dataset-coverage",
       catalogRevision: "catalog-revision-a",
-      publicationScope: null,
-      publicationScopeSource: "legacy_schema_1_0_unscoped",
+      publicationScope: {
+        schemaVersion: "1.0",
+        level: "full",
+        denominatorBasis: "county_total",
+      },
+      publicationScopeSource: "mcp_scope_registry",
+      scopeRegistryVersion: "test-1",
+      publicationScopeResolution: {
+        reason: "registry_match",
+      },
     });
     expect(mockRunInternalPropertyQuery).not.toHaveBeenCalled();
     expect(logSpy).toHaveBeenCalledWith(
@@ -1209,7 +1241,10 @@ describe("getOracleDatasetInfo catalog-bound metadata performance", () => {
     ]);
     const logSpy = vi.spyOn(logger, "info").mockImplementation(() => undefined);
 
-    const result = await getOracleDatasetInfoHandler({ county: "Lee" });
+    const result = await getOracleDatasetInfoHandler(
+      { county: "Lee" },
+      { scopeRegistry },
+    );
     const content = result.content[0];
     if (content?.type !== "text") {
       throw new Error("Expected a text MCP result.");
@@ -1220,6 +1255,10 @@ describe("getOracleDatasetInfo catalog-bound metadata performance", () => {
       county: "Lee",
       propertyCount: 511695,
       source: "query-table",
+      publicationScope: null,
+      publicationScopeResolution: {
+        reason: "runtime_artifact_identity_mismatch",
+      },
     });
     expect(parsed.countSource).toBeUndefined();
     expect(mockRunInternalPropertyQuery).toHaveBeenCalledWith(
@@ -1293,7 +1332,10 @@ describe("getOracleDatasetInfo catalog-bound metadata performance", () => {
     const startedAt = Date.now();
     const resultPromise = Promise.all(
       counties.map((county) =>
-        getOracleDatasetInfoHandler({ county: county.countyName }),
+        getOracleDatasetInfoHandler(
+          { county: county.countyName },
+          { scopeRegistry },
+        ),
       ),
     );
     await vi.advanceTimersByTimeAsync(11_000);
@@ -1313,6 +1355,7 @@ describe("getOracleDatasetInfo catalog-bound metadata performance", () => {
           countSource: parsed.countSource,
           publicationScope: parsed.publicationScope,
           publicationScopeSource: parsed.publicationScopeSource,
+          resolutionReason: parsed.publicationScopeResolution.reason,
         };
       }),
     ).toEqual(
@@ -1325,13 +1368,14 @@ describe("getOracleDatasetInfo catalog-bound metadata performance", () => {
           level: "full",
           denominatorBasis: "county_total",
         },
-        publicationScopeSource: "catalog_and_coverage",
+        publicationScopeSource: "mcp_scope_registry",
+        resolutionReason: "registry_match",
       })),
     );
     expect(mockRunInternalPropertyQuery).not.toHaveBeenCalled();
   });
 
-  it("rejects inconsistent catalog and coverage scope without scanning parquet", async () => {
+  it("fails scope closed on source conflict without scanning parquet", async () => {
     mockFetchPublishedCountyCatalog.mockResolvedValue(catalog);
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
@@ -1355,15 +1399,23 @@ describe("getOracleDatasetInfo catalog-bound metadata performance", () => {
       ),
     );
 
-    const result = await getOracleDatasetInfoHandler({ county: "Lee" });
+    const result = await getOracleDatasetInfoHandler(
+      { county: "Lee" },
+      { scopeRegistry },
+    );
     const content = result.content[0];
     if (content?.type !== "text") {
       throw new Error("Expected a text MCP result.");
     }
     const parsed = JSON.parse(content.text);
 
-    expect(parsed.error).toBe("Failed to fetch oracle dataset info");
-    expect(parsed.details).toContain("does not match the canonical catalog");
+    expect(parsed.error).toBeUndefined();
+    expect(parsed.propertyCount).toBe(50);
+    expect(parsed.countSource).toBe("catalog-bound-dataset-coverage");
+    expect(parsed.publicationScope).toBeNull();
+    expect(parsed.publicationScopeResolution.reason).toBe(
+      "explicit_source_scope_conflict",
+    );
     expect(mockRunInternalPropertyQuery).not.toHaveBeenCalled();
   });
 
@@ -1385,7 +1437,7 @@ describe("getOracleDatasetInfo catalog-bound metadata performance", () => {
     const controller = new AbortController();
     const resultPromise = getOracleDatasetInfoHandler(
       { county: "Lee" },
-      { signal: controller.signal },
+      { signal: controller.signal, scopeRegistry },
     );
 
     controller.abort();

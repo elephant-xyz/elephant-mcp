@@ -11,6 +11,7 @@
       },
       "ingestedCount": 50,
       "expectedCount": 50,
+      "resolutionReason": "registry_match",
       "factEligible": false
     },
     {
@@ -23,6 +24,7 @@
       },
       "ingestedCount": 100,
       "expectedCount": 100,
+      "resolutionReason": "registry_match",
       "factEligible": true
     },
     {
@@ -35,7 +37,57 @@
       },
       "ingestedCount": 50,
       "expectedCount": 100,
+      "resolutionReason": "registry_match",
       "factEligible": false
+    },
+    {
+      "id": "unknown-new-county",
+      "countyKey": "new-county",
+      "publicationScope": null,
+      "ingestedCount": 100,
+      "expectedCount": 100,
+      "resolutionReason": "registry_entry_missing",
+      "factEligible": false
+    },
+    {
+      "id": "artifact-identity-drift",
+      "countyKey": "lee",
+      "publicationScope": null,
+      "ingestedCount": 100,
+      "expectedCount": 100,
+      "resolutionReason": "registry_identity_mismatch",
+      "factEligible": false
+    },
+    {
+      "id": "explicit-source-conflict",
+      "countyKey": "lee",
+      "publicationScope": null,
+      "ingestedCount": 100,
+      "expectedCount": 100,
+      "resolutionReason": "explicit_source_scope_conflict",
+      "factEligible": false
+    },
+    {
+      "id": "partial-to-full-registry-transition",
+      "countyKey": "orange",
+      "before": {
+        "scopeRegistryRevision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "publicationScope": {
+          "schemaVersion": "1.0",
+          "level": "partial",
+          "denominatorBasis": "county_total"
+        },
+        "factEligible": false
+      },
+      "after": {
+        "scopeRegistryRevision": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "publicationScope": {
+          "schemaVersion": "1.0",
+          "level": "full",
+          "denominatorBasis": "county_total"
+        },
+        "factEligible": true
+      }
     }
   ]
 }
