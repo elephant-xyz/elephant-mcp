@@ -45,6 +45,7 @@ export const DEFAULT_DATASET_COVERAGE_MAP: Readonly<Record<string, string>> = {
 interface CoverageCacheEntry {
   readonly source: string;
   readonly catalogRevision: string | null;
+  readonly scopeRegistryRevision: string | null;
   readonly snapshot: OracleDatasetCoverageSnapshot | null;
   readonly fetchedAt: number;
 }
@@ -180,6 +181,7 @@ export interface DatasetCoverageFetchOptions {
   readonly signal?: AbortSignal;
   readonly timeoutMs?: number;
   readonly catalogRevision?: string;
+  readonly scopeRegistryRevision?: string;
 }
 
 async function readSnapshotJson(
@@ -246,10 +248,12 @@ export async function fetchDatasetCoverage(
   const cacheKey = resolution.countyKey ?? DEFAULT_CACHE_KEY;
   const cached = coverageCache.get(cacheKey);
   const catalogRevision = options.catalogRevision ?? null;
+  const scopeRegistryRevision = options.scopeRegistryRevision ?? null;
   if (
     cached !== undefined &&
     cached.source === resolution.location &&
     cached.catalogRevision === catalogRevision &&
+    cached.scopeRegistryRevision === scopeRegistryRevision &&
     now - cached.fetchedAt < CACHE_TTL_MS
   ) {
     return cached.snapshot;
@@ -325,6 +329,7 @@ export async function fetchDatasetCoverage(
     coverageCache.set(cacheKey, {
       source: resolution.location,
       catalogRevision,
+      scopeRegistryRevision,
       snapshot,
       fetchedAt: now,
     });
