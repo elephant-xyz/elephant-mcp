@@ -19,7 +19,7 @@
       "provenance": {
         "owner": "elephant-mcp/donphan",
         "artifactCatalog": "https://raw.githubusercontent.com/elephant-xyz/oracle-node/main/catalog/published-counties.json",
-        "classificationEvidence": "https://github.com/elephant-xyz/elephant-mcp/pull/55",
+        "classificationEvidence": "https://github.com/elephant-xyz/oracle-node/pull/206",
         "reviewedAt": "2026-09-02T20:04:50.929Z"
       }
     },
