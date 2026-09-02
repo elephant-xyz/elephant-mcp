@@ -91,6 +91,17 @@ describe("resolveCoverageLocation", () => {
     expect(res.countyKey).toBe("lee");
   });
 
+  it("serves Broward as a coverage-only BBB snapshot", () => {
+    const res = resolveCoverageLocation("Broward");
+    expect(res).toEqual({
+      served: true,
+      location:
+        "https://ipfs.filebase.io/ipfs/QmXueAqTV1e5qpBVhZA263KZzRqZCXAjFd8NwAvgQ45RS8",
+      countyKey: "broward",
+    });
+    expect(res.location).toBe(DEFAULT_DATASET_COVERAGE_MAP.broward);
+  });
+
   it("not served when an unknown county has no configured snapshot", () => {
     const res = resolveCoverageLocation("not-built-in");
     expect(res.served).toBe(false);
