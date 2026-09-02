@@ -31,7 +31,7 @@ describe("Broward coverage mirror", () => {
         source: "appraisal",
         ingested_count: 526068,
         expected_count: null,
-        cid: "QmWMVYR3JSoNg1TAgTyCEK2fxFgqu5ux4BcE9SKdj3AaPk",
+        cid: "QmPUFdWJuXsFut6XZTQSEuBNCyfz22uu3AuorrVSXdsHnU",
         ipns_label: "oracle-query-table-broward",
       },
       {
@@ -45,7 +45,7 @@ describe("Broward coverage mirror", () => {
         source: "permits",
         ingested_count: 495465,
         expected_count: null,
-        cid: "QmYPRStJYA9Pstm3BaMDq73wJYMNXxWcPHL4FEEbUT6KjN",
+        cid: "Qmb1XuBnD7c3xs99bUuHUWfhEoVNwuo4eNfWQHFa6Fdbis",
         ipns_label: "oracle-permit-table-broward",
       },
     ]);
