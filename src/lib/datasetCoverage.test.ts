@@ -375,7 +375,7 @@ describe("fetchDatasetCoverage / getDatasetCoverageEntries", () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 
-  it("never reuses coverage across catalog revisions", async () => {
+  it("never reuses coverage across catalog or scope-registry revisions", async () => {
     const snapshot = (ingestedCount: number) => ({
       county: "lee",
       datasets: [sampleRow({ ingested_count: ingestedCount })],
@@ -387,6 +387,9 @@ describe("fetchDatasetCoverage / getDatasetCoverageEntries", () => {
       )
       .mockResolvedValueOnce(
         new Response(JSON.stringify(snapshot(75)), { status: 200 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(snapshot(90)), { status: 200 }),
       );
     process.env.DATASET_COVERAGE_MAP = JSON.stringify({
       lee: "https://gw/c.json",
@@ -394,18 +397,26 @@ describe("fetchDatasetCoverage / getDatasetCoverageEntries", () => {
 
     const revisionOne = await fetchDatasetCoverage("lee", {
       catalogRevision: "revision-1",
+      scopeRegistryRevision: "scope-1",
     });
     const cachedRevisionOne = await fetchDatasetCoverage("lee", {
       catalogRevision: "revision-1",
+      scopeRegistryRevision: "scope-1",
+    });
+    const scopeRevisionTwo = await fetchDatasetCoverage("lee", {
+      catalogRevision: "revision-1",
+      scopeRegistryRevision: "scope-2",
     });
     const revisionTwo = await fetchDatasetCoverage("lee", {
       catalogRevision: "revision-2",
+      scopeRegistryRevision: "scope-2",
     });
 
     expect(revisionOne?.datasets[0]?.ingested_count).toBe(50);
     expect(cachedRevisionOne?.datasets[0]?.ingested_count).toBe(50);
-    expect(revisionTwo?.datasets[0]?.ingested_count).toBe(75);
-    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(scopeRevisionTwo?.datasets[0]?.ingested_count).toBe(75);
+    expect(revisionTwo?.datasets[0]?.ingested_count).toBe(90);
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
   });
 
   it("ignores a snapshot whose county does not match the requested county", async () => {

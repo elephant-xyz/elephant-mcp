@@ -1,0 +1,198 @@
+{
+  "schemaVersion": "1.0",
+  "registryVersion": "2026-09-02.1",
+  "owner": "elephant-mcp/donphan",
+  "reviewedAt": "2026-09-01T17:06:37.000Z",
+  "entries": [
+    {
+      "countyKey": "chester",
+      "countyName": "Chester",
+      "stateCode": "PA",
+      "countyFips": "42029",
+      "queryTableIdentity": "ipns:k51qzi5uqu5dho0b79m6k93jdthnpjf6j9d6abn2jl7rjro0e31icjpg83vy0f",
+      "datasetCoverageIdentity": "ipns:k51qzi5uqu5djzghr538v7zskwn586juujd2nxzsox3fqr66konxwzlb08sebg",
+      "publicationScope": {
+        "schemaVersion": "1.0",
+        "level": "pilot",
+        "denominatorBasis": "published_subset"
+      },
+      "provenance": {
+        "owner": "elephant-mcp/donphan",
+        "artifactCatalog": "https://raw.githubusercontent.com/elephant-xyz/oracle-node/main/catalog/published-counties.json",
+        "classificationEvidence": "https://github.com/elephant-xyz/oracle-node/pull/195",
+        "reviewedAt": "2026-09-01T17:06:37.000Z"
+      }
+    },
+    {
+      "countyKey": "hillsborough",
+      "countyName": "Hillsborough",
+      "stateCode": "FL",
+      "countyFips": "12057",
+      "queryTableIdentity": "ipns:k51qzi5uqu5diqz0l68gfi22qk0w8aqhsm7pcgje535uz8vhu8p37ynm2po0fh",
+      "datasetCoverageIdentity": "ipns:k51qzi5uqu5di5jghjwbpumnr2vt1crmaycqmtx673kw8pqp8dymecuig5x8jb",
+      "publicationScope": {
+        "schemaVersion": "1.0",
+        "level": "pilot",
+        "denominatorBasis": "published_subset"
+      },
+      "provenance": {
+        "owner": "elephant-mcp/donphan",
+        "artifactCatalog": "https://raw.githubusercontent.com/elephant-xyz/oracle-node/main/catalog/published-counties.json",
+        "classificationEvidence": "https://github.com/elephant-xyz/oracle-node/pull/195",
+        "reviewedAt": "2026-09-01T17:06:37.000Z"
+      }
+    },
+    {
+      "countyKey": "lee",
+      "countyName": "Lee",
+      "stateCode": "FL",
+      "countyFips": "12071",
+      "queryTableIdentity": "ipns:k51qzi5uqu5djd4ohcf3qm87dhlt0e270xw8ejhkyia62edr76uj0u05hrf7m5",
+      "datasetCoverageIdentity": "ipns:k51qzi5uqu5dimw0elyh4agbtqe7v2fzp0jcd7b1bcu8kxs0hml7yu1no0z0vd",
+      "publicationScope": {
+        "schemaVersion": "1.0",
+        "level": "full",
+        "denominatorBasis": "county_total"
+      },
+      "provenance": {
+        "owner": "elephant-mcp/donphan",
+        "artifactCatalog": "https://raw.githubusercontent.com/elephant-xyz/oracle-node/main/catalog/published-counties.json",
+        "classificationEvidence": "https://github.com/elephant-xyz/oracle-node/pull/195",
+        "reviewedAt": "2026-09-01T17:06:37.000Z"
+      }
+    },
+    {
+      "countyKey": "miami-dade",
+      "countyName": "Miami-Dade",
+      "stateCode": "FL",
+      "countyFips": "12086",
+      "queryTableIdentity": "ipns:k51qzi5uqu5dgqktver4htb060qxfnaytjhybcxlfkp22vtgygbx2lb4t1h1xs",
+      "datasetCoverageIdentity": "ipns:k51qzi5uqu5djj45hvhz6z2dnsdg6pkgucds99t0f78d5gmwu19bfv8o9tygno",
+      "publicationScope": {
+        "schemaVersion": "1.0",
+        "level": "full",
+        "denominatorBasis": "county_total"
+      },
+      "provenance": {
+        "owner": "elephant-mcp/donphan",
+        "artifactCatalog": "https://raw.githubusercontent.com/elephant-xyz/oracle-node/main/catalog/published-counties.json",
+        "classificationEvidence": "https://github.com/elephant-xyz/oracle-node/pull/195",
+        "reviewedAt": "2026-09-01T17:06:37.000Z"
+      }
+    },
+    {
+      "countyKey": "montgomery",
+      "countyName": "Montgomery",
+      "stateCode": "PA",
+      "countyFips": "42091",
+      "queryTableIdentity": "ipns:k51qzi5uqu5dknn192e4mzltecz3cul4byog3x9oydaxsiecf1huk3woqrkpnj",
+      "datasetCoverageIdentity": "ipns:k51qzi5uqu5djrxnqch9zhkm7n4m0ieep6zgbdo6tkvy5xqwn7uy94jfucndjm",
+      "publicationScope": {
+        "schemaVersion": "1.0",
+        "level": "full",
+        "denominatorBasis": "county_total"
+      },
+      "provenance": {
+        "owner": "elephant-mcp/donphan",
+        "artifactCatalog": "https://raw.githubusercontent.com/elephant-xyz/oracle-node/main/catalog/published-counties.json",
+        "classificationEvidence": "https://github.com/elephant-xyz/oracle-node/pull/195",
+        "reviewedAt": "2026-09-01T17:06:37.000Z"
+      }
+    },
+    {
+      "countyKey": "orange",
+      "countyName": "Orange",
+      "stateCode": "FL",
+      "countyFips": "12095",
+      "queryTableIdentity": "ipns:k51qzi5uqu5dhgte20ho86rzg5b7h0ght3a2js5wz0t55i96aaf1d12wpl8efn",
+      "datasetCoverageIdentity": "ipns:k51qzi5uqu5dj8n2f8nowh8kts53rvpr62zfj0mz9izc11rfzv56q7m4161lg7",
+      "publicationScope": {
+        "schemaVersion": "1.0",
+        "level": "full",
+        "denominatorBasis": "county_total"
+      },
+      "provenance": {
+        "owner": "elephant-mcp/donphan",
+        "artifactCatalog": "https://raw.githubusercontent.com/elephant-xyz/oracle-node/main/catalog/published-counties.json",
+        "classificationEvidence": "https://github.com/elephant-xyz/oracle-node/pull/195",
+        "reviewedAt": "2026-09-01T17:06:37.000Z"
+      }
+    },
+    {
+      "countyKey": "palm-beach",
+      "countyName": "Palm Beach",
+      "stateCode": "FL",
+      "countyFips": "12099",
+      "queryTableIdentity": "ipns:k51qzi5uqu5dlu7hx158su5palzzxdbl6zcm8ojh7645bxisxs0cf0s158h6h3",
+      "datasetCoverageIdentity": "ipns:k51qzi5uqu5djwga4mcd8nx1gbwy4o9rks3gkoe1u5py5wi9tieea7h44nh4g2",
+      "publicationScope": {
+        "schemaVersion": "1.0",
+        "level": "full",
+        "denominatorBasis": "county_total"
+      },
+      "provenance": {
+        "owner": "elephant-mcp/donphan",
+        "artifactCatalog": "https://raw.githubusercontent.com/elephant-xyz/oracle-node/main/catalog/published-counties.json",
+        "classificationEvidence": "https://github.com/elephant-xyz/oracle-node/pull/195",
+        "reviewedAt": "2026-09-01T17:06:37.000Z"
+      }
+    },
+    {
+      "countyKey": "pinellas",
+      "countyName": "Pinellas",
+      "stateCode": "FL",
+      "countyFips": "12103",
+      "queryTableIdentity": "ipns:k51qzi5uqu5dhmo3zv6xvidksgvsqkfer3nw1s4v7bcbafpl66btpyab3zv9ir",
+      "datasetCoverageIdentity": "ipns:k51qzi5uqu5djrzm8n599i98ey7rpmwpbphgk8tvo5d6zjkfeqcmbrg7lh03xl",
+      "publicationScope": {
+        "schemaVersion": "1.0",
+        "level": "pilot",
+        "denominatorBasis": "published_subset"
+      },
+      "provenance": {
+        "owner": "elephant-mcp/donphan",
+        "artifactCatalog": "https://raw.githubusercontent.com/elephant-xyz/oracle-node/main/catalog/published-counties.json",
+        "classificationEvidence": "https://github.com/elephant-xyz/oracle-node/pull/195",
+        "reviewedAt": "2026-09-01T17:06:37.000Z"
+      }
+    },
+    {
+      "countyKey": "polk",
+      "countyName": "Polk",
+      "stateCode": "FL",
+      "countyFips": "12105",
+      "queryTableIdentity": "ipns:k51qzi5uqu5dj7acu8xg9ugfk670m8b185q4h7pz2gp8cv3mos15ftb4yz6w7o",
+      "datasetCoverageIdentity": "ipns:k51qzi5uqu5diaoycedqekfs0osktwx8py1h8s7h0gspga18rksi3kumrs52nq",
+      "publicationScope": {
+        "schemaVersion": "1.0",
+        "level": "full",
+        "denominatorBasis": "county_total"
+      },
+      "provenance": {
+        "owner": "elephant-mcp/donphan",
+        "artifactCatalog": "https://raw.githubusercontent.com/elephant-xyz/oracle-node/main/catalog/published-counties.json",
+        "classificationEvidence": "https://github.com/elephant-xyz/oracle-node/pull/195",
+        "reviewedAt": "2026-09-01T17:06:37.000Z"
+      }
+    },
+    {
+      "countyKey": "rock-island",
+      "countyName": "Rock Island",
+      "stateCode": "IL",
+      "countyFips": "17161",
+      "queryTableIdentity": "ipns:k51qzi5uqu5djbtswq6lb4p7xbf3nu8bzdzokdtcdld1r2vx6asn7lgfuk54wt",
+      "datasetCoverageIdentity": "ipns:k51qzi5uqu5disduz18ogkvf3f2zgdsizl20o034fu8spgh2khri8uxmeo3khv",
+      "publicationScope": {
+        "schemaVersion": "1.0",
+        "level": "full",
+        "denominatorBasis": "county_total"
+      },
+      "provenance": {
+        "owner": "elephant-mcp/donphan",
+        "artifactCatalog": "https://raw.githubusercontent.com/elephant-xyz/oracle-node/main/catalog/published-counties.json",
+        "classificationEvidence": "https://github.com/elephant-xyz/oracle-node/pull/195",
+        "reviewedAt": "2026-09-01T17:06:37.000Z"
+      }
+    }
+  ]
+}
