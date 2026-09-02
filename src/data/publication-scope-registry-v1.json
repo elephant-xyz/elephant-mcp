@@ -1,8 +1,8 @@
 {
   "schemaVersion": "1.0",
-  "registryVersion": "2026-09-02.3",
+  "registryVersion": "2026-09-02.4",
   "owner": "elephant-mcp/donphan",
-  "reviewedAt": "2026-09-02T20:04:50.929Z",
+  "reviewedAt": "2026-09-02T20:59:31.937Z",
   "entries": [
     {
       "countyKey": "broward",
@@ -14,13 +14,13 @@
       "publicationScope": {
         "schemaVersion": "1.0",
         "level": "partial",
-        "denominatorBasis": "published_subset"
+        "denominatorBasis": "county_total"
       },
       "provenance": {
         "owner": "elephant-mcp/donphan",
         "artifactCatalog": "https://raw.githubusercontent.com/elephant-xyz/oracle-node/main/catalog/published-counties.json",
         "classificationEvidence": "https://github.com/elephant-xyz/oracle-node/pull/206",
-        "reviewedAt": "2026-09-02T20:04:50.929Z"
+        "reviewedAt": "2026-09-02T20:59:31.937Z"
       }
     },
     {

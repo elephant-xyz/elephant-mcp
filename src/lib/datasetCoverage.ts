@@ -3,6 +3,11 @@ import { readFile } from "node:fs/promises";
 import { logger } from "../logger.ts";
 import { normalizeCountyKey } from "./countyIpnsRegistry.ts";
 import {
+  extractIpnsName,
+  filebaseCidUrl,
+  parseCountyCidFallbackMap,
+} from "./cidFallback.ts";
+import {
   OracleDatasetCoverageSnapshotSchema,
   type OracleDatasetCoverageRow,
   type OracleDatasetCoverageSnapshot,
@@ -31,6 +36,8 @@ import { PublicationScopeSchema } from "../types/publishedCountyCatalog.ts";
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const SNAPSHOT_TIMEOUT_MS = 12_000;
 const DEFAULT_CACHE_KEY = "__default__";
+const COVERAGE_CID_FALLBACK_MAP_ENV =
+  "DATASET_COVERAGE_CID_FALLBACK_MAP_ADDITIONS";
 
 export const DEFAULT_DATASET_COVERAGE_MAP: Readonly<Record<string, string>> = {
   lee: "https://k51qzi5uqu5dimw0elyh4agbtqe7v2fzp0jcd7b1bcu8kxs0hml7yu1no0z0vd.ipns.dweb.link/",
@@ -40,8 +47,8 @@ export const DEFAULT_DATASET_COVERAGE_MAP: Readonly<Record<string, string>> = {
     "https://k51qzi5uqu5dj8n2f8nowh8kts53rvpr62zfj0mz9izc11rfzv56q7m4161lg7.ipns.dweb.link/",
   "palm-beach":
     "https://k51qzi5uqu5djwga4mcd8nx1gbwy4o9rks3gkoe1u5py5wi9tieea7h44nh4g2.ipns.dweb.link/",
-  // Partial Broward appraisal, permit, and BBB coverage. The dedicated IPNS
-  // label advances as validated partial snapshots are published.
+  // Partial Broward appraisal, permit, corporate, and BBB coverage. The
+  // dedicated IPNS label advances as validated partial snapshots are published.
   broward:
     "https://ipfs.filebase.io/ipns/k51qzi5uqu5dhx6yqczp6f9na3xa9g1iiizxtquer62x9wavh8gpbng524vrbp",
 };
@@ -116,6 +123,35 @@ export function parseCoverageMap(
   }
 
   return map;
+}
+
+/**
+ * Resolve the runtime coverage location while retaining IPNS as the reviewed
+ * publication identity.
+ *
+ * @param location - Stable coverage location from the county map.
+ * @param countyKey - Normalized county key, or null in legacy single mode.
+ * @returns Original location when no fallback exists, otherwise a CID URL.
+ * @throws {Error} When a fallback is paired with a non-IPNS base route.
+ */
+export function resolveCoverageRuntimeLocation(
+  location: string,
+  countyKey: string | null,
+): string {
+  const expectedByCounty = parseCountyCidFallbackMap(
+    process.env[COVERAGE_CID_FALLBACK_MAP_ENV],
+    COVERAGE_CID_FALLBACK_MAP_ENV,
+  );
+  const expectedCid =
+    countyKey === null ? undefined : expectedByCounty[countyKey];
+  if (expectedCid === undefined) return location;
+
+  if (extractIpnsName(location) === null) {
+    throw new Error(
+      `${COVERAGE_CID_FALLBACK_MAP_ENV} requires the base route for '${countyKey}' to remain an IPNS URL`,
+    );
+  }
+  return filebaseCidUrl(expectedCid);
 }
 
 /**
@@ -250,12 +286,16 @@ export async function fetchDatasetCoverage(
 
   const now = Date.now();
   const cacheKey = resolution.countyKey ?? DEFAULT_CACHE_KEY;
+  const runtimeLocation = resolveCoverageRuntimeLocation(
+    resolution.location,
+    resolution.countyKey,
+  );
   const cached = coverageCache.get(cacheKey);
   const catalogRevision = options.catalogRevision ?? null;
   const scopeRegistryRevision = options.scopeRegistryRevision ?? null;
   if (
     cached !== undefined &&
-    cached.source === resolution.location &&
+    cached.source === runtimeLocation &&
     cached.catalogRevision === catalogRevision &&
     cached.scopeRegistryRevision === scopeRegistryRevision &&
     now - cached.fetchedAt < CACHE_TTL_MS
@@ -265,7 +305,7 @@ export async function fetchDatasetCoverage(
 
   let snapshot: OracleDatasetCoverageSnapshot | null = null;
   try {
-    const raw = await readSnapshotJson(resolution.location, options);
+    const raw = await readSnapshotJson(runtimeLocation, options);
     if (raw !== null) {
       if (
         typeof raw === "object" &&
@@ -294,7 +334,7 @@ export async function fetchDatasetCoverage(
         ) {
           logger.warn(
             {
-              location: resolution.location,
+              location: runtimeLocation,
               expectedCounty: resolution.countyKey,
               snapshotCounty: parsed.data.county,
             },
@@ -305,7 +345,7 @@ export async function fetchDatasetCoverage(
         }
       } else {
         logger.warn(
-          { location: resolution.location, error: parsed.error.message },
+          { location: runtimeLocation, error: parsed.error.message },
           "Coverage snapshot failed schema validation — ignoring",
         );
       }
@@ -319,7 +359,7 @@ export async function fetchDatasetCoverage(
     }
     logger.warn(
       {
-        location: resolution.location,
+        location: runtimeLocation,
         error: err instanceof Error ? err.message : String(err),
       },
       "Failed to read coverage snapshot — ignoring",
@@ -331,7 +371,7 @@ export async function fetchDatasetCoverage(
   // for the full TTL even once the underlying read recovers.
   if (snapshot !== null) {
     coverageCache.set(cacheKey, {
-      source: resolution.location,
+      source: runtimeLocation,
       catalogRevision,
       scopeRegistryRevision,
       snapshot,

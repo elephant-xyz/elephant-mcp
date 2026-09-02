@@ -1,36 +1,281 @@
 {
+  "schemaVersion": "oracle-node.broward-donphan-snapshot.v2",
   "county": "broward",
-  "exportedAt": "2026-09-02T20:45:27.531Z",
+  "countyName": "Broward",
+  "stateCode": "FL",
+  "countyFips": "12011",
+  "exportedAt": "2026-09-02T20:59:31.937Z",
+  "snapshotTimestamp": "2026-09-02T20:59:31.937Z",
+  "coverage_status": "supported_partial",
+  "county_complete": false,
+  "publicationScope": {
+    "schemaVersion": "1.0",
+    "level": "partial",
+    "denominatorBasis": "county_total"
+  },
+  "denominator_semantics": {
+    "appraisal": {
+      "basis": "official_bcpa_gis_distinct_folios",
+      "expectedCount": 534309,
+      "ingestedCount": 526068,
+      "unit": "distinct_folio"
+    },
+    "permits": {
+      "rowExpectedCount": null,
+      "rowExpectedCountReason": "No authoritative countywide permit-record denominator exists across fragmented municipal sources.",
+      "routeBasis": "current_primary_jurisdiction_routes",
+      "routeRegistryVersion": "2026-09-01.2",
+      "routeCount": 32,
+      "supportedRouteCount": 24,
+      "unattendedUnavailableRouteCount": 8,
+      "loadedSourceSystemCount": 14
+    }
+  },
   "datasets": [
     {
       "county": "broward",
       "source": "appraisal",
       "ingested_count": 526068,
-      "expected_count": null,
-      "first_loaded_at": "2026-08-29 17:29:29.891733+00",
-      "last_loaded_at": "2026-08-30 16:39:49.193222+00",
-      "cid": "QmPUFdWJuXsFut6XZTQSEuBNCyfz22uu3AuorrVSXdsHnU",
-      "ipns_label": "oracle-query-table-broward"
-    },
-    {
-      "county": "broward",
-      "source": "bbb",
-      "ingested_count": 2102,
-      "expected_count": null,
-      "first_loaded_at": "2026-09-02 05:15:20.984626+00",
-      "last_loaded_at": "2026-09-02 16:47:48.563405+00",
+      "expected_count": 534309,
+      "first_loaded_at": "2026-08-29T17:29:29.891Z",
+      "last_loaded_at": "2026-08-30T16:39:49.193Z",
       "cid": null,
       "ipns_label": null
     },
     {
       "county": "broward",
       "source": "permits",
-      "ingested_count": 495465,
+      "ingested_count": 496064,
       "expected_count": null,
-      "first_loaded_at": "2026-08-31 06:21:49.453384+00",
-      "last_loaded_at": "2026-09-02 19:54:16.931171+00",
-      "cid": "Qmb1XuBnD7c3xs99bUuHUWfhEoVNwuo4eNfWQHFa6Fdbis",
-      "ipns_label": "oracle-permit-table-broward"
+      "first_loaded_at": "2026-08-31T06:21:49.453Z",
+      "last_loaded_at": "2026-09-02T20:59:13.517Z",
+      "cid": null,
+      "ipns_label": null
+    },
+    {
+      "county": "broward",
+      "source": "corporate",
+      "ingested_count": 12432,
+      "expected_count": null,
+      "first_loaded_at": "2026-05-28T04:04:03.785Z",
+      "last_loaded_at": "2026-08-31T22:04:17.451Z",
+      "cid": null,
+      "ipns_label": null
+    },
+    {
+      "county": "broward",
+      "source": "bbb",
+      "ingested_count": 2823,
+      "expected_count": null,
+      "first_loaded_at": "2026-06-08T14:05:17.672Z",
+      "last_loaded_at": "2026-08-27T22:17:22.141Z",
+      "cid": null,
+      "ipns_label": null
     }
-  ]
+  ],
+  "reconciliation": {
+    "propertyRowsMatchDistinctPropertyIds": true,
+    "propertyRowsMatchDistinctFolios": true,
+    "propertyFoliosNonNull": true,
+    "permitRowsMatchDistinctIds": true,
+    "permitRowsAccountedFor": true,
+    "permitSourceRowsAccountedFor": true,
+    "roofingRowsAccountedFor": true,
+    "permitSourceSystemCountMatches": true,
+    "routeCountsAccountedFor": true,
+    "allBalanced": true
+  },
+  "permitJoins": {
+    "linked": 360392,
+    "unlinked": 135672,
+    "foreignLinked": 0,
+    "linkedProperties": 67499,
+    "roofing": 48899,
+    "bbbMatchedProperties": 0
+  },
+  "enrichmentJoins": {
+    "sunbizAddressMatches": 21512,
+    "sunbizRegistrations": 12432,
+    "sunbizProperties": 9023,
+    "bbbProfiles": 2823,
+    "bbbMatchedProperties": 0
+  },
+  "permitSources": [
+    {
+      "sourceSystem": "broward_cooper_city_accela_permits",
+      "rowCount": 1971,
+      "linkedCount": 1971,
+      "unlinkedCount": 0,
+      "roofingCount": 0
+    },
+    {
+      "sourceSystem": "broward_county_bcs_posse_permits",
+      "rowCount": 73,
+      "linkedCount": 73,
+      "unlinkedCount": 0,
+      "roofingCount": 0
+    },
+    {
+      "sourceSystem": "broward_fort_lauderdale_lauderbuild_permits",
+      "rowCount": 206090,
+      "linkedCount": 160919,
+      "unlinkedCount": 45171,
+      "roofingCount": 16615
+    },
+    {
+      "sourceSystem": "broward_hallandale_beach_tyler_permits",
+      "rowCount": 130267,
+      "linkedCount": 69631,
+      "unlinkedCount": 60636,
+      "roofingCount": 8036
+    },
+    {
+      "sourceSystem": "broward_hollywood_accela_permits",
+      "rowCount": 17078,
+      "linkedCount": 79,
+      "unlinkedCount": 16999,
+      "roofingCount": 4487
+    },
+    {
+      "sourceSystem": "broward_lauderdale_by_the_sea_citizenserve_permits",
+      "rowCount": 1602,
+      "linkedCount": 1602,
+      "unlinkedCount": 0,
+      "roofingCount": 180
+    },
+    {
+      "sourceSystem": "broward_miramar_tyler_permits",
+      "rowCount": 106121,
+      "linkedCount": 99376,
+      "unlinkedCount": 6745,
+      "roofingCount": 14044
+    },
+    {
+      "sourceSystem": "broward_oakland_park_tyler_permits",
+      "rowCount": 28948,
+      "linkedCount": 22993,
+      "unlinkedCount": 5955,
+      "roofingCount": 4996
+    },
+    {
+      "sourceSystem": "broward_pembroke_park_gov_easy_permits",
+      "rowCount": 166,
+      "linkedCount": 0,
+      "unlinkedCount": 166,
+      "roofingCount": 149
+    },
+    {
+      "sourceSystem": "broward_pembroke_pines_tyler_permits",
+      "rowCount": 724,
+      "linkedCount": 724,
+      "unlinkedCount": 0,
+      "roofingCount": 150
+    },
+    {
+      "sourceSystem": "broward_plantation_accela_permits",
+      "rowCount": 1024,
+      "linkedCount": 1024,
+      "unlinkedCount": 0,
+      "roofingCount": 0
+    },
+    {
+      "sourceSystem": "broward_southwest_ranches_citizenserve_permits",
+      "rowCount": 1233,
+      "linkedCount": 1233,
+      "unlinkedCount": 0,
+      "roofingCount": 236
+    },
+    {
+      "sourceSystem": "broward_weston_accela_permits",
+      "rowCount": 742,
+      "linkedCount": 742,
+      "unlinkedCount": 0,
+      "roofingCount": 0
+    },
+    {
+      "sourceSystem": "broward_wilton_manors_citizenserve_permits",
+      "rowCount": 25,
+      "linkedCount": 25,
+      "unlinkedCount": 0,
+      "roofingCount": 6
+    }
+  ],
+  "routeCoverage": {
+    "registryVersion": "2026-09-01.2",
+    "totalCurrentRoutes": 32,
+    "implementedCurrentRoutes": 24,
+    "manualCaptchaCurrentRoutes": 3,
+    "hardBlockedCurrentRoutes": 5,
+    "unattendedUnavailableCurrentRoutes": 8,
+    "implementedJurisdictions": [
+      "Broward Municipal Services District / unincorporated",
+      "Coconut Creek",
+      "Cooper City",
+      "Dania Beach",
+      "Davie",
+      "Fort Lauderdale",
+      "Hallandale Beach",
+      "Hollywood",
+      "Lauderdale-by-the-Sea",
+      "Lauderhill",
+      "Lazy Lake",
+      "Lighthouse Point",
+      "Margate",
+      "Miramar",
+      "Oakland Park",
+      "Pembroke Pines",
+      "Plantation",
+      "Pompano Beach",
+      "Southwest Ranches",
+      "Sunrise",
+      "Tamarac",
+      "West Park",
+      "Weston",
+      "Wilton Manors"
+    ],
+    "manualCaptchaJurisdictions": [
+      "Coral Springs",
+      "Hillsboro Beach",
+      "Pembroke Park"
+    ],
+    "hardBlockCategories": [
+      {
+        "key": "software_or_transport",
+        "kind": "software_transport",
+        "label": "Software / transport",
+        "count": 1,
+        "jurisdictions": [
+          "Lauderdale Lakes"
+        ]
+      },
+      {
+        "key": "login_required",
+        "kind": "source_policy",
+        "label": "Login required",
+        "count": 2,
+        "jurisdictions": [
+          "North Lauderdale",
+          "Parkland"
+        ]
+      },
+      {
+        "key": "no_anonymous_search",
+        "kind": "source_policy",
+        "label": "No anonymous search",
+        "count": 1,
+        "jurisdictions": [
+          "Deerfield Beach"
+        ]
+      },
+      {
+        "key": "custodian_only",
+        "kind": "source_policy",
+        "label": "Custodian only",
+        "count": 1,
+        "jurisdictions": [
+          "Sea Ranch Lakes"
+        ]
+      }
+    ]
+  }
 }

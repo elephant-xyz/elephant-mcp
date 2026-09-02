@@ -97,7 +97,7 @@ describe("Donphan publication-scope registry", () => {
     });
     expect(result.resolution).toMatchObject({
       reason: "registry_match",
-      registryVersion: "2026-09-02.3",
+      registryVersion: "2026-09-02.4",
       registryRevision: getPublicationScopeRegistryRevision(),
       entryIdentity: expect.stringMatching(/^[a-f0-9]{64}$/),
       provenance: { owner: "elephant-mcp/donphan" },
@@ -122,7 +122,7 @@ describe("Donphan publication-scope registry", () => {
     expect(result.publicationScope).toEqual({
       schemaVersion: "1.0",
       level: "partial",
-      denominatorBasis: "published_subset",
+      denominatorBasis: "county_total",
     });
     expect(result.resolution.reason).toBe("registry_match");
   });

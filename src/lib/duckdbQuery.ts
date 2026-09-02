@@ -1,4 +1,11 @@
+import { randomUUID } from "node:crypto";
+import { createWriteStream } from "node:fs";
+import { mkdir, open, rename, stat, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 import { DuckDBInstance } from "@duckdb/node-api";
 import type { DuckDBConnection, DuckDBValue, Json } from "@duckdb/node-api";
 import { logger } from "../logger.ts";
@@ -49,6 +56,9 @@ const PROPERTY_QUERY_CID_FALLBACK_MAP_ENV =
   "PROPERTY_QUERY_TABLE_CID_FALLBACK_MAP_ADDITIONS";
 const PERMIT_QUERY_CID_FALLBACK_MAP_ENV =
   "PERMIT_QUERY_TABLE_CID_FALLBACK_MAP_ADDITIONS";
+const FILEBASE_CID_PARQUET_PATTERN =
+  /^https:\/\/ipfs\.filebase\.io\/ipfs\/(Qm[1-9A-HJ-NP-Za-km-z]{44})\/?$/u;
+const materializedQueryTables = new Map<string, Promise<string>>();
 
 /**
  * Statement-level keywords that must never appear in a caller's query. These
@@ -545,14 +555,137 @@ function isHttpLocation(location: string): boolean {
   return /^https?:\/\//i.test(location);
 }
 
+/**
+ * Check whether a local file has valid Parquet boundary markers.
+ *
+ * @param path - Candidate local Parquet path.
+ * @returns True only when the file is at least eight bytes and starts and ends
+ * with the `PAR1` marker.
+ */
+async function isValidLocalParquet(path: string): Promise<boolean> {
+  try {
+    const metadata = await stat(path);
+    if (!metadata.isFile() || metadata.size < 8) return false;
+
+    const handle = await open(path, "r");
+    try {
+      const first = Buffer.alloc(4);
+      const last = Buffer.alloc(4);
+      await handle.read(first, 0, 4, 0);
+      await handle.read(last, 0, 4, metadata.size - 4);
+      return (
+        first.toString("ascii") === "PAR1" && last.toString("ascii") === "PAR1"
+      );
+    } finally {
+      await handle.close();
+    }
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Download one immutable Filebase CID to an atomic local cache file.
+ *
+ * Full-file materialization avoids public gateway rate limits caused by
+ * Parquets with many small row groups. The bytes remain unchanged; DuckDB
+ * reads the downloaded immutable artifact from local storage.
+ *
+ * @param location - Immutable Filebase `/ipfs/<cid>` URL.
+ * @param destination - Deterministic local cache path for that CID.
+ * @returns The validated local Parquet path.
+ * @throws {Error} When download, length validation, or Parquet validation fails.
+ */
+async function downloadImmutableParquet(
+  location: string,
+  destination: string,
+): Promise<string> {
+  const response = await fetch(location, {
+    redirect: "follow",
+    signal: AbortSignal.timeout(120_000),
+  });
+  if (!response.ok || response.body === null) {
+    throw new Error(
+      `Immutable query-table download failed with HTTP ${response.status}`,
+    );
+  }
+
+  const temporaryPath = `${destination}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    await pipeline(
+      Readable.fromWeb(
+        response.body as unknown as NodeReadableStream<Uint8Array>,
+      ),
+      createWriteStream(temporaryPath, { flags: "wx" }),
+    );
+
+    const contentLength = response.headers.get("content-length");
+    const expectedLength =
+      contentLength === null ? null : Number(contentLength);
+    const downloaded = await stat(temporaryPath);
+    if (
+      expectedLength !== null &&
+      Number.isFinite(expectedLength) &&
+      expectedLength >= 0 &&
+      downloaded.size !== expectedLength
+    ) {
+      throw new Error(
+        `Immutable query-table length mismatch: expected ${expectedLength}, received ${downloaded.size}`,
+      );
+    }
+    if (!(await isValidLocalParquet(temporaryPath))) {
+      throw new Error("Immutable query-table download is not valid Parquet");
+    }
+    await rename(temporaryPath, destination);
+    return destination;
+  } catch (error) {
+    await unlink(temporaryPath).catch(() => undefined);
+    throw error;
+  }
+}
+
+/**
+ * Materialize a reviewed Filebase CID before DuckDB opens it.
+ *
+ * Non-Filebase locations are returned unchanged. Concurrent requests for the
+ * same CID share one download promise, and warm serverless invocations reuse
+ * the validated file in the configured temporary cache directory.
+ *
+ * @param location - Resolved query-table runtime location.
+ * @returns Original location or a validated local Parquet path.
+ */
+export async function materializeImmutableQueryTable(
+  location: string,
+): Promise<string> {
+  const match = FILEBASE_CID_PARQUET_PATTERN.exec(location);
+  const cid = match?.[1];
+  if (cid === undefined) return location;
+
+  const cacheDirectory =
+    process.env.DUCKDB_QUERY_CACHE_DIRECTORY ??
+    join(tmpdir(), "elephant-mcp-query-cache");
+  await mkdir(cacheDirectory, { recursive: true });
+  const destination = join(cacheDirectory, `${cid}.parquet`);
+  if (await isValidLocalParquet(destination)) return destination;
+
+  let pending = materializedQueryTables.get(location);
+  if (pending === undefined) {
+    pending = downloadImmutableParquet(location, destination);
+    materializedQueryTables.set(location, pending);
+    pending.catch(() => materializedQueryTables.delete(location));
+  }
+  return pending;
+}
+
 async function openCountyConnection(
   view: string,
   location: string,
 ): Promise<CountyConnection> {
   const instance = await DuckDBInstance.create(":memory:");
   const connection = await instance.connect();
+  const queryLocation = await materializeImmutableQueryTable(location);
 
-  if (isHttpLocation(location)) {
+  if (isHttpLocation(queryLocation)) {
     // httpfs lets DuckDB range-read a Parquet served from an IPFS gateway.
     // INSTALL writes the extension under DuckDB's home directory; serverless
     // runtimes (e.g. Vercel Functions) start with an empty HOME, which makes
@@ -565,13 +698,21 @@ async function openCountyConnection(
     await connection.run("SET unsafe_disable_etag_checks = true");
   }
 
-  const escaped = location.replace(/'/g, "''");
+  const escaped = queryLocation.replace(/'/g, "''");
   await connection.run(
     `CREATE VIEW ${view} AS SELECT * FROM read_parquet('${escaped}')`,
   );
 
-  logger.info({ view, location }, "Opened DuckDB query table view");
-  return { connection, location, tail: Promise.resolve() };
+  logger.info(
+    {
+      view,
+      location,
+      queryLocation,
+      materialized: queryLocation !== location,
+    },
+    "Opened DuckDB query table view",
+  );
+  return { connection, location: queryLocation, tail: Promise.resolve() };
 }
 
 async function getCountyConnection(

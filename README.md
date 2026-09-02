@@ -142,7 +142,7 @@ runs the server locally via `npx`, see below):
    ```
    For OpenAI or AI Gateway, replace the corresponding placeholder with your actual key. Vercel production may instead use its automatically supplied OIDC identity. For AWS Bedrock, remove the OpenAI/Gateway variables and ensure your environment has valid AWS credentials (IAM role, environment variables, or AWS credentials file).
 
-`PROPERTY_QUERY_TABLE_MAP` maps each county to its published query-table Parquet on IPFS. It powers `queryProperties` (arbitrary SQL) and is the primary source for `getOracleProperty`, `listOracleProperties`, `getOracleDatasetInfo`, and the geo tools — so a county listed there needs no `ORACLE_*` vars. `getOracleDatasetInfo` has built-in public coverage snapshots for Lee, Miami-Dade, Orange, Palm Beach, and Broward. Broward's snapshot is explicitly partial and combines appraisal, permit, and BBB counts. `DATASET_COVERAGE_MAP` can override those URLs or add more counties by mapping each county to its small hourly `dataset-coverage.json` snapshot on Filebase/IPNS. Donphan uses this coverage to qualify answers, while Miranda's website can read the same public JSON URL directly. Do not configure this to an AWS S3 URL for public users. The `ORACLE_OPEN_DATA_*` / `ORACLE_GEO_INDEX_*` vars are optional fallback for counties not yet in the map.
+`PROPERTY_QUERY_TABLE_MAP` maps each county to its published query-table Parquet on IPFS. It powers `queryProperties` (arbitrary SQL) and is the primary source for `getOracleProperty`, `listOracleProperties`, `getOracleDatasetInfo`, and the geo tools — so a county listed there needs no `ORACLE_*` vars. `getOracleDatasetInfo` has built-in public coverage snapshots for Lee, Miami-Dade, Orange, Palm Beach, and Broward. Broward's snapshot is explicitly partial and combines appraisal, permit, corporate-registration, and BBB counts. `DATASET_COVERAGE_MAP` can override those URLs or add more counties by mapping each county to its small hourly `dataset-coverage.json` snapshot on Filebase/IPNS. Donphan uses this coverage to qualify answers, while Miranda's website can read the same public JSON URL directly. Do not configure this to an AWS S3 URL for public users. The `ORACLE_OPEN_DATA_*` / `ORACLE_GEO_INDEX_*` vars are optional fallback for counties not yet in the map.
 
 ### Rock Island additive configuration
 
@@ -190,26 +190,32 @@ runtime (additions win on key collision). Use that overlay when the base
 
 ### Broward additive configuration
 
-Broward is an explicitly partial publication: 526,068 appraisal properties,
-495,465 frozen permit rows, and 2,102 BBB profiles. Unknown county-wide
-denominators remain `null`; these counts must not be presented as complete
-county coverage. Merge only the `broward` entries:
+Broward is an explicitly partial, privacy-filtered publication: 526,068
+appraisal property rows against an official 534,309-folio denominator, 496,064
+frozen permit rows from 14 loaded source systems, 12,432 corporate
+registrations, and 2,823 BBB profiles. The county-wide permit denominator is
+unknown, and only 24 of 32 current primary jurisdiction routes are supported;
+these counts must not be presented as complete county coverage. Merge only the
+`broward` entries:
 
 ```text
 PROPERTY_QUERY_TABLE_MAP_ADDITIONS
 {"broward":"https://ipfs.filebase.io/ipns/k51qzi5uqu5dibuhwyztmkjgvz94v3mkpgfreryxwb3d4neta5e7tsxebfi09s"}
 
 PROPERTY_QUERY_TABLE_CID_FALLBACK_MAP_ADDITIONS
-{"broward":"QmPUFdWJuXsFut6XZTQSEuBNCyfz22uu3AuorrVSXdsHnU"}
+{"broward":"QmQhc18TqKTjBymQkfxdsbWNg6SxrDmQ3bfYBJdWWdU7cF"}
 
 PERMIT_QUERY_TABLE_MAP_ADDITIONS
 {"broward":"https://ipfs.filebase.io/ipns/k51qzi5uqu5dhns9u4o0lot4w4808yi4gdsyo5qx136lgmrplmgqdhah5qj7lg"}
 
 PERMIT_QUERY_TABLE_CID_FALLBACK_MAP_ADDITIONS
-{"broward":"Qmb1XuBnD7c3xs99bUuHUWfhEoVNwuo4eNfWQHFa6Fdbis"}
+{"broward":"QmcDAHJBt5LHiHAHdDwqCKM2BZqPwTJBrxW4Z5DJ6qEJd2"}
 
 DATASET_COVERAGE_MAP_ADDITIONS
 {"broward":"https://ipfs.filebase.io/ipns/k51qzi5uqu5dhx6yqczp6f9na3xa9g1iiizxtquer62x9wavh8gpbng524vrbp"}
+
+DATASET_COVERAGE_CID_FALLBACK_MAP_ADDITIONS
+{"broward":"QmTZndCJfNi29hxGzyLXpt9iYJedtmeM2DKFRa24LLA6dq"}
 ```
 
 The CID fallback maps do not replace the reviewed IPNS identity. They let
@@ -341,6 +347,7 @@ The stdio transport means no port or server identity flags are required. Environ
 | `PERMIT_QUERY_TABLE_MAP`                                       | JSON object mapping county → permit query-table Parquet location. Merge new county entries into the existing object so configured counties keep their current routes.                                                                                                                                                                                                                                                                                                                                                                                                                                                   | _(optional)_              |
 | `PERMIT_QUERY_TABLE_CID_FALLBACK_MAP_ADDITIONS`                | Strict county → reviewed CIDv0 map for DuckDB permit reads. The corresponding permit map route must remain IPNS.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | _(optional)_              |
 | `DATASET_COVERAGE_MAP`                                         | Optional JSON object mapping county → published `dataset-coverage.json` location (a Filebase/IPNS gateway URL or a local path for development), e.g. `{"lee":"https://ipfs.filebase.io/ipns/k51…"}`. Lee, Miami-Dade, Orange, Palm Beach, and Broward are built in; this env var overrides those URLs or adds more counties. Broward's built-in snapshot is partial and multi-source; property and permit query tools additionally require their corresponding map entries. `getOracleDatasetInfo` returns `datasets[]` with per-source (appraisal/permits/sunbiz/bbb) `ingestedCount`, `expectedCount`, `completionPercent`, and load timestamps. Coverage is additive — a read failure or slow gateway never breaks dataset-info. Do not use AWS S3 URLs for public users. | _(optional)_              |
+| `DATASET_COVERAGE_CID_FALLBACK_MAP_ADDITIONS`                  | Strict county → reviewed CIDv0 map for coverage reads. The corresponding coverage map route must remain IPNS so publication identity and scope checks stay stable.                                                                                                                                                                                                                                                                                                                                                                                                                                                        | _(optional)_              |
 | `DATASET_COVERAGE`                                             | Single-county coverage snapshot location (fallback when the map is unset).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | _(optional)_              |
 | `DATASET_COVERAGE_DEFAULT_COUNTY`                              | County the single `DATASET_COVERAGE` serves.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | _(optional)_              |
 | `PUBLISHED_COUNTY_CATALOG_URL`                                 | Canonical Oracle-published county catalog used by `listPublishedCounties` and as the only source of `queryPlaces` parquet URLs. Accepts an HTTP(S) URL or a local JSON path for development. Places queries additionally require each non-null `placesTableUrl` to use an approved HTTPS IPFS gateway and end in `/places-table.parquet`. Defaults to `oracle-node/main/catalog/published-counties.json`.                                                                                                                                                                                                            | Oracle repository catalog |
