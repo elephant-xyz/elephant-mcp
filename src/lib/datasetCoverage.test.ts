@@ -7,6 +7,7 @@ import {
   DEFAULT_DATASET_COVERAGE_MAP,
   parseCoverageMap,
   resolveCoverageLocation,
+  resolveCoverageRuntimeLocation,
   computeCompletionPercent,
   toDatasetInfoCoverageEntry,
   fetchDatasetCoverage,
@@ -19,6 +20,7 @@ import type { OracleDatasetCoverageRow } from "../types/oracleOpenData.ts";
 const COVERAGE_ENV_KEYS = [
   "DATASET_COVERAGE_MAP",
   "DATASET_COVERAGE_MAP_ADDITIONS",
+  "DATASET_COVERAGE_CID_FALLBACK_MAP_ADDITIONS",
   "DATASET_COVERAGE",
   "DATASET_COVERAGE_DEFAULT_COUNTY",
 ] as const;
@@ -91,6 +93,17 @@ describe("resolveCoverageLocation", () => {
     expect(res.countyKey).toBe("lee");
   });
 
+  it("serves Broward from its partial multi-source coverage IPNS", () => {
+    const res = resolveCoverageLocation("Broward");
+    expect(res).toEqual({
+      served: true,
+      location:
+        "https://ipfs.filebase.io/ipns/k51qzi5uqu5dhx6yqczp6f9na3xa9g1iiizxtquer62x9wavh8gpbng524vrbp",
+      countyKey: "broward",
+    });
+    expect(res.location).toBe(DEFAULT_DATASET_COVERAGE_MAP.broward);
+  });
+
   it("not served when an unknown county has no configured snapshot", () => {
     const res = resolveCoverageLocation("not-built-in");
     expect(res.served).toBe(false);
@@ -130,6 +143,39 @@ describe("resolveCoverageLocation", () => {
     expect(res.served).toBe(true);
     expect(res.location).toBe("/tmp/hillsborough.json");
     expect(res.countyKey).toBe("hillsborough");
+  });
+});
+
+describe("coverage CID fallback", () => {
+  beforeEach(clearCoverageEnv);
+  afterEach(clearCoverageEnv);
+
+  it("keeps coverage IPNS as identity but selects its reviewed CID at runtime", () => {
+    const cid = "QmTZndCJfNi29hxGzyLXpt9iYJedtmeM2DKFRa24LLA6dq";
+    process.env.DATASET_COVERAGE_CID_FALLBACK_MAP_ADDITIONS = JSON.stringify({
+      broward: cid,
+    });
+
+    expect(
+      resolveCoverageRuntimeLocation(
+        DEFAULT_DATASET_COVERAGE_MAP.broward,
+        "broward",
+      ),
+    ).toBe(`https://ipfs.filebase.io/ipfs/${cid}`);
+  });
+
+  it("rejects a CID fallback when the reviewed route is not IPNS", () => {
+    const cid = "QmTZndCJfNi29hxGzyLXpt9iYJedtmeM2DKFRa24LLA6dq";
+    process.env.DATASET_COVERAGE_CID_FALLBACK_MAP_ADDITIONS = JSON.stringify({
+      broward: cid,
+    });
+
+    expect(() =>
+      resolveCoverageRuntimeLocation(
+        "https://example.com/broward.json",
+        "broward",
+      ),
+    ).toThrow("remain an IPNS URL");
   });
 });
 

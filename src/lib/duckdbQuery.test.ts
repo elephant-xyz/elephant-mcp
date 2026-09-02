@@ -11,7 +11,15 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AddressInfo } from "node:net";
-import { describe, it, expect, afterEach, beforeAll, afterAll } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  afterEach,
+  beforeAll,
+  afterAll,
+  vi,
+} from "vitest";
 import { DuckDBInstance } from "@duckdb/node-api";
 import {
   validateSelectQuery,
@@ -19,6 +27,8 @@ import {
   parseQueryTableMap,
   runPropertyQuery,
   clearPropertyQueryConnections,
+  resolvePropertyQueryRuntimeLocation,
+  resolvePermitQueryRuntimeLocation,
 } from "./duckdbQuery.ts";
 
 describe("validateSelectQuery", () => {
@@ -95,6 +105,8 @@ describe("resolveQueryTableLocation", () => {
     "PROPERTY_QUERY_TABLE",
     "PROPERTY_QUERY_TABLE_MAP",
     "PROPERTY_QUERY_TABLE_MAP_ADDITIONS",
+    "PROPERTY_QUERY_TABLE_CID_FALLBACK_MAP_ADDITIONS",
+    "PERMIT_QUERY_TABLE_CID_FALLBACK_MAP_ADDITIONS",
     "PROPERTY_QUERY_TABLE_DEFAULT_COUNTY",
   ];
   const saved: Record<string, string | undefined> = {};
@@ -180,6 +192,58 @@ describe("resolveQueryTableLocation", () => {
       location: "/lee-override.parquet",
     });
   });
+
+  it("keeps property IPNS as identity but selects its reviewed CID for DuckDB", () => {
+    const ipns =
+      "k51qzi5uqu5dibuhwyztmkjgvz94v3mkpgfreryxwb3d4neta5e7tsxebfi09s";
+    const cid = "QmQhc18TqKTjBymQkfxdsbWNg6SxrDmQ3bfYBJdWWdU7cF";
+    setEnv({
+      PROPERTY_QUERY_TABLE_CID_FALLBACK_MAP_ADDITIONS: JSON.stringify({
+        broward: cid,
+      }),
+    });
+
+    expect(
+      resolvePropertyQueryRuntimeLocation(
+        `https://ipfs.filebase.io/ipns/${ipns}`,
+        "broward",
+      ),
+    ).toBe(`https://ipfs.filebase.io/ipfs/${cid}`);
+  });
+
+  it("keeps permit IPNS as identity but selects its reviewed CID for DuckDB", () => {
+    const ipns =
+      "k51qzi5uqu5dhns9u4o0lot4w4808yi4gdsyo5qx136lgmrplmgqdhah5qj7lg";
+    const cid = "QmcDAHJBt5LHiHAHdDwqCKM2BZqPwTJBrxW4Z5DJ6qEJd2";
+    setEnv({
+      PERMIT_QUERY_TABLE_CID_FALLBACK_MAP_ADDITIONS: JSON.stringify({
+        broward: cid,
+      }),
+    });
+
+    expect(
+      resolvePermitQueryRuntimeLocation(
+        `https://ipfs.filebase.io/ipns/${ipns}`,
+        "broward",
+      ),
+    ).toBe(`https://ipfs.filebase.io/ipfs/${cid}`);
+  });
+
+  it("rejects a CID fallback when the reviewed route is not IPNS", () => {
+    const cid = "QmQhc18TqKTjBymQkfxdsbWNg6SxrDmQ3bfYBJdWWdU7cF";
+    setEnv({
+      PROPERTY_QUERY_TABLE_CID_FALLBACK_MAP_ADDITIONS: JSON.stringify({
+        broward: cid,
+      }),
+    });
+
+    expect(() =>
+      resolvePropertyQueryRuntimeLocation(
+        "https://example.com/broward.parquet",
+        "broward",
+      ),
+    ).toThrow("remain an IPNS URL");
+  });
 });
 
 /**
@@ -198,11 +262,14 @@ describe("runPropertyQuery over an HTTP query table with empty HOME", () => {
     "PROPERTY_QUERY_TABLE",
     "PROPERTY_QUERY_TABLE_DEFAULT_COUNTY",
     "DUCKDB_HOME_DIRECTORY",
+    "DUCKDB_QUERY_CACHE_DIRECTORY",
+    "PROPERTY_QUERY_TABLE_CID_FALLBACK_MAP_ADDITIONS",
   ] as const;
   const saved: Record<string, string | undefined> = {};
 
   let tmpDir: string;
   let parquetPath: string;
+  let fileBuf: Buffer;
   let server: Server;
 
   beforeAll(async () => {
@@ -220,7 +287,7 @@ describe("runPropertyQuery over an HTTP query table with empty HOME", () => {
       `COPY (SELECT 1 AS request_identifier, 'x' AS owners_text) TO '${escaped}' (FORMAT PARQUET)`,
     );
 
-    const fileBuf = readFileSync(parquetPath);
+    fileBuf = readFileSync(parquetPath);
 
     // Serve the fixture over localhost with HTTP Range support — httpfs issues
     // range reads (and a HEAD for the size) rather than fetching the whole file.
@@ -291,6 +358,7 @@ describe("runPropertyQuery over an HTTP query table with empty HOME", () => {
   });
 
   afterAll(async () => {
+    vi.restoreAllMocks();
     clearPropertyQueryConnections();
     await new Promise<void>((resolve, reject) => {
       server.close((err) => (err ? reject(err) : resolve()));
@@ -309,5 +377,36 @@ describe("runPropertyQuery over an HTTP query table with empty HOME", () => {
     );
     expect(result.rows).toHaveLength(1);
     expect(Number(result.rows[0].n)).toBe(1);
+  }, 60_000);
+
+  it("materializes a reviewed immutable CID before querying it", async () => {
+    const cid = "QmQhc18TqKTjBymQkfxdsbWNg6SxrDmQ3bfYBJdWWdU7cF";
+    const cacheDirectory = join(tmpDir, "query-cache");
+    process.env.DUCKDB_QUERY_CACHE_DIRECTORY = cacheDirectory;
+    process.env.PROPERTY_QUERY_TABLE_MAP = JSON.stringify({
+      broward:
+        "https://ipfs.filebase.io/ipns/k51qzi5uqu5dibuhwyztmkjgvz94v3mkpgfreryxwb3d4neta5e7tsxebfi09s",
+    });
+    process.env.PROPERTY_QUERY_TABLE_CID_FALLBACK_MAP_ADDITIONS =
+      JSON.stringify({ broward: cid });
+    clearPropertyQueryConnections();
+
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(new Uint8Array(fileBuf), {
+        status: 200,
+        headers: { "content-length": String(fileBuf.length) },
+      }),
+    );
+
+    const result = await runPropertyQuery(
+      "broward",
+      "SELECT count(*) AS n FROM properties",
+    );
+
+    expect(Number(result.rows[0].n)).toBe(1);
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    expect(readFileSync(join(cacheDirectory, `${cid}.parquet`))).toEqual(
+      fileBuf,
+    );
   }, 60_000);
 });

@@ -60,8 +60,8 @@ function syntheticRegistry(level: "full" | "partial" | "pilot" = "full") {
 }
 
 describe("Donphan publication-scope registry", () => {
-  it("contains the revalidated ten county identities and eight full counties", () => {
-    expect(registryJson.entries).toHaveLength(10);
+  it("contains eleven county identities with Broward explicitly partial", () => {
+    expect(registryJson.entries).toHaveLength(11);
     expect(
       registryJson.entries
         .filter((entry) => entry.publicationScope.level === "full")
@@ -81,6 +81,11 @@ describe("Donphan publication-scope registry", () => {
         .filter((entry) => entry.publicationScope.level === "pilot")
         .map((entry) => entry.countyKey),
     ).toEqual(["chester", "pinellas"]);
+    expect(
+      registryJson.entries
+        .filter((entry) => entry.publicationScope.level === "partial")
+        .map((entry) => entry.countyKey),
+    ).toEqual(["broward"]);
   });
 
   it("resolves a registry-bound full county across equivalent IPNS URL forms", () => {
@@ -92,11 +97,34 @@ describe("Donphan publication-scope registry", () => {
     });
     expect(result.resolution).toMatchObject({
       reason: "registry_match",
-      registryVersion: "2026-09-02.2",
+      registryVersion: "2026-09-02.4",
       registryRevision: getPublicationScopeRegistryRevision(),
       entryIdentity: expect.stringMatching(/^[a-f0-9]{64}$/),
       provenance: { owner: "elephant-mcp/donphan" },
     });
+  });
+
+  it("resolves Broward as partial only for its reviewed artifact identities", () => {
+    const result = resolvePublicationScope(
+      county({
+        countyKey: "broward",
+        countyName: "Broward",
+        countyFips: "12011",
+        queryTableUrl:
+          "https://ipfs.filebase.io/ipns/k51qzi5uqu5dibuhwyztmkjgvz94v3mkpgfreryxwb3d4neta5e7tsxebfi09s",
+        datasetCoverageUrl:
+          "https://ipfs.filebase.io/ipns/k51qzi5uqu5dhx6yqczp6f9na3xa9g1iiizxtquer62x9wavh8gpbng524vrbp",
+        permitQueryTableUrl:
+          "https://ipfs.filebase.io/ipns/k51qzi5uqu5dhns9u4o0lot4w4808yi4gdsyo5qx136lgmrplmgqdhah5qj7lg",
+      }),
+    );
+
+    expect(result.publicationScope).toEqual({
+      schemaVersion: "1.0",
+      level: "partial",
+      denominatorBasis: "county_total",
+    });
+    expect(result.resolution.reason).toBe("registry_match");
   });
 
   it.each([
