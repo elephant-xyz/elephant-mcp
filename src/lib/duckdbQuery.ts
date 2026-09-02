@@ -3,6 +3,11 @@ import { DuckDBInstance } from "@duckdb/node-api";
 import type { DuckDBConnection, DuckDBValue, Json } from "@duckdb/node-api";
 import { logger } from "../logger.ts";
 import { normalizeCountyKey } from "./countyIpnsRegistry.ts";
+import {
+  extractIpnsName,
+  filebaseCidUrl,
+  parseCountyCidFallbackMap,
+} from "./cidFallback.ts";
 
 /**
  * Embedded DuckDB query engine over per-county Parquet "query tables".
@@ -40,6 +45,10 @@ export const DEFAULT_ROW_LIMIT = 100;
 
 /** Hard upper bound on returned rows, so results can't blow the agent context. */
 export const MAX_ROW_LIMIT = 1000;
+const PROPERTY_QUERY_CID_FALLBACK_MAP_ENV =
+  "PROPERTY_QUERY_TABLE_CID_FALLBACK_MAP_ADDITIONS";
+const PERMIT_QUERY_CID_FALLBACK_MAP_ENV =
+  "PERMIT_QUERY_TABLE_CID_FALLBACK_MAP_ADDITIONS";
 
 /**
  * Statement-level keywords that must never appear in a caller's query. These
@@ -111,6 +120,11 @@ interface DatasetConfig {
   readonly defaultCountyEnv: string;
   /** This dataset's private connection cache, keyed by countyKey + location. */
   readonly connectionCache: Map<string, Promise<CountyConnection>>;
+  /**
+   * Optional strict county-to-CID map. The configured IPNS URL remains the
+   * publication identity while DuckDB reads the reviewed immutable CID.
+   */
+  readonly cidFallbackMapEnv?: string;
 }
 
 const PROPERTY_DATASET: DatasetConfig = {
@@ -119,6 +133,7 @@ const PROPERTY_DATASET: DatasetConfig = {
   singleEnv: "PROPERTY_QUERY_TABLE",
   defaultCountyEnv: "PROPERTY_QUERY_TABLE_DEFAULT_COUNTY",
   connectionCache: new Map<string, Promise<CountyConnection>>(),
+  cidFallbackMapEnv: PROPERTY_QUERY_CID_FALLBACK_MAP_ENV,
 };
 
 const PERMIT_DATASET: DatasetConfig = {
@@ -127,7 +142,75 @@ const PERMIT_DATASET: DatasetConfig = {
   singleEnv: "PERMIT_QUERY_TABLE",
   defaultCountyEnv: "PERMIT_QUERY_TABLE_DEFAULT_COUNTY",
   connectionCache: new Map<string, Promise<CountyConnection>>(),
+  cidFallbackMapEnv: PERMIT_QUERY_CID_FALLBACK_MAP_ENV,
 };
+
+/**
+ * Select a reviewed immutable CID for DuckDB while retaining IPNS as the
+ * externally reviewed route.
+ *
+ * @param location - Stable query-table location from the county map.
+ * @param countyKey - Normalized county key selected by the caller.
+ * @param envName - County-to-CID environment map name.
+ * @returns Original location when no fallback exists, otherwise a CID URL.
+ * @throws {Error} When a fallback is paired with a non-IPNS base route.
+ */
+function resolveCidFallbackRuntimeLocation(
+  location: string,
+  countyKey: string | null,
+  envName: string,
+): string {
+  const expectedByCounty = parseCountyCidFallbackMap(
+    process.env[envName],
+    envName,
+  );
+  const expectedCid =
+    countyKey === null ? undefined : expectedByCounty[countyKey];
+  if (expectedCid === undefined) return location;
+
+  if (extractIpnsName(location) === null) {
+    throw new Error(
+      `${envName} requires the base route for '${countyKey}' to remain an IPNS URL`,
+    );
+  }
+  return filebaseCidUrl(expectedCid);
+}
+
+/**
+ * Resolve the runtime property-table location for one county.
+ *
+ * @param location - Stable property IPNS route.
+ * @param countyKey - Normalized county key.
+ * @returns Immutable CID URL when a reviewed fallback is configured.
+ */
+export function resolvePropertyQueryRuntimeLocation(
+  location: string,
+  countyKey: string | null,
+): string {
+  return resolveCidFallbackRuntimeLocation(
+    location,
+    countyKey,
+    PROPERTY_QUERY_CID_FALLBACK_MAP_ENV,
+  );
+}
+
+/**
+ * Resolve the runtime permit-table location for one county.
+ *
+ * @param location - Stable permit IPNS route.
+ * @param countyKey - Normalized county key.
+ * @returns Immutable CID URL when a reviewed fallback is configured.
+ */
+export function resolvePermitQueryRuntimeLocation(
+  location: string,
+  countyKey: string | null,
+): string {
+  return resolveCidFallbackRuntimeLocation(
+    location,
+    countyKey,
+    PERMIT_QUERY_CID_FALLBACK_MAP_ENV,
+  );
+}
 
 /**
  * Parse a JSON county→location map env value (generic core). Returns an empty
@@ -504,10 +587,18 @@ async function getCountyConnection(
     );
   }
 
-  const cacheKey = `${resolution.countyKey ?? "__default__"}::${resolution.location}`;
+  const runtimeLocation =
+    config.cidFallbackMapEnv === undefined
+      ? resolution.location
+      : resolveCidFallbackRuntimeLocation(
+          resolution.location,
+          resolution.countyKey,
+          config.cidFallbackMapEnv,
+        );
+  const cacheKey = `${resolution.countyKey ?? "__default__"}::${runtimeLocation}`;
   let pending = config.connectionCache.get(cacheKey);
   if (pending === undefined) {
-    pending = openCountyConnection(config.view, resolution.location);
+    pending = openCountyConnection(config.view, runtimeLocation);
     config.connectionCache.set(cacheKey, pending);
     // Don't cache a failed open — let the next call retry.
     pending.catch(() => config.connectionCache.delete(cacheKey));

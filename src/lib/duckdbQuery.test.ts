@@ -19,6 +19,8 @@ import {
   parseQueryTableMap,
   runPropertyQuery,
   clearPropertyQueryConnections,
+  resolvePropertyQueryRuntimeLocation,
+  resolvePermitQueryRuntimeLocation,
 } from "./duckdbQuery.ts";
 
 describe("validateSelectQuery", () => {
@@ -95,6 +97,8 @@ describe("resolveQueryTableLocation", () => {
     "PROPERTY_QUERY_TABLE",
     "PROPERTY_QUERY_TABLE_MAP",
     "PROPERTY_QUERY_TABLE_MAP_ADDITIONS",
+    "PROPERTY_QUERY_TABLE_CID_FALLBACK_MAP_ADDITIONS",
+    "PERMIT_QUERY_TABLE_CID_FALLBACK_MAP_ADDITIONS",
     "PROPERTY_QUERY_TABLE_DEFAULT_COUNTY",
   ];
   const saved: Record<string, string | undefined> = {};
@@ -179,6 +183,58 @@ describe("resolveQueryTableLocation", () => {
       served: true,
       location: "/lee-override.parquet",
     });
+  });
+
+  it("keeps property IPNS as identity but selects its reviewed CID for DuckDB", () => {
+    const ipns =
+      "k51qzi5uqu5dibuhwyztmkjgvz94v3mkpgfreryxwb3d4neta5e7tsxebfi09s";
+    const cid = "QmPUFdWJuXsFut6XZTQSEuBNCyfz22uu3AuorrVSXdsHnU";
+    setEnv({
+      PROPERTY_QUERY_TABLE_CID_FALLBACK_MAP_ADDITIONS: JSON.stringify({
+        broward: cid,
+      }),
+    });
+
+    expect(
+      resolvePropertyQueryRuntimeLocation(
+        `https://ipfs.filebase.io/ipns/${ipns}`,
+        "broward",
+      ),
+    ).toBe(`https://ipfs.filebase.io/ipfs/${cid}`);
+  });
+
+  it("keeps permit IPNS as identity but selects its reviewed CID for DuckDB", () => {
+    const ipns =
+      "k51qzi5uqu5dhns9u4o0lot4w4808yi4gdsyo5qx136lgmrplmgqdhah5qj7lg";
+    const cid = "Qmb1XuBnD7c3xs99bUuHUWfhEoVNwuo4eNfWQHFa6Fdbis";
+    setEnv({
+      PERMIT_QUERY_TABLE_CID_FALLBACK_MAP_ADDITIONS: JSON.stringify({
+        broward: cid,
+      }),
+    });
+
+    expect(
+      resolvePermitQueryRuntimeLocation(
+        `https://ipfs.filebase.io/ipns/${ipns}`,
+        "broward",
+      ),
+    ).toBe(`https://ipfs.filebase.io/ipfs/${cid}`);
+  });
+
+  it("rejects a CID fallback when the reviewed route is not IPNS", () => {
+    const cid = "QmPUFdWJuXsFut6XZTQSEuBNCyfz22uu3AuorrVSXdsHnU";
+    setEnv({
+      PROPERTY_QUERY_TABLE_CID_FALLBACK_MAP_ADDITIONS: JSON.stringify({
+        broward: cid,
+      }),
+    });
+
+    expect(() =>
+      resolvePropertyQueryRuntimeLocation(
+        "https://example.com/broward.parquet",
+        "broward",
+      ),
+    ).toThrow("remain an IPNS URL");
   });
 });
 

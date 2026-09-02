@@ -1,0 +1,36 @@
+{
+  "county": "broward",
+  "exportedAt": "2026-09-02T20:45:27.531Z",
+  "datasets": [
+    {
+      "county": "broward",
+      "source": "appraisal",
+      "ingested_count": 526068,
+      "expected_count": null,
+      "first_loaded_at": "2026-08-29 17:29:29.891733+00",
+      "last_loaded_at": "2026-08-30 16:39:49.193222+00",
+      "cid": "QmPUFdWJuXsFut6XZTQSEuBNCyfz22uu3AuorrVSXdsHnU",
+      "ipns_label": "oracle-query-table-broward"
+    },
+    {
+      "county": "broward",
+      "source": "bbb",
+      "ingested_count": 2102,
+      "expected_count": null,
+      "first_loaded_at": "2026-09-02 05:15:20.984626+00",
+      "last_loaded_at": "2026-09-02 16:47:48.563405+00",
+      "cid": null,
+      "ipns_label": null
+    },
+    {
+      "county": "broward",
+      "source": "permits",
+      "ingested_count": 495465,
+      "expected_count": null,
+      "first_loaded_at": "2026-08-31 06:21:49.453384+00",
+      "last_loaded_at": "2026-09-02 19:54:16.931171+00",
+      "cid": "Qmb1XuBnD7c3xs99bUuHUWfhEoVNwuo4eNfWQHFa6Fdbis",
+      "ipns_label": "oracle-permit-table-broward"
+    }
+  ]
+}
