@@ -10,6 +10,10 @@ import {
   getPublishedCountyCatalogLocation,
   getPublishedCountyCatalogRevision,
 } from "../lib/publishedCountyCatalog.ts";
+import type {
+  PublishedCounty,
+  PublishedCountyCatalog,
+} from "../types/publishedCountyCatalog.ts";
 import { listPublishedCountiesHandler } from "./publishedCounties.ts";
 
 const publicationScopeFixture = JSON.parse(
@@ -28,7 +32,7 @@ const publicationScopeFixture = JSON.parse(
   }>;
 };
 
-const catalog = {
+const catalog: PublishedCountyCatalog = {
   schemaVersion: "1.1",
   generatedAt: "2026-07-24T10:00:00.000Z",
   counties: [
@@ -68,7 +72,31 @@ const catalog = {
       updatedAt: "2026-07-24T08:00:00.000Z",
     },
   ],
-} as const;
+};
+
+function scopeRegistryFor(counties: readonly PublishedCounty[]) {
+  return {
+    schemaVersion: "1.0",
+    registryVersion: "test-1",
+    owner: "elephant-mcp/donphan",
+    reviewedAt: "2026-07-24T10:00:00.000Z",
+    entries: counties.map((county) => ({
+      countyKey: county.countyKey,
+      countyName: county.countyName,
+      stateCode: county.stateCode,
+      countyFips: county.countyFips,
+      queryTableIdentity: county.queryTableUrl,
+      datasetCoverageIdentity: county.datasetCoverageUrl,
+      publicationScope: county.publicationScope,
+      provenance: {
+        owner: "elephant-mcp/donphan",
+        artifactCatalog: "https://example.com/catalog.json",
+        classificationEvidence: "https://example.com/review/1",
+        reviewedAt: "2026-07-24T10:00:00.000Z",
+      },
+    })),
+  };
+}
 
 describe("published county catalog", () => {
   let directory: string;
@@ -125,9 +153,14 @@ describe("published county catalog", () => {
     writeFileSync(file, JSON.stringify(catalog));
     process.env.PUBLISHED_COUNTY_CATALOG_URL = file;
 
-    const first = await listPublishedCountiesHandler();
+    const registry = scopeRegistryFor(catalog.counties);
+    const first = await listPublishedCountiesHandler({
+      scopeRegistry: registry,
+    });
     clearPublishedCountyCatalogCache();
-    const second = await listPublishedCountiesHandler();
+    const second = await listPublishedCountiesHandler({
+      scopeRegistry: registry,
+    });
     const firstPayload = JSON.parse(first.content[0]?.text ?? "{}") as {
       countyCount: number;
       catalogRevision: string;
@@ -138,7 +171,13 @@ describe("published county catalog", () => {
           level: string;
           denominatorBasis: string;
         };
+        publicationScopeResolution: {
+          reason: string;
+          registryRevision: string;
+        };
       }>;
+      scopeRegistryVersion: string;
+      scopeRegistryRevision: string;
     };
     const secondPayload = JSON.parse(second.content[0]?.text ?? "{}") as {
       catalogRevision: string;
@@ -154,12 +193,17 @@ describe("published county catalog", () => {
       level: "full",
       denominatorBasis: "county_total",
     });
+    expect(firstPayload.counties[0]?.publicationScopeResolution.reason).toBe(
+      "registry_match",
+    );
+    expect(firstPayload.scopeRegistryVersion).toBe("test-1");
+    expect(firstPayload.scopeRegistryRevision).toMatch(/^[a-f0-9]{64}$/);
     expect(firstPayload.counties[1]?.placesTableUrl).toBeNull();
     expect(firstPayload.catalogRevision).toMatch(/^[a-f0-9]{64}$/);
     expect(secondPayload.catalogRevision).toBe(firstPayload.catalogRevision);
   });
 
-  it("preserves the shared Hillsborough pilot scope fixture", async () => {
+  it("preserves a shared synthetic pilot scope fixture", async () => {
     const pilot = publicationScopeFixture.scenarios.find(
       (scenario) => scenario.id === "hillsborough-50-of-50-pilot",
     );
@@ -182,13 +226,28 @@ describe("published county catalog", () => {
     );
     process.env.PUBLISHED_COUNTY_CATALOG_URL = file;
 
-    const result = await listPublishedCountiesHandler();
+    const pilotCounty = {
+      ...catalog.counties[0],
+      countyKey: "hillsborough",
+      countyName: "Hillsborough",
+      countyFips: "12057",
+      publicationScope: pilot!.publicationScope,
+    };
+    const result = await listPublishedCountiesHandler({
+      scopeRegistry: scopeRegistryFor([pilotCounty]),
+    });
     const payload = JSON.parse(result.content[0]?.text ?? "{}") as {
-      counties: Array<{ publicationScope: unknown }>;
+      counties: Array<{
+        publicationScope: unknown;
+        publicationScopeResolution: { reason: string };
+      }>;
     };
 
     expect(payload.counties[0]?.publicationScope).toEqual(
       pilot!.publicationScope,
+    );
+    expect(payload.counties[0]?.publicationScopeResolution.reason).toBe(
+      "registry_match",
     );
   });
 

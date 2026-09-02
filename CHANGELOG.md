@@ -1,3 +1,10 @@
+# [1.11.0](https://github.com/elephant-xyz/elephant-mcp/compare/v1.10.1...v1.11.0) (2026-09-02)
+
+
+### Features
+
+* add fail-closed county scope registry ([#57](https://github.com/elephant-xyz/elephant-mcp/issues/57)) ([f6af4f8](https://github.com/elephant-xyz/elephant-mcp/commit/f6af4f8473ab4645a6cb26de21fb25fc3472e74c))
+
 ## [1.10.1](https://github.com/elephant-xyz/elephant-mcp/compare/v1.10.0...v1.10.1) (2026-09-01)
 
 

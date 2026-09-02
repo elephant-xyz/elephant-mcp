@@ -23,6 +23,13 @@ import {
   fetchPublishedCountyCatalog,
   getPublishedCountyCatalogRevision,
 } from "../lib/publishedCountyCatalog.ts";
+import {
+  getPublicationScopeRegistryRevision,
+  getPublicationScopeRegistryVersion,
+  publicArtifactIdentity,
+  resolvePublicationScope,
+  type ResolvedPublicationScope,
+} from "../lib/publicationScopeRegistry.ts";
 import { normalizeCountyKey } from "../lib/countyIpnsRegistry.ts";
 import type { Json } from "@duckdb/node-api";
 import type {
@@ -159,13 +166,17 @@ async function listOraclePropertiesFromQueryTable(
  * Dataset-info result for a county this deployment does not serve (unknown
  * county, or a county that doesn't match the single legacy dataset).
  */
-function countyNotServedResult(county?: string) {
+function countyNotServedResult(
+  county?: string,
+  scopeFields: Record<string, unknown> = {},
+) {
   return createTextResult({
     error: county
       ? `County '${county}' is not served by this deployment.`
       : "No oracle open-data dataset is available.",
     county: county ?? null,
     propertyCount: 0,
+    ...scopeFields,
   });
 }
 
@@ -656,49 +667,6 @@ async function fetchDatasetInfoCatalog(
   }
 }
 
-/**
- * Normalize the two trusted public IPNS URL forms to one artifact identity.
- * Non-IPNS locations remain exact (apart from a trailing slash), so local and
- * custom deployments only use the fast path when catalog/config truly match.
- */
-function artifactIdentity(location: string): string {
-  try {
-    const url = new URL(location);
-    const hostname = url.hostname.toLowerCase();
-    const pathSegments = url.pathname.split("/").filter(Boolean);
-    if (
-      hostname === "ipfs.filebase.io" &&
-      pathSegments[0]?.toLowerCase() === "ipns" &&
-      pathSegments[1]
-    ) {
-      return `ipns:${pathSegments.slice(1).join("/")}`;
-    }
-    const dwebSuffix = ".ipns.dweb.link";
-    if (hostname.endsWith(dwebSuffix)) {
-      const ipnsName = hostname.slice(0, -dwebSuffix.length);
-      return `ipns:${[ipnsName, ...pathSegments].join("/")}`;
-    }
-    return url.toString().replace(/\/$/, "");
-  } catch {
-    return location.replace(/\/$/, "");
-  }
-}
-
-function publicationScopesEqual(
-  left: NonNullable<
-    PublishedCountyCatalog["counties"][number]["publicationScope"]
-  >,
-  right: NonNullable<
-    PublishedCountyCatalog["counties"][number]["publicationScope"]
-  >,
-): boolean {
-  return (
-    left.schemaVersion === right.schemaVersion &&
-    left.level === right.level &&
-    left.denominatorBasis === right.denominatorBasis
-  );
-}
-
 type CatalogCoverageDecisionReason =
   | "catalog_bound_schema_1_0_legacy_scope"
   | "catalog_bound_schema_1_1_scope"
@@ -738,18 +706,6 @@ function buildCatalogCoverageDatasetInfo(
   const publishedCounty = catalogContext.catalog.counties.find(
     (entry) => entry.countyKey === countyKey,
   );
-  if (
-    publishedCounty?.publicationScope !== undefined &&
-    coverageSnapshot.publicationScope !== undefined &&
-    !publicationScopesEqual(
-      publishedCounty.publicationScope,
-      coverageSnapshot.publicationScope,
-    )
-  ) {
-    throw new Error(
-      `coverage publicationScope for '${countyKey}' does not match the canonical catalog`,
-    );
-  }
   const queryTable = resolveQueryTableLocation(county);
   const coverage = resolveCoverageLocation(county);
   if (publishedCounty === undefined) {
@@ -768,8 +724,8 @@ function buildCatalogCoverageDatasetInfo(
     return { base: null, reason: "coverage_location_missing" };
   }
   if (
-    artifactIdentity(queryTable.location) !==
-    artifactIdentity(publishedCounty.queryTableUrl)
+    publicArtifactIdentity(queryTable.location) !==
+    publicArtifactIdentity(publishedCounty.queryTableUrl)
   ) {
     return {
       base: null,
@@ -777,8 +733,8 @@ function buildCatalogCoverageDatasetInfo(
     };
   }
   if (
-    artifactIdentity(coverage.location) !==
-    artifactIdentity(publishedCounty.datasetCoverageUrl)
+    publicArtifactIdentity(coverage.location) !==
+    publicArtifactIdentity(publishedCounty.datasetCoverageUrl)
   ) {
     return {
       base: null,
@@ -804,13 +760,6 @@ function buildCatalogCoverageDatasetInfo(
       exportedAt: coverageSnapshot.exportedAt ?? null,
       ipnsName: getOpenDataIpnsName(county) ?? null,
       catalogRevision: catalogContext.revision,
-      publicationScope: publishedCounty.publicationScope ?? null,
-      publicationScopeSource:
-        publishedCounty.publicationScope === undefined
-          ? "legacy_schema_1_0_unscoped"
-          : coverageSnapshot.publicationScope === undefined
-            ? "catalog_legacy_coverage"
-            : "catalog_and_coverage",
     },
     reason:
       catalogContext.catalog.schemaVersion === "1.0"
@@ -821,15 +770,22 @@ function buildCatalogCoverageDatasetInfo(
 
 export async function getOracleDatasetInfoHandler(
   args: { county?: string } = {},
-  options: { signal?: AbortSignal } = {},
+  options: { signal?: AbortSignal; scopeRegistry?: unknown } = {},
 ) {
   try {
     options.signal?.throwIfAborted();
     const catalogContext = await fetchDatasetInfoCatalog(options.signal);
+    const scopeRegistryRevision = getPublicationScopeRegistryRevision(
+      options.scopeRegistry,
+    );
+    const scopeRegistryVersion = getPublicationScopeRegistryVersion(
+      options.scopeRegistry,
+    );
     const coverageSnapshot = await fetchDatasetCoverage(args.county, {
       signal: options.signal,
       timeoutMs: DATASET_INFO_COVERAGE_TIMEOUT_MS,
       catalogRevision: catalogContext?.revision,
+      scopeRegistryRevision,
     });
     const coverage =
       coverageSnapshot === null
@@ -863,10 +819,62 @@ export async function getOracleDatasetInfoHandler(
     const base =
       metadataDecision.base ??
       (await buildBaseDatasetInfo(args.county, options.signal));
+    const catalogCounty =
+      args.county === undefined || catalogContext === null
+        ? undefined
+        : catalogContext.catalog.counties.find(
+            (entry) =>
+              entry.countyKey === normalizeCountyKey(args.county as string),
+          );
+    const queryTable = resolveQueryTableLocation(args.county);
+    const coverageLocation = resolveCoverageLocation(args.county);
+    const explicitScopes = [
+      ...(catalogCounty?.publicationScope === undefined
+        ? []
+        : [
+            {
+              source: "catalog",
+              value: catalogCounty.publicationScope,
+            },
+          ]),
+      ...(coverageSnapshot?.publicationScope === undefined
+        ? []
+        : [
+            {
+              source: "coverage",
+              value: coverageSnapshot.publicationScope,
+            },
+          ]),
+    ];
+    const scope: ResolvedPublicationScope = resolvePublicationScope(
+      catalogCounty ?? null,
+      {
+        registry: options.scopeRegistry,
+        catalogUnavailable: catalogContext === null,
+        explicitScopes,
+        ...(catalogCounty === undefined
+          ? {}
+          : {
+              runtimeArtifacts: {
+                queryTableUrl: queryTable.location,
+                datasetCoverageUrl: coverageLocation.location,
+              },
+            }),
+      },
+    );
+    const scopeFields: Record<string, unknown> = {
+      catalogRevision: catalogContext?.revision ?? null,
+      scopeRegistryVersion,
+      scopeRegistryRevision,
+      publicationScope: scope.publicationScope,
+      publicationScopeSource:
+        scope.publicationScope === null ? null : "mcp_scope_registry",
+      publicationScopeResolution: scope.resolution,
+    };
 
     // County served by neither a property dataset nor coverage → not served.
     if (base === null && (coverage === null || coverage.length === 0)) {
-      return countyNotServedResult(args.county);
+      return countyNotServedResult(args.county, scopeFields);
     }
 
     // Coverage-only county: no property dataset is served, so report
@@ -879,21 +887,7 @@ export async function getOracleDatasetInfoHandler(
       propertyCount: null,
       propertyDatasetAvailable: false,
     };
-    const catalogCounty =
-      args.county === undefined || catalogContext === null
-        ? undefined
-        : catalogContext.catalog.counties.find(
-            (entry) =>
-              entry.countyKey === normalizeCountyKey(args.county as string),
-          );
-    if (
-      catalogCounty?.publicationScope !== undefined &&
-      result.publicationScope === undefined
-    ) {
-      result.publicationScope = catalogCounty.publicationScope;
-      result.publicationScopeSource = "catalog";
-      result.catalogRevision = catalogContext?.revision;
-    }
+    Object.assign(result, scopeFields);
 
     if (coverage !== null && coverage.length > 0) {
       result.datasets = coverage;
