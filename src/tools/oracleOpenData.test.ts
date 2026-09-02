@@ -755,27 +755,27 @@ describe("multi-county routing", () => {
     expect(mockGetJsonByCid).not.toHaveBeenCalled();
   });
 
-  it("[datasetInfo][legacy index] mismatched county returns not-served", async () => {
+  it("[datasetInfo][legacy index] unmapped county returns not-served", async () => {
     const shards = [buildShardRef(0, "1000", "2999", 2, "shard-cid-0")];
     mockFetchOracleIndex.mockResolvedValue(buildIndex(shards, "Lee"));
 
-    const result = await getOracleDatasetInfoHandler({ county: "Broward" });
+    const result = await getOracleDatasetInfoHandler({ county: "Duval" });
     const parsed = JSON.parse(result.content[0].text);
 
-    expect(parsed.error).toContain("Broward");
+    expect(parsed.error).toContain("Duval");
     expect(parsed.propertyCount).toBe(0);
   });
 
-  it("[datasetInfo][legacy manifest] mismatched county returns not-served", async () => {
+  it("[datasetInfo][legacy manifest] unmapped county returns not-served", async () => {
     mockFetchOracleIndex.mockResolvedValue(null);
     mockFetchOracleManifest.mockResolvedValue(
       buildManifest([buildEntry("uuid-001", "1234567890", "cid-001")]),
     );
 
-    const result = await getOracleDatasetInfoHandler({ county: "Broward" });
+    const result = await getOracleDatasetInfoHandler({ county: "Duval" });
     const parsed = JSON.parse(result.content[0].text);
 
-    expect(parsed.error).toContain("Broward");
+    expect(parsed.error).toContain("Duval");
     expect(parsed.propertyCount).toBe(0);
   });
 });

@@ -91,6 +91,17 @@ describe("resolveCoverageLocation", () => {
     expect(res.countyKey).toBe("lee");
   });
 
+  it("serves Broward from its partial multi-source coverage IPNS", () => {
+    const res = resolveCoverageLocation("Broward");
+    expect(res).toEqual({
+      served: true,
+      location:
+        "https://ipfs.filebase.io/ipns/k51qzi5uqu5dhx6yqczp6f9na3xa9g1iiizxtquer62x9wavh8gpbng524vrbp",
+      countyKey: "broward",
+    });
+    expect(res.location).toBe(DEFAULT_DATASET_COVERAGE_MAP.broward);
+  });
+
   it("not served when an unknown county has no configured snapshot", () => {
     const res = resolveCoverageLocation("not-built-in");
     expect(res.served).toBe(false);
