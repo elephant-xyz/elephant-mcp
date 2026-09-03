@@ -1,8 +1,8 @@
 {
   "schemaVersion": "1.0",
-  "registryVersion": "2026-09-02.4",
+  "registryVersion": "2026-09-03.1",
   "owner": "elephant-mcp/donphan",
-  "reviewedAt": "2026-09-02T20:59:31.937Z",
+  "reviewedAt": "2026-09-03T21:04:26.085Z",
   "entries": [
     {
       "countyKey": "broward",
@@ -211,6 +211,25 @@
         "artifactCatalog": "https://raw.githubusercontent.com/elephant-xyz/oracle-node/main/catalog/published-counties.json",
         "classificationEvidence": "https://github.com/elephant-xyz/oracle-node/pull/195",
         "reviewedAt": "2026-09-01T17:06:37.000Z"
+      }
+    },
+    {
+      "countyKey": "seminole",
+      "countyName": "Seminole",
+      "stateCode": "FL",
+      "countyFips": "12117",
+      "queryTableIdentity": "ipns:k51qzi5uqu5di6kqptmkfaoq7yxc7z04spm1n0gbrc26toi2eah1b66cfrqfwp",
+      "datasetCoverageIdentity": "ipns:k51qzi5uqu5dmawnn59hx0z87i36xk60os0vur3m05p8u2ial89cn2oay7o9oz",
+      "publicationScope": {
+        "schemaVersion": "1.0",
+        "level": "full",
+        "denominatorBasis": "county_total"
+      },
+      "provenance": {
+        "owner": "elephant-mcp/donphan",
+        "artifactCatalog": "https://raw.githubusercontent.com/elephant-xyz/oracle-node/main/catalog/published-counties.json",
+        "classificationEvidence": "https://github.com/elephant-xyz/oracle-node/pull/209",
+        "reviewedAt": "2026-09-03T21:04:26.085Z"
       }
     }
   ]

@@ -188,6 +188,22 @@ DATASET_COVERAGE_MAP
 runtime (additions win on key collision). Use that overlay when the base
 `PROPERTY_QUERY_TABLE_MAP` is a Vercel Secret you cannot rewrite in place.
 
+### Seminole additive configuration
+
+Seminole (FL) is a full CAMA query-table publication: 181,218 appraisal rows
+against the county total, with an honest coverage snapshot that reports 0 for
+permits, corporate registrations, BBB, and Overture places. Do not set
+`ORACLE_OPEN_DATA_IPNS_MAP` for Seminole (no canonical per-property JSON). Merge
+only the `seminole` entries:
+
+```text
+PROPERTY_QUERY_TABLE_MAP_ADDITIONS
+{"seminole":"https://ipfs.filebase.io/ipns/k51qzi5uqu5di6kqptmkfaoq7yxc7z04spm1n0gbrc26toi2eah1b66cfrqfwp"}
+
+DATASET_COVERAGE_MAP_ADDITIONS
+{"seminole":"https://ipfs.filebase.io/ipns/k51qzi5uqu5dmawnn59hx0z87i36xk60os0vur3m05p8u2ial89cn2oay7o9oz"}
+```
+
 ### Broward additive configuration
 
 Broward is an explicitly partial, privacy-filtered publication: 526,068

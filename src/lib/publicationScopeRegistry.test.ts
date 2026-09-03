@@ -60,8 +60,8 @@ function syntheticRegistry(level: "full" | "partial" | "pilot" = "full") {
 }
 
 describe("Donphan publication-scope registry", () => {
-  it("contains eleven county identities with Broward explicitly partial", () => {
-    expect(registryJson.entries).toHaveLength(11);
+  it("contains twelve county identities with Broward explicitly partial", () => {
+    expect(registryJson.entries).toHaveLength(12);
     expect(
       registryJson.entries
         .filter((entry) => entry.publicationScope.level === "full")
@@ -75,6 +75,7 @@ describe("Donphan publication-scope registry", () => {
       "palm-beach",
       "polk",
       "rock-island",
+      "seminole",
     ]);
     expect(
       registryJson.entries
@@ -97,7 +98,7 @@ describe("Donphan publication-scope registry", () => {
     });
     expect(result.resolution).toMatchObject({
       reason: "registry_match",
-      registryVersion: "2026-09-02.4",
+      registryVersion: "2026-09-03.1",
       registryRevision: getPublicationScopeRegistryRevision(),
       entryIdentity: expect.stringMatching(/^[a-f0-9]{64}$/),
       provenance: { owner: "elephant-mcp/donphan" },
@@ -122,6 +123,27 @@ describe("Donphan publication-scope registry", () => {
     expect(result.publicationScope).toEqual({
       schemaVersion: "1.0",
       level: "partial",
+      denominatorBasis: "county_total",
+    });
+    expect(result.resolution.reason).toBe("registry_match");
+  });
+
+  it("resolves Seminole as full for its reviewed CAMA artifact identities", () => {
+    const result = resolvePublicationScope(
+      county({
+        countyKey: "seminole",
+        countyName: "Seminole",
+        countyFips: "12117",
+        queryTableUrl:
+          "https://ipfs.filebase.io/ipns/k51qzi5uqu5di6kqptmkfaoq7yxc7z04spm1n0gbrc26toi2eah1b66cfrqfwp",
+        datasetCoverageUrl:
+          "https://ipfs.filebase.io/ipns/k51qzi5uqu5dmawnn59hx0z87i36xk60os0vur3m05p8u2ial89cn2oay7o9oz",
+      }),
+    );
+
+    expect(result.publicationScope).toEqual({
+      schemaVersion: "1.0",
+      level: "full",
       denominatorBasis: "county_total",
     });
     expect(result.resolution.reason).toBe("registry_match");
