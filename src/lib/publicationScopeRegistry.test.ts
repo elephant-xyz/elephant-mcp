@@ -60,8 +60,8 @@ function syntheticRegistry(level: "full" | "partial" | "pilot" = "full") {
 }
 
 describe("Donphan publication-scope registry", () => {
-  it("contains twelve county identities with Broward explicitly partial", () => {
-    expect(registryJson.entries).toHaveLength(12);
+  it("contains 13 county identities with Broward explicitly partial", () => {
+    expect(registryJson.entries).toHaveLength(13);
     expect(
       registryJson.entries
         .filter((entry) => entry.publicationScope.level === "full")
@@ -73,10 +73,11 @@ describe("Donphan publication-scope registry", () => {
       "montgomery",
       "orange",
       "palm-beach",
+      "pasco",
       "polk",
       "rock-island",
-      "seminole",
-    ]);
+      "seminole"
+]);
     expect(
       registryJson.entries
         .filter((entry) => entry.publicationScope.level === "pilot")
@@ -98,7 +99,7 @@ describe("Donphan publication-scope registry", () => {
     });
     expect(result.resolution).toMatchObject({
       reason: "registry_match",
-      registryVersion: "2026-09-03.1",
+      registryVersion: "2026-09-03.2",
       registryRevision: getPublicationScopeRegistryRevision(),
       entryIdentity: expect.stringMatching(/^[a-f0-9]{64}$/),
       provenance: { owner: "elephant-mcp/donphan" },
