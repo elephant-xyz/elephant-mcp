@@ -1,8 +1,8 @@
 {
   "schemaVersion": "1.0",
-  "registryVersion": "2026-09-03.1",
+  "registryVersion": "2026-09-03.2",
   "owner": "elephant-mcp/donphan",
-  "reviewedAt": "2026-09-03T21:04:26.085Z",
+  "reviewedAt": "2026-09-03T14:10:00.000Z",
   "entries": [
     {
       "countyKey": "broward",
@@ -154,6 +154,25 @@
         "artifactCatalog": "https://raw.githubusercontent.com/elephant-xyz/oracle-node/main/catalog/published-counties.json",
         "classificationEvidence": "https://github.com/elephant-xyz/oracle-node/pull/195",
         "reviewedAt": "2026-09-01T17:06:37.000Z"
+      }
+    },
+    {
+      "countyKey": "pasco",
+      "countyName": "Pasco",
+      "stateCode": "FL",
+      "countyFips": "12101",
+      "queryTableIdentity": "ipns:k51qzi5uqu5dlm72r495ei7507h3yl4tw4olszh2ppas8roxrbg2ccko84s8kv",
+      "datasetCoverageIdentity": "ipns:k51qzi5uqu5dl7i1pgx4n755nbj57j2stfob0gvnymfwto13icqbwre3z41y8k",
+      "publicationScope": {
+        "schemaVersion": "1.0",
+        "level": "full",
+        "denominatorBasis": "county_total"
+      },
+      "provenance": {
+        "owner": "elephant-mcp/donphan",
+        "artifactCatalog": "https://raw.githubusercontent.com/elephant-xyz/oracle-node/main/catalog/published-counties.json",
+        "classificationEvidence": "https://github.com/elephant-xyz/oracle-node/pull/195",
+        "reviewedAt": "2026-09-03T14:10:00.000Z"
       }
     },
     {
