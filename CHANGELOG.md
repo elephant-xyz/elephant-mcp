@@ -1,3 +1,10 @@
+## [1.12.1](https://github.com/elephant-xyz/elephant-mcp/compare/v1.12.0...v1.12.1) (2026-09-04)
+
+
+### Bug Fixes
+
+* declare uint8arrays as a direct dependency ([#67](https://github.com/elephant-xyz/elephant-mcp/issues/67)) ([abc7d7f](https://github.com/elephant-xyz/elephant-mcp/commit/abc7d7f212d9daada20b1560023404f02b046168))
+
 # [1.12.0](https://github.com/elephant-xyz/elephant-mcp/compare/v1.11.0...v1.12.0) (2026-09-04)
 
 
