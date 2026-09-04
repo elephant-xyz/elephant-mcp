@@ -21,6 +21,10 @@ import {
   getPropertyQuerySchemaHandler,
 } from "./propertyQuery.ts";
 import {
+  executeDatasetQueryPlanHandler,
+  getDatasetQueryCapabilitiesHandler,
+} from "./datasetQuery.ts";
+import {
   queryPermitsHandler,
   getPermitQuerySchemaHandler,
   getPermitCoverageHandler,
@@ -45,6 +49,10 @@ import {
   type PlaceColocationRequest,
 } from "../lib/placeColocation.ts";
 import type { PlaceColocationDiscoveryRequest } from "../lib/placeColocationDiscovery.ts";
+import {
+  datasetQueryPlanSchema,
+  type DatasetQueryPlan,
+} from "../lib/datasetQuery.ts";
 
 const boundedCountySchema = z
   .string()
@@ -422,6 +430,46 @@ export function registerAllTools(
     }) => {
       return sumPropertyValueInAreaHandler(args);
     },
+  );
+
+  server.registerTool(
+    "getDatasetQueryCapabilities",
+    {
+      title: "Get dataset query capabilities",
+      description:
+        "Describe bounded aggregate query capabilities for a county's property and permit datasets. Returns only allowlisted non-PII fields, types, operators, measures, null semantics, hard budgets, and query-table identity. It returns no source rows and accepts no SQL or data URL.",
+      inputSchema: {
+        county: boundedCountySchema.describe(
+          "One published county key/name, e.g. 'lee' or 'Lee'.",
+        ),
+      },
+    },
+    async (args: { county: string }, { signal }) =>
+      getDatasetQueryCapabilitiesHandler(args, {
+        signal:
+          requestSignal === undefined
+            ? signal
+            : AbortSignal.any([signal, requestSignal]),
+      }),
+  );
+
+  server.registerTool(
+    "executeDatasetQueryPlan",
+    {
+      title: "Execute a dataset query plan",
+      description:
+        "Execute one typed, bounded aggregate plan over a county's property or permit query table. The server independently allowlists fields, operators, grouping, measures, row/group/time budgets, compiles identifiers itself, and binds every value. Callers cannot provide SQL, URLs, joins, projections, expressions, raw-row queries, or mutations. Returns exact numerator, measured denominator, support, null completeness, median where relevant, canonical hashes, and query-table provenance.",
+      inputSchema: {
+        plan: datasetQueryPlanSchema,
+      },
+    },
+    async (args: { plan: DatasetQueryPlan }, { signal }) =>
+      executeDatasetQueryPlanHandler(args, {
+        signal:
+          requestSignal === undefined
+            ? signal
+            : AbortSignal.any([signal, requestSignal]),
+      }),
   );
 
   server.registerTool(
