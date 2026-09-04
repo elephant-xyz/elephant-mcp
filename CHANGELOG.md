@@ -1,3 +1,11 @@
+# [1.12.0](https://github.com/elephant-xyz/elephant-mcp/compare/v1.11.0...v1.12.0) (2026-09-04)
+
+
+### Features
+
+* add bounded dataset aggregate queries ([#64](https://github.com/elephant-xyz/elephant-mcp/issues/64)) ([fff4a79](https://github.com/elephant-xyz/elephant-mcp/commit/fff4a7962a0f2e012e80cc67269fe34d079d3cd7))
+* add Pasco to publication-scope registry ([#62](https://github.com/elephant-xyz/elephant-mcp/issues/62)) ([a736c9f](https://github.com/elephant-xyz/elephant-mcp/commit/a736c9fc510d32c50ec3419a609fc03421d8fc06))
+
 # [1.11.0](https://github.com/elephant-xyz/elephant-mcp/compare/v1.10.1...v1.11.0) (2026-09-02)
 
 
