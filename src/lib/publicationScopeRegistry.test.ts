@@ -76,8 +76,8 @@ describe("Donphan publication-scope registry", () => {
       "pasco",
       "polk",
       "rock-island",
-      "seminole"
-]);
+      "seminole",
+    ]);
     expect(
       registryJson.entries
         .filter((entry) => entry.publicationScope.level === "pilot")
