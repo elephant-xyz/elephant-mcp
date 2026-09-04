@@ -216,8 +216,8 @@ DATASET_COVERAGE_MAP_ADDITIONS
 ### Broward additive configuration
 
 Broward is an explicitly partial, privacy-filtered publication: 526,068
-appraisal property rows against an official 534,309-folio denominator, 496,064
-frozen permit rows from 14 loaded source systems, 12,432 corporate
+appraisal property rows against an official 534,309-folio denominator, 1,239,649
+frozen permit rows from 22 loaded source systems, 12,432 corporate
 registrations, and 2,823 BBB profiles. The county-wide permit denominator is
 unknown, and only 24 of 32 current primary jurisdiction routes are supported;
 these counts must not be presented as complete county coverage. Merge only the
@@ -234,13 +234,13 @@ PERMIT_QUERY_TABLE_MAP_ADDITIONS
 {"broward":"https://ipfs.filebase.io/ipns/k51qzi5uqu5dhns9u4o0lot4w4808yi4gdsyo5qx136lgmrplmgqdhah5qj7lg"}
 
 PERMIT_QUERY_TABLE_CID_FALLBACK_MAP_ADDITIONS
-{"broward":"QmcDAHJBt5LHiHAHdDwqCKM2BZqPwTJBrxW4Z5DJ6qEJd2"}
+{"broward":"QmYE98KYHw8PCLV9U62oJFjkWpCmrmJUabXxUzxb5rvdg5"}
 
 DATASET_COVERAGE_MAP_ADDITIONS
 {"broward":"https://ipfs.filebase.io/ipns/k51qzi5uqu5dhx6yqczp6f9na3xa9g1iiizxtquer62x9wavh8gpbng524vrbp"}
 
 DATASET_COVERAGE_CID_FALLBACK_MAP_ADDITIONS
-{"broward":"QmTZndCJfNi29hxGzyLXpt9iYJedtmeM2DKFRa24LLA6dq"}
+{"broward":"QmQhT1ZZahifb575GRMLE2nfvWVvEn43Re6KjDiGzgRDCe"}
 ```
 
 The CID fallback maps do not replace the reviewed IPNS identity. They let
