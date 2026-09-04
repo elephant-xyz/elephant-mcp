@@ -4,8 +4,8 @@
   "countyName": "Broward",
   "stateCode": "FL",
   "countyFips": "12011",
-  "exportedAt": "2026-09-02T20:59:31.937Z",
-  "snapshotTimestamp": "2026-09-02T20:59:31.937Z",
+  "exportedAt": "2026-09-03T22:23:47.399Z",
+  "snapshotTimestamp": "2026-09-03T22:23:47.399Z",
   "coverage_status": "supported_partial",
   "county_complete": false,
   "publicationScope": {
@@ -28,7 +28,9 @@
       "routeCount": 32,
       "supportedRouteCount": 24,
       "unattendedUnavailableRouteCount": 8,
-      "loadedSourceSystemCount": 14
+      "loadedSourceSystemCount": 22,
+      "incrementalPartialSourceCount": 10,
+      "incrementalBoundaryBasis": "partial_terminal_artifacts"
     }
   },
   "datasets": [
@@ -45,10 +47,10 @@
     {
       "county": "broward",
       "source": "permits",
-      "ingested_count": 496064,
+      "ingested_count": 1239649,
       "expected_count": null,
       "first_loaded_at": "2026-08-31T06:21:49.453Z",
-      "last_loaded_at": "2026-09-02T20:59:13.517Z",
+      "last_loaded_at": "2026-09-03T22:23:29.059Z",
       "cid": null,
       "ipns_label": null
     },
@@ -79,6 +81,8 @@
     "propertyFoliosNonNull": true,
     "permitRowsMatchDistinctIds": true,
     "permitRowsAccountedFor": true,
+    "noForeignPermitLinks": true,
+    "noBrokenPermitLinks": true,
     "permitSourceRowsAccountedFor": true,
     "roofingRowsAccountedFor": true,
     "permitSourceSystemCountMatches": true,
@@ -86,11 +90,12 @@
     "allBalanced": true
   },
   "permitJoins": {
-    "linked": 360392,
-    "unlinked": 135672,
+    "linked": 871314,
+    "unlinked": 368335,
     "foreignLinked": 0,
-    "linkedProperties": 67499,
-    "roofing": 48899,
+    "brokenLinks": 0,
+    "linkedProperties": 130661,
+    "roofing": 120994,
     "bbbMatchedProperties": 0
   },
   "enrichmentJoins": {
@@ -102,17 +107,38 @@
   },
   "permitSources": [
     {
-      "sourceSystem": "broward_cooper_city_accela_permits",
-      "rowCount": 1971,
-      "linkedCount": 1971,
+      "sourceSystem": "broward_coconut_creek_permit_status",
+      "rowCount": 13956,
+      "linkedCount": 13956,
       "unlinkedCount": 0,
-      "roofingCount": 0
+      "roofingCount": 1000
+    },
+    {
+      "sourceSystem": "broward_cooper_city_accela_permits",
+      "rowCount": 77978,
+      "linkedCount": 1971,
+      "unlinkedCount": 76007,
+      "roofingCount": 7620
     },
     {
       "sourceSystem": "broward_county_bcs_posse_permits",
-      "rowCount": 73,
-      "linkedCount": 73,
+      "rowCount": 11963,
+      "linkedCount": 11963,
       "unlinkedCount": 0,
+      "roofingCount": 2346
+    },
+    {
+      "sourceSystem": "broward_dania_beach_tyler_esuite_permits",
+      "rowCount": 186,
+      "linkedCount": 174,
+      "unlinkedCount": 12,
+      "roofingCount": 0
+    },
+    {
+      "sourceSystem": "broward_davie_tyler_esuite_permits",
+      "rowCount": 54,
+      "linkedCount": 32,
+      "unlinkedCount": 22,
       "roofingCount": 0
     },
     {
@@ -138,10 +164,24 @@
     },
     {
       "sourceSystem": "broward_lauderdale_by_the_sea_citizenserve_permits",
-      "rowCount": 1602,
-      "linkedCount": 1602,
+      "rowCount": 4242,
+      "linkedCount": 4242,
       "unlinkedCount": 0,
-      "roofingCount": 180
+      "roofingCount": 434
+    },
+    {
+      "sourceSystem": "broward_lighthouse_point_smartgov_permits",
+      "rowCount": 4004,
+      "linkedCount": 0,
+      "unlinkedCount": 4004,
+      "roofingCount": 0
+    },
+    {
+      "sourceSystem": "broward_margate_click2gov_permits",
+      "rowCount": 980,
+      "linkedCount": 897,
+      "unlinkedCount": 83,
+      "roofingCount": 258
     },
     {
       "sourceSystem": "broward_miramar_tyler_permits",
@@ -166,38 +206,59 @@
     },
     {
       "sourceSystem": "broward_pembroke_pines_tyler_permits",
-      "rowCount": 724,
-      "linkedCount": 724,
-      "unlinkedCount": 0,
-      "roofingCount": 150
+      "rowCount": 251329,
+      "linkedCount": 192498,
+      "unlinkedCount": 58831,
+      "roofingCount": 34167
     },
     {
       "sourceSystem": "broward_plantation_accela_permits",
-      "rowCount": 1024,
+      "rowCount": 35845,
       "linkedCount": 1024,
-      "unlinkedCount": 0,
-      "roofingCount": 0
+      "unlinkedCount": 34821,
+      "roofingCount": 11
+    },
+    {
+      "sourceSystem": "broward_pompano_beach_click2gov_permits",
+      "rowCount": 80,
+      "linkedCount": 0,
+      "unlinkedCount": 80,
+      "roofingCount": 2
     },
     {
       "sourceSystem": "broward_southwest_ranches_citizenserve_permits",
-      "rowCount": 1233,
-      "linkedCount": 1233,
+      "rowCount": 3214,
+      "linkedCount": 3214,
       "unlinkedCount": 0,
-      "roofingCount": 236
+      "roofingCount": 604
+    },
+    {
+      "sourceSystem": "broward_sunrise_tyler_permits",
+      "rowCount": 336944,
+      "linkedCount": 280487,
+      "unlinkedCount": 56457,
+      "roofingCount": 24510
+    },
+    {
+      "sourceSystem": "broward_tamarac_click2gov_permits",
+      "rowCount": 7071,
+      "linkedCount": 7049,
+      "unlinkedCount": 22,
+      "roofingCount": 1357
     },
     {
       "sourceSystem": "broward_weston_accela_permits",
-      "rowCount": 742,
+      "rowCount": 3066,
       "linkedCount": 742,
-      "unlinkedCount": 0,
-      "roofingCount": 0
+      "unlinkedCount": 2324,
+      "roofingCount": 337
     },
     {
       "sourceSystem": "broward_wilton_manors_citizenserve_permits",
-      "rowCount": 25,
-      "linkedCount": 25,
+      "rowCount": 67,
+      "linkedCount": 67,
       "unlinkedCount": 0,
-      "roofingCount": 6
+      "roofingCount": 21
     }
   ],
   "routeCoverage": {
@@ -277,5 +338,305 @@
         ]
       }
     ]
-  }
+  },
+  "acceptedTerminalExceptions": [
+    {
+      "jurisdiction": "Oakland Park",
+      "sourceSystem": "broward_oakland_park_tyler_permits",
+      "kind": "source_missing_record",
+      "count": 1,
+      "treatment": "accepted_terminal_exclusion",
+      "affectsPublishedPermitRows": false
+    },
+    {
+      "jurisdiction": "Pembroke Pines",
+      "sourceSystem": "broward_pembroke_pines_tyler_permits",
+      "kind": "source_missing_record",
+      "count": 2,
+      "treatment": "accepted_terminal_exclusion",
+      "affectsPublishedPermitRows": false
+    }
+  ],
+  "incrementalPartialSourceBoundaries": [
+    {
+      "sourceSystem": "broward_coconut_creek_permit_status",
+      "coverageBoundary": "partial_terminal_artifacts",
+      "incrementalLoadCount": 2,
+      "incrementalAcceptedRecordCount": 13956,
+      "currentLoadedSourceRows": 13956,
+      "latestCompletedAt": "2026-09-03T22:05:43.947Z",
+      "highWatermark": {
+        "family": "municipal_property_queries",
+        "nextQueryIndex": 1919,
+        "completedQueries": 1919
+      },
+      "excludedCounts": {
+        "invalid": 0,
+        "undated": 0,
+        "deferred": 0,
+        "duplicate": 0,
+        "in_flight": 0,
+        "incomplete": 0,
+        "non_permit": 0,
+        "source_cap": 0,
+        "unreconciled": 0,
+        "already_committed": 7721
+      }
+    },
+    {
+      "sourceSystem": "broward_cooper_city_accela_permits",
+      "coverageBoundary": "partial_terminal_artifacts",
+      "incrementalLoadCount": 1,
+      "incrementalAcceptedRecordCount": 76709,
+      "currentLoadedSourceRows": 77978,
+      "latestCompletedAt": "2026-09-03T16:05:40.416Z",
+      "highWatermark": {
+        "family": "accela_csv_windows",
+        "pendingWindowCount": 160,
+        "completedWindowCount": 1394,
+        "unresolvedShardPlanCount": 1,
+        "gapPlans": [
+          {
+            "seedExhausted": false,
+            "nextSeedRowIndex": 133,
+            "retainedRecordCount": 506
+          }
+        ]
+      },
+      "excludedCounts": {
+        "invalid": 0,
+        "undated": 1,
+        "deferred": 0,
+        "duplicate": 20,
+        "in_flight": 0,
+        "incomplete": 0,
+        "non_permit": 0,
+        "source_cap": 0,
+        "unreconciled": 0,
+        "already_committed": 0
+      }
+    },
+    {
+      "sourceSystem": "broward_dania_beach_tyler_esuite_permits",
+      "coverageBoundary": "partial_terminal_artifacts",
+      "incrementalLoadCount": 1,
+      "incrementalAcceptedRecordCount": 186,
+      "currentLoadedSourceRows": 186,
+      "latestCompletedAt": "2026-09-03T15:58:38.218Z",
+      "highWatermark": {
+        "family": "municipal_record_type_pages",
+        "cappedPartitionCount": 3,
+        "currentPartitionPageCount": 0,
+        "checkpointNextPendingCount": 235,
+        "safeCompletedPartitionCount": 3
+      },
+      "excludedCounts": {
+        "invalid": 0,
+        "undated": 0,
+        "deferred": 0,
+        "duplicate": 0,
+        "in_flight": 0,
+        "incomplete": 0,
+        "non_permit": 0,
+        "source_cap": 320,
+        "unreconciled": 0,
+        "already_committed": 0
+      }
+    },
+    {
+      "sourceSystem": "broward_davie_tyler_esuite_permits",
+      "coverageBoundary": "partial_terminal_artifacts",
+      "incrementalLoadCount": 1,
+      "incrementalAcceptedRecordCount": 54,
+      "currentLoadedSourceRows": 54,
+      "latestCompletedAt": "2026-09-03T15:58:54.433Z",
+      "highWatermark": {
+        "family": "municipal_record_type_pages",
+        "cappedPartitionCount": 5,
+        "currentPartitionPageCount": 0,
+        "checkpointNextPendingCount": 266,
+        "safeCompletedPartitionCount": 2
+      },
+      "excludedCounts": {
+        "invalid": 0,
+        "undated": 0,
+        "deferred": 0,
+        "duplicate": 0,
+        "in_flight": 0,
+        "incomplete": 0,
+        "non_permit": 0,
+        "source_cap": 570,
+        "unreconciled": 0,
+        "already_committed": 0
+      }
+    },
+    {
+      "sourceSystem": "broward_lighthouse_point_smartgov_permits",
+      "coverageBoundary": "partial_terminal_artifacts",
+      "incrementalLoadCount": 2,
+      "incrementalAcceptedRecordCount": 4004,
+      "currentLoadedSourceRows": 4004,
+      "latestCompletedAt": "2026-09-03T22:07:46.593Z",
+      "highWatermark": {
+        "family": "municipal_record_type_terminal_partitions",
+        "cappedPartitionCount": 0,
+        "checkpointNextPendingCount": 426,
+        "safeCompletedPartitionCount": 71,
+        "excludedCurrentPartitionPageCount": 61
+      },
+      "excludedCounts": {
+        "invalid": 0,
+        "undated": 0,
+        "deferred": 0,
+        "duplicate": 0,
+        "in_flight": 610,
+        "incomplete": 0,
+        "non_permit": 0,
+        "source_cap": 0,
+        "unreconciled": 0,
+        "already_committed": 1875
+      }
+    },
+    {
+      "sourceSystem": "broward_margate_click2gov_permits",
+      "coverageBoundary": "partial_terminal_artifacts",
+      "incrementalLoadCount": 1,
+      "incrementalAcceptedRecordCount": 980,
+      "currentLoadedSourceRows": 980,
+      "latestCompletedAt": "2026-09-03T16:00:29.961Z",
+      "highWatermark": {
+        "family": "municipal_property_queries",
+        "nextQueryIndex": 168,
+        "completedQueries": 168
+      },
+      "excludedCounts": {
+        "invalid": 0,
+        "undated": 0,
+        "deferred": 0,
+        "duplicate": 0,
+        "in_flight": 0,
+        "incomplete": 0,
+        "non_permit": 0,
+        "source_cap": 0,
+        "unreconciled": 0,
+        "already_committed": 0
+      }
+    },
+    {
+      "sourceSystem": "broward_plantation_accela_permits",
+      "coverageBoundary": "partial_terminal_artifacts",
+      "incrementalLoadCount": 1,
+      "incrementalAcceptedRecordCount": 34944,
+      "currentLoadedSourceRows": 35845,
+      "latestCompletedAt": "2026-09-03T16:05:06.129Z",
+      "highWatermark": {
+        "family": "accela_csv_windows",
+        "pendingWindowCount": 251,
+        "completedWindowCount": 30,
+        "unresolvedShardPlanCount": 1,
+        "gapPlans": [
+          {
+            "seedExhausted": false,
+            "nextSeedRowIndex": 12469,
+            "retainedRecordCount": 1
+          }
+        ]
+      },
+      "excludedCounts": {
+        "invalid": 0,
+        "undated": 9,
+        "deferred": 0,
+        "duplicate": 0,
+        "in_flight": 0,
+        "incomplete": 0,
+        "non_permit": 9090,
+        "source_cap": 0,
+        "unreconciled": 0,
+        "already_committed": 0
+      }
+    },
+    {
+      "sourceSystem": "broward_pompano_beach_click2gov_permits",
+      "coverageBoundary": "partial_terminal_artifacts",
+      "incrementalLoadCount": 1,
+      "incrementalAcceptedRecordCount": 80,
+      "currentLoadedSourceRows": 80,
+      "latestCompletedAt": "2026-09-03T16:00:11.907Z",
+      "highWatermark": {
+        "family": "municipal_property_queries",
+        "nextQueryIndex": 24,
+        "completedQueries": 23
+      },
+      "excludedCounts": {
+        "invalid": 0,
+        "undated": 0,
+        "deferred": 100,
+        "duplicate": 8,
+        "in_flight": 0,
+        "incomplete": 0,
+        "non_permit": 0,
+        "source_cap": 0,
+        "unreconciled": 0,
+        "already_committed": 0
+      }
+    },
+    {
+      "sourceSystem": "broward_tamarac_click2gov_permits",
+      "coverageBoundary": "partial_terminal_artifacts",
+      "incrementalLoadCount": 2,
+      "incrementalAcceptedRecordCount": 7071,
+      "currentLoadedSourceRows": 7071,
+      "latestCompletedAt": "2026-09-03T22:06:47.483Z",
+      "highWatermark": {
+        "family": "municipal_property_queries",
+        "nextQueryIndex": 1340,
+        "completedQueries": 1339
+      },
+      "excludedCounts": {
+        "invalid": 0,
+        "undated": 0,
+        "deferred": 100,
+        "duplicate": 7,
+        "in_flight": 0,
+        "incomplete": 0,
+        "non_permit": 0,
+        "source_cap": 0,
+        "unreconciled": 0,
+        "already_committed": 1979
+      }
+    },
+    {
+      "sourceSystem": "broward_weston_accela_permits",
+      "coverageBoundary": "partial_terminal_artifacts",
+      "incrementalLoadCount": 1,
+      "incrementalAcceptedRecordCount": 2346,
+      "currentLoadedSourceRows": 3066,
+      "latestCompletedAt": "2026-09-03T16:04:43.259Z",
+      "highWatermark": {
+        "family": "accela_csv_windows",
+        "pendingWindowCount": 253,
+        "completedWindowCount": 145,
+        "unresolvedShardPlanCount": 1,
+        "gapPlans": [
+          {
+            "seedExhausted": false,
+            "nextSeedRowIndex": 38440,
+            "retainedRecordCount": 0
+          }
+        ]
+      },
+      "excludedCounts": {
+        "invalid": 0,
+        "undated": 159,
+        "deferred": 0,
+        "duplicate": 60,
+        "in_flight": 0,
+        "incomplete": 0,
+        "non_permit": 0,
+        "source_cap": 0,
+        "unreconciled": 0,
+        "already_committed": 0
+      }
+    }
+  ]
 }

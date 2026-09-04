@@ -12,7 +12,7 @@ describe("Broward coverage mirror", () => {
       "utf8",
     );
     expect(createHash("sha256").update(rawSnapshot).digest("hex")).toBe(
-      "78c41900e2e781c47296b010686539c0b31112f6b72359b702c0fc943a85cae2",
+      "8a30bf9cda497b5a825c62074e9d9860ac107b1f5a1520e5e88f29263cff1ad6",
     );
 
     const snapshot = OracleDatasetCoverageSnapshotSchema.parse(
@@ -45,7 +45,7 @@ describe("Broward coverage mirror", () => {
       },
       {
         source: "permits",
-        ingested_count: 496064,
+        ingested_count: 1239649,
         expected_count: null,
         cid: null,
         ipns_label: null,
@@ -71,11 +71,11 @@ describe("Broward coverage mirror", () => {
       county_complete: false,
       reconciliation: { allBalanced: true },
       permitJoins: {
-        linked: 360392,
-        unlinked: 135672,
+        linked: 871314,
+        unlinked: 368335,
         foreignLinked: 0,
-        linkedProperties: 67499,
-        roofing: 48899,
+        linkedProperties: 130661,
+        roofing: 120994,
       },
       routeCoverage: {
         totalCurrentRoutes: 32,
