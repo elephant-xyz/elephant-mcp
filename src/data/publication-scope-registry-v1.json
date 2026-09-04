@@ -1,8 +1,8 @@
 {
   "schemaVersion": "1.0",
-  "registryVersion": "2026-09-03.2",
+  "registryVersion": "2026-09-04.1",
   "owner": "elephant-mcp/donphan",
-  "reviewedAt": "2026-09-03T14:10:00.000Z",
+  "reviewedAt": "2026-09-04T19:53:45.000Z",
   "entries": [
     {
       "countyKey": "broward",
@@ -40,6 +40,25 @@
         "artifactCatalog": "https://raw.githubusercontent.com/elephant-xyz/oracle-node/main/catalog/published-counties.json",
         "classificationEvidence": "https://github.com/elephant-xyz/oracle-node/pull/195",
         "reviewedAt": "2026-09-01T17:06:37.000Z"
+      }
+    },
+    {
+      "countyKey": "duval",
+      "countyName": "Duval",
+      "stateCode": "FL",
+      "countyFips": "12031",
+      "queryTableIdentity": "ipns:k51qzi5uqu5dle7swd06u9ebrgw375b5vhhhtiiz7un7udfsar0rci53x2w5y4",
+      "datasetCoverageIdentity": "ipns:k51qzi5uqu5dgqc52fnea1o42e27dr4os0mrdf5ixonuv8kdztdnxclflazf4w",
+      "publicationScope": {
+        "schemaVersion": "1.0",
+        "level": "full",
+        "denominatorBasis": "county_total"
+      },
+      "provenance": {
+        "owner": "elephant-mcp/donphan",
+        "artifactCatalog": "https://raw.githubusercontent.com/soofi-xyz/soofi-xyz-team-kit/main/skills/use-oracle/runtime/catalog/published-counties.json",
+        "classificationEvidence": "https://github.com/soofi-xyz/soofi-xyz-team-kit/pull/148",
+        "reviewedAt": "2026-09-04T19:53:45.000Z"
       }
     },
     {
