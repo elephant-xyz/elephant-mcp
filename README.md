@@ -45,6 +45,8 @@ This helps the AI understand which data context to use and ensures it leverages 
 - `sumPropertyValueInArea` – Sums the current AVM value of properties whose centroid falls inside a bounding box or polygon.
 - `queryProperties` – Runs a read-only SQL `SELECT`/`WITH` over a county's query-table (view `properties`) via embedded DuckDB, for arbitrary counts, filters, and aggregates over owner, address, zip, value, acreage, material, and more.
 - `getPropertyQuerySchema` – Returns the query-table's columns and types for a county so callers know what they can query.
+- `getDatasetQueryCapabilities` – Returns the per-county allowlisted aggregate fields, operators, measures, hard budgets, null semantics, and query-table provenance for bounded dataset access.
+- `executeDatasetQueryPlan` – Executes a typed `count`, `share`, or `average` plan over properties or permits. Callers cannot provide SQL, URLs, joins, expressions, or raw-row projections; values are parameter-bound and row/group/time budgets fail closed.
 - `queryPlaces` – Runs a structured, read-only query over a county's catalog-authorized Overture places parquet. Supports category/hierarchy/name/location/status/hosted-service/confidence filters, count mode, deterministic pages, and grouped `taxonomy_primary` aggregates; callers cannot submit SQL or URLs.
 - `analyzePlaceColocation` – Returns diagnostic bounded occupied-cell evidence for one exact Overture category pair, including conditioned spatial evidence, raw embedding distance, and immutable places-table provenance when the catalog IPNS path resolves. It explicitly returns no calibrated semantic percentile and remains non-publishable; discovery is the publishable Class H source unless separate auditable percentile evidence exists.
 - `discoverPlaceColocationCandidates` – Accepts `{ county }` only, embeds every eligible category, and calibrates raw semantic distance against all eligible unordered category pairs before applying the `distance >= 0.35 AND inclusive percentile >= 0.80` guard. It returns bounded top-32/top-5 evidence plus corpus, full-distribution, spatial-ledger, and immutable table-identity digests. Discovery fails closed for publication if immutable table provenance is unavailable or inconsistent. The percentile is relative semantic distance—not statistical improbability or a publish decision.
@@ -143,6 +145,13 @@ runs the server locally via `npx`, see below):
    For OpenAI or AI Gateway, replace the corresponding placeholder with your actual key. Vercel production may instead use its automatically supplied OIDC identity. For AWS Bedrock, remove the OpenAI/Gateway variables and ensure your environment has valid AWS credentials (IAM role, environment variables, or AWS credentials file).
 
 `PROPERTY_QUERY_TABLE_MAP` maps each county to its published query-table Parquet on IPFS. It powers `queryProperties` (arbitrary SQL) and is the primary source for `getOracleProperty`, `listOracleProperties`, `getOracleDatasetInfo`, and the geo tools — so a county listed there needs no `ORACLE_*` vars. `getOracleDatasetInfo` has built-in public coverage snapshots for Lee, Miami-Dade, Orange, Palm Beach, and Broward. Broward's snapshot is explicitly partial and combines appraisal, permit, corporate-registration, and BBB counts. `DATASET_COVERAGE_MAP` can override those URLs or add more counties by mapping each county to its small hourly `dataset-coverage.json` snapshot on Filebase/IPNS. Donphan uses this coverage to qualify answers, while Miranda's website can read the same public JSON URL directly. Do not configure this to an AWS S3 URL for public users. The `ORACLE_OPEN_DATA_*` / `ORACLE_GEO_INDEX_*` vars are optional fallback for counties not yet in the map.
+
+Automated evidence consumers should pair each reviewed IPNS route with its
+reviewed immutable query-table CID in
+`PROPERTY_QUERY_TABLE_CID_FALLBACK_MAP_ADDITIONS` (and
+`PERMIT_QUERY_TABLE_CID_FALLBACK_MAP_ADDITIONS` for permits). The typed dataset
+query capability and aggregate result then report immutable CID provenance;
+callers that require immutable evidence can reject mutable IPNS-only reads.
 
 ### Rock Island additive configuration
 

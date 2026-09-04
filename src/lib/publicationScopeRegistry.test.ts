@@ -60,13 +60,14 @@ function syntheticRegistry(level: "full" | "partial" | "pilot" = "full") {
 }
 
 describe("Donphan publication-scope registry", () => {
-  it("contains 13 county identities with Broward explicitly partial", () => {
-    expect(registryJson.entries).toHaveLength(13);
+  it("contains 14 county identities with Broward explicitly partial", () => {
+    expect(registryJson.entries).toHaveLength(14);
     expect(
       registryJson.entries
         .filter((entry) => entry.publicationScope.level === "full")
         .map((entry) => entry.countyKey),
     ).toEqual([
+      "duval",
       "hillsborough",
       "lee",
       "miami-dade",
@@ -76,8 +77,8 @@ describe("Donphan publication-scope registry", () => {
       "pasco",
       "polk",
       "rock-island",
-      "seminole"
-]);
+      "seminole",
+    ]);
     expect(
       registryJson.entries
         .filter((entry) => entry.publicationScope.level === "pilot")
@@ -99,10 +100,41 @@ describe("Donphan publication-scope registry", () => {
     });
     expect(result.resolution).toMatchObject({
       reason: "registry_match",
-      registryVersion: "2026-09-03.2",
+      registryVersion: "2026-09-04.1",
       registryRevision: getPublicationScopeRegistryRevision(),
       entryIdentity: expect.stringMatching(/^[a-f0-9]{64}$/),
       provenance: { owner: "elephant-mcp/donphan" },
+    });
+  });
+
+  it("resolves Duval as full for its reviewed full-county artifacts", () => {
+    const result = resolvePublicationScope(
+      county({
+        countyKey: "duval",
+        countyName: "Duval",
+        countyFips: "12031",
+        queryTableUrl:
+          "https://ipfs.filebase.io/ipns/k51qzi5uqu5dle7swd06u9ebrgw375b5vhhhtiiz7un7udfsar0rci53x2w5y4",
+        datasetCoverageUrl:
+          "https://ipfs.filebase.io/ipns/k51qzi5uqu5dgqc52fnea1o42e27dr4os0mrdf5ixonuv8kdztdnxclflazf4w",
+      }),
+    );
+
+    expect(result.publicationScope).toEqual({
+      schemaVersion: "1.0",
+      level: "full",
+      denominatorBasis: "county_total",
+    });
+    expect(result.resolution).toMatchObject({
+      reason: "registry_match",
+      registryVersion: "2026-09-04.1",
+      provenance: {
+        owner: "elephant-mcp/donphan",
+        artifactCatalog:
+          "https://raw.githubusercontent.com/soofi-xyz/soofi-xyz-team-kit/main/skills/use-oracle/runtime/catalog/published-counties.json",
+        classificationEvidence:
+          "https://github.com/soofi-xyz/soofi-xyz-team-kit/pull/148",
+      },
     });
   });
 
