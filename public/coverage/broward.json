@@ -4,8 +4,8 @@
   "countyName": "Broward",
   "stateCode": "FL",
   "countyFips": "12011",
-  "exportedAt": "2026-09-03T22:23:47.399Z",
-  "snapshotTimestamp": "2026-09-03T22:23:47.399Z",
+  "exportedAt": "2026-09-07T22:07:31.220Z",
+  "snapshotTimestamp": "2026-09-07T22:07:31.220Z",
   "coverage_status": "supported_partial",
   "county_complete": false,
   "publicationScope": {
@@ -47,10 +47,10 @@
     {
       "county": "broward",
       "source": "permits",
-      "ingested_count": 1239649,
+      "ingested_count": 1276328,
       "expected_count": null,
       "first_loaded_at": "2026-08-31T06:21:49.453Z",
-      "last_loaded_at": "2026-09-03T22:23:29.059Z",
+      "last_loaded_at": "2026-09-05T18:51:18.101Z",
       "cid": null,
       "ipns_label": null
     },
@@ -90,12 +90,12 @@
     "allBalanced": true
   },
   "permitJoins": {
-    "linked": 871314,
-    "unlinked": 368335,
+    "linked": 907987,
+    "unlinked": 368341,
     "foreignLinked": 0,
     "brokenLinks": 0,
-    "linkedProperties": 130661,
-    "roofing": 120994,
+    "linkedProperties": 134675,
+    "roofing": 127690,
     "bbbMatchedProperties": 0
   },
   "enrichmentJoins": {
@@ -108,10 +108,10 @@
   "permitSources": [
     {
       "sourceSystem": "broward_coconut_creek_permit_status",
-      "rowCount": 13956,
-      "linkedCount": 13956,
+      "rowCount": 16547,
+      "linkedCount": 16547,
       "unlinkedCount": 0,
-      "roofingCount": 1000
+      "roofingCount": 1028
     },
     {
       "sourceSystem": "broward_cooper_city_accela_permits",
@@ -122,10 +122,10 @@
     },
     {
       "sourceSystem": "broward_county_bcs_posse_permits",
-      "rowCount": 11963,
-      "linkedCount": 11963,
+      "rowCount": 36993,
+      "linkedCount": 36993,
       "unlinkedCount": 0,
-      "roofingCount": 2346
+      "roofingCount": 7191
     },
     {
       "sourceSystem": "broward_dania_beach_tyler_esuite_permits",
@@ -164,10 +164,10 @@
     },
     {
       "sourceSystem": "broward_lauderdale_by_the_sea_citizenserve_permits",
-      "rowCount": 4242,
-      "linkedCount": 4242,
+      "rowCount": 6338,
+      "linkedCount": 6338,
       "unlinkedCount": 0,
-      "roofingCount": 434
+      "roofingCount": 645
     },
     {
       "sourceSystem": "broward_lighthouse_point_smartgov_permits",
@@ -227,10 +227,10 @@
     },
     {
       "sourceSystem": "broward_southwest_ranches_citizenserve_permits",
-      "rowCount": 3214,
-      "linkedCount": 3214,
+      "rowCount": 6520,
+      "linkedCount": 6520,
       "unlinkedCount": 0,
-      "roofingCount": 604
+      "roofingCount": 1254
     },
     {
       "sourceSystem": "broward_sunrise_tyler_permits",
@@ -241,10 +241,10 @@
     },
     {
       "sourceSystem": "broward_tamarac_click2gov_permits",
-      "rowCount": 7071,
-      "linkedCount": 7049,
-      "unlinkedCount": 22,
-      "roofingCount": 1357
+      "rowCount": 10668,
+      "linkedCount": 10640,
+      "unlinkedCount": 28,
+      "roofingCount": 2307
     },
     {
       "sourceSystem": "broward_weston_accela_permits",
@@ -255,10 +255,10 @@
     },
     {
       "sourceSystem": "broward_wilton_manors_citizenserve_permits",
-      "rowCount": 67,
-      "linkedCount": 67,
+      "rowCount": 126,
+      "linkedCount": 126,
       "unlinkedCount": 0,
-      "roofingCount": 21
+      "roofingCount": 33
     }
   ],
   "routeCoverage": {
@@ -361,14 +361,14 @@
     {
       "sourceSystem": "broward_coconut_creek_permit_status",
       "coverageBoundary": "partial_terminal_artifacts",
-      "incrementalLoadCount": 2,
-      "incrementalAcceptedRecordCount": 13956,
-      "currentLoadedSourceRows": 13956,
-      "latestCompletedAt": "2026-09-03T22:05:43.947Z",
+      "incrementalLoadCount": 3,
+      "incrementalAcceptedRecordCount": 16547,
+      "currentLoadedSourceRows": 16547,
+      "latestCompletedAt": "2026-09-04T16:20:24.729Z",
       "highWatermark": {
         "family": "municipal_property_queries",
-        "nextQueryIndex": 1919,
-        "completedQueries": 1919
+        "nextQueryIndex": 2067,
+        "completedQueries": 2067
       },
       "excludedCounts": {
         "invalid": 0,
@@ -380,7 +380,7 @@
         "non_permit": 0,
         "source_cap": 0,
         "unreconciled": 0,
-        "already_committed": 7721
+        "already_committed": 0
       }
     },
     {
@@ -583,26 +583,26 @@
     {
       "sourceSystem": "broward_tamarac_click2gov_permits",
       "coverageBoundary": "partial_terminal_artifacts",
-      "incrementalLoadCount": 2,
-      "incrementalAcceptedRecordCount": 7071,
-      "currentLoadedSourceRows": 7071,
-      "latestCompletedAt": "2026-09-03T22:06:47.483Z",
+      "incrementalLoadCount": 3,
+      "incrementalAcceptedRecordCount": 10668,
+      "currentLoadedSourceRows": 10668,
+      "latestCompletedAt": "2026-09-04T16:21:36.523Z",
       "highWatermark": {
         "family": "municipal_property_queries",
-        "nextQueryIndex": 1340,
-        "completedQueries": 1339
+        "nextQueryIndex": 1990,
+        "completedQueries": 1989
       },
       "excludedCounts": {
         "invalid": 0,
         "undated": 0,
         "deferred": 100,
-        "duplicate": 7,
+        "duplicate": 0,
         "in_flight": 0,
         "incomplete": 0,
         "non_permit": 0,
         "source_cap": 0,
         "unreconciled": 0,
-        "already_committed": 1979
+        "already_committed": 0
       }
     },
     {
