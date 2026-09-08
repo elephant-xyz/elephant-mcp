@@ -4,7 +4,7 @@
   "countyName": "Broward",
   "stateCode": "FL",
   "countyFips": "12011",
-  "exportedAt": "2026-09-08T16:28:41.329Z",
+  "exportedAt": "2026-09-08T18:13:32.000Z",
   "snapshotTimestamp": "2026-09-07T22:07:31.220Z",
   "coverage_status": "supported_partial",
   "county_complete": false,
@@ -101,7 +101,7 @@
   "enrichmentJoins": {
     "sunbizAddressMatches": 21512,
     "sunbizRegistrations": 12432,
-    "sunbizProperties": 9023,
+    "sunbizProperties": 8256,
     "bbbProfiles": 2823,
     "bbbMatchedProperties": 970
   },

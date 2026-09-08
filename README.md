@@ -240,7 +240,7 @@ DATASET_COVERAGE_MAP_ADDITIONS
 {"broward":"https://ipfs.filebase.io/ipns/k51qzi5uqu5dhx6yqczp6f9na3xa9g1iiizxtquer62x9wavh8gpbng524vrbp"}
 
 DATASET_COVERAGE_CID_FALLBACK_MAP_ADDITIONS
-{"broward":"QmSAoNw1BYscToHjf1Aedsg8zir3LXRvDn8crrwe3R1sFx"}
+{"broward":"QmUJYobtqq1dSvGs6etoTNQMT8zDjSpGA8qEVce4jfnTfQ"}
 
 ORACLE_OPEN_DATA_IPNS_MAP
 {"broward":"k51qzi5uqu5dh5q2ovjs5iazajd9cgvmw21dh7ppvlunlqmj0p38c71nesccj6"}

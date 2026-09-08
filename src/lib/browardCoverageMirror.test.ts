@@ -12,7 +12,7 @@ describe("Broward coverage mirror", () => {
       "utf8",
     );
     expect(createHash("sha256").update(rawSnapshot).digest("hex")).toBe(
-      "4c1e1fdb99e025d1d976ccadaefd0cc602febdcb1334c1ac002671f00f8ca39f",
+      "7c8a2735fade6924aba0c188d0b59d035d78ccd9ca1c32f61dd40eb0ee3d1f5b",
     );
 
     const snapshot = OracleDatasetCoverageSnapshotSchema.parse(
@@ -80,7 +80,7 @@ describe("Broward coverage mirror", () => {
       },
       enrichmentJoins: {
         sunbizRegistrations: 12432,
-        sunbizProperties: 9023,
+        sunbizProperties: 8256,
         bbbProfiles: 2823,
         bbbMatchedProperties: 970,
       },

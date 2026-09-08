@@ -1,8 +1,27 @@
-import { describe, it, expect } from "vitest";
-import { verifyFetchedContent } from "../ipfs.ts";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { fetchFromIpfs, verifyFetchedContent } from "../ipfs.ts";
 
 // ipfs-only-hash is a CJS module with real async computation — let it run
 // naturally in tests (no mock needed: we just feed it known content).
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe("fetchFromIpfs", () => {
+  it("reads Filebase-hosted immutable JSON from the Filebase gateway first", async () => {
+    const content = '{"test":true}';
+    const cid = "QmV6vzWB6kU1mQzmsQijkA688iNwyLhFaKHtjKXeKoFVyg";
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(content, { status: 200 }));
+
+    await expect(fetchFromIpfs(cid)).resolves.toBe(content);
+    expect(fetchMock).toHaveBeenCalledExactlyOnceWith(
+      `https://ipfs.filebase.io/ipfs/${cid}`,
+    );
+  });
+});
 
 describe("verifyFetchedContent", () => {
   describe("dag-pb / UnixFS CIDs (Qm..., codec 0x70)", () => {
