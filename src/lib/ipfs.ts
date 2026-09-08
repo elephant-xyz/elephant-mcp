@@ -69,6 +69,7 @@ export async function getJsonByCid<T>(cidString: string): Promise<T> {
 export async function fetchFromIpfs(cid: string): Promise<string> {
   logger.info(`Fetching ${cid}`);
   const ipfsGateways: string[] = [
+    "https://ipfs.filebase.io",
     "https://ipfs.io",
     "https://gateway.ipfs.io",
     "https://dweb.link",
