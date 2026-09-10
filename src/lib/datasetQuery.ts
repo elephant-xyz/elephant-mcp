@@ -15,6 +15,12 @@ import {
   type PropertyColumn,
 } from "./duckdbQuery.ts";
 import { normalizeCountyKey } from "./countyIpnsRegistry.ts";
+import {
+  DATASET_QUERY_PROFILE_VERSION,
+  clearDatasetQueryProfileCache,
+  findDatasetQueryProfile,
+  type DatasetQueryProfile,
+} from "./datasetQueryProfile.ts";
 
 export const DATASET_QUERY_CONTRACT_VERSION = "dataset-query-plan-v1" as const;
 export const DATASET_AGGREGATE_RESULT_VERSION =
@@ -688,6 +694,10 @@ function tableProvenance(dataset: DatasetQueryDataset, county: string) {
     countyKey: resolution.countyKey,
     runtimeLocation,
   });
+  const sourceCid =
+    /\/ipfs\/((?:Qm[1-9A-HJ-NP-Za-km-z]{44}|bafy[a-z0-9]+))(?:\/|$)/u.exec(
+      runtimeLocation,
+    )?.[1] ?? null;
   return {
     dataset,
     view: dataset === "properties" ? PROPERTIES_VIEW : PERMITS_VIEW,
@@ -695,6 +705,7 @@ function tableProvenance(dataset: DatasetQueryDataset, county: string) {
     locatorKind,
     immutable: locatorKind === "immutable_cid",
     tableIdentity: identity,
+    sourceCid,
   };
 }
 
@@ -705,7 +716,47 @@ async function columnsFor(
 ): Promise<PropertyColumn[]> {
   return dataset === "properties"
     ? getPropertyColumns(county, signal)
-    : getPermitColumns(county);
+    : getPermitColumns(county, signal);
+}
+
+async function profileFor(
+  dataset: DatasetQueryDataset,
+  county: string,
+): Promise<DatasetQueryProfile | null> {
+  const provenance = tableProvenance(dataset, county);
+  if (!provenance.immutable || provenance.sourceCid === null) return null;
+  return findDatasetQueryProfile({
+    dataset,
+    countyKey: provenance.countyKey,
+    sourceCid: provenance.sourceCid,
+  });
+}
+
+function enrichedTableProvenance(
+  dataset: DatasetQueryDataset,
+  county: string,
+  columns: readonly PropertyColumn[],
+  profile: DatasetQueryProfile | null,
+) {
+  const provenance = tableProvenance(dataset, county);
+  const schemaFingerprint =
+    profile?.schemaFingerprint ??
+    sha256(columns.map((column) => ({ name: column.name, type: column.type })));
+  return {
+    ...provenance,
+    schemaFingerprint,
+    metadataProfile:
+      profile === null
+        ? null
+        : {
+            profileVersion: DATASET_QUERY_PROFILE_VERSION,
+            profileIdentity: profile.profileIdentity,
+            profileCid: null,
+            sourceCid: profile.sourceCid,
+            exact: true as const,
+            origin: profile.origin,
+          },
+  };
 }
 
 async function runCompiled(
@@ -757,6 +808,84 @@ export type DatasetQueryRefusal =
   | "row_budget_exceeded"
   | "group_cardinality_exceeded";
 
+const queryResultCache = new Map<
+  string,
+  ReturnType<typeof profileCountResult>
+>();
+const QUERY_RESULT_CACHE_MAX_ENTRIES = 256;
+
+function profileCountResult(
+  compiled: CompiledDatasetQuery,
+  planHash: string,
+  provenance: ReturnType<typeof enrichedTableProvenance>,
+  rowCount: number,
+) {
+  const provenanceHash = sha256(provenance);
+  const rows: DatasetAggregateRow[] = [
+    {
+      group: null,
+      numerator: rowCount,
+      denominator: rowCount,
+      value: rowCount,
+      measuredCount: rowCount,
+      scopeCount: rowCount,
+      median: null,
+    },
+  ];
+  const completeness = {
+    semantics:
+      "exact unfiltered count from immutable Parquet metadata; every source row is measured and null is never treated as false or zero",
+    totalScopeCount: rowCount,
+    returnedGroupScopeCount: rowCount,
+    measuredRows: rowCount,
+    unmeasuredRows: 0,
+    nullRows: 0,
+    invalidRows: 0,
+    measurementPercent: rowCount === 0 ? null : 100,
+  };
+  const canonicalResult = {
+    planHash,
+    rows,
+    totalGroups: 1,
+    truncated: false,
+    completeness,
+    provenanceHash,
+  };
+  return {
+    resultVersion: DATASET_AGGREGATE_RESULT_VERSION,
+    status: "ok" as const,
+    refusal: null,
+    plan: compiled.plan,
+    planHash,
+    rows,
+    totalGroups: 1,
+    truncated: false,
+    completeness,
+    provenance,
+    provenanceHash,
+    resultHash: sha256(canonicalResult),
+    executedAt: new Date().toISOString(),
+  };
+}
+
+function rememberQueryResult(
+  key: string,
+  result: ReturnType<typeof profileCountResult>,
+): void {
+  queryResultCache.delete(key);
+  queryResultCache.set(key, result);
+  while (queryResultCache.size > QUERY_RESULT_CACHE_MAX_ENTRIES) {
+    const oldest = queryResultCache.keys().next().value as string | undefined;
+    if (oldest === undefined) break;
+    queryResultCache.delete(oldest);
+  }
+}
+
+export function clearDatasetQueryCaches(): void {
+  queryResultCache.clear();
+  clearDatasetQueryProfileCache();
+}
+
 export async function executeDatasetQueryPlan(
   input: unknown,
   requestSignal?: AbortSignal,
@@ -767,15 +896,31 @@ export async function executeDatasetQueryPlan(
     requestSignal === undefined
       ? timeoutSignal
       : AbortSignal.any([requestSignal, timeoutSignal]);
-  const columns = await columnsFor(parsed.dataset, parsed.county, signal);
+  signal.throwIfAborted();
+  const profile = await profileFor(parsed.dataset, parsed.county);
+  signal.throwIfAborted();
+  if (
+    tableProvenance(parsed.dataset, parsed.county).immutable &&
+    profile === null
+  ) {
+    throw new Error(
+      `immutable ${parsed.dataset} dataset has no CID-bound metadata profile`,
+    );
+  }
+  const columns =
+    profile?.columns ??
+    (await columnsFor(parsed.dataset, parsed.county, signal));
   const compiled = compileDatasetQueryPlan(parsed, columns);
   const planHash = sha256(compiled.plan);
-  const provenance = tableProvenance(
+  const provenance = enrichedTableProvenance(
     compiled.plan.dataset,
     compiled.plan.county,
+    columns,
+    profile,
   );
   const provenanceHash = sha256(provenance);
-  const rowUpperBound = await preflightRowUpperBound(compiled.plan, signal);
+  const rowUpperBound =
+    profile?.rowCount ?? (await preflightRowUpperBound(compiled.plan, signal));
   if (rowUpperBound > compiled.plan.budgets.maxRowsScanned) {
     const completeness = {
       semantics:
@@ -809,6 +954,24 @@ export async function executeDatasetQueryPlan(
       resultHash: sha256(canonicalResult),
       executedAt: new Date().toISOString(),
     };
+  }
+  if (
+    profile !== null &&
+    compiled.plan.scopeFilters.length === 0 &&
+    compiled.plan.groupBy === null &&
+    compiled.plan.measure.kind === "count"
+  ) {
+    const cacheKey = `${profile.sourceCid}:${profile.schemaFingerprint}:${planHash}`;
+    const cached = queryResultCache.get(cacheKey);
+    if (cached !== undefined) return cached;
+    const result = profileCountResult(
+      compiled,
+      planHash,
+      provenance,
+      profile.rowCount,
+    );
+    rememberQueryResult(cacheKey, result);
+    return result;
   }
   const rawRows = await runCompiled(compiled, signal);
   const first = rawRows[0];
@@ -883,9 +1046,23 @@ async function datasetCapability(
   signal?: AbortSignal,
 ) {
   try {
-    const columns = await columnsFor(dataset, county, signal);
+    signal?.throwIfAborted();
+    const profile = await profileFor(dataset, county);
+    signal?.throwIfAborted();
+    if (tableProvenance(dataset, county).immutable && profile === null) {
+      throw new Error(
+        `${dataset} metadata profile is unavailable; no remote table scan was attempted`,
+      );
+    }
+    const columns =
+      profile?.columns ?? (await columnsFor(dataset, county, signal));
     const fields = actualSafeFields(dataset, columns);
-    const provenance = tableProvenance(dataset, county);
+    const provenance = enrichedTableProvenance(
+      dataset,
+      county,
+      columns,
+      profile,
+    );
     return {
       dataset,
       available: true as const,
@@ -903,14 +1080,20 @@ async function datasetCapability(
       provenance,
       reason: null,
     };
-  } catch {
+  } catch (error) {
+    signal?.throwIfAborted();
     return {
       dataset,
       available: false as const,
       fields: [],
       measures: [],
       provenance: null,
-      reason: `${dataset} query table is unavailable for this county`,
+      reason:
+        error instanceof Error &&
+        error.message ===
+          `${dataset} metadata profile is unavailable; no remote table scan was attempted`
+          ? error.message
+          : `${dataset} query table is unavailable for this county`,
     };
   }
 }

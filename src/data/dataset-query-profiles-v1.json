@@ -1,0 +1,62 @@
+{
+  "schemaVersion": "1.0",
+  "profiles": [
+    {
+      "profileVersion": "dataset-query-runtime-profile-v1",
+      "dataset": "properties",
+      "countyKey": "broward",
+      "sourceCid": "QmQhc18TqKTjBymQkfxdsbWNg6SxrDmQ3bfYBJdWWdU7cF",
+      "columns": [
+        {
+          "name": "property_id",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "parcel_identifier",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "source_system",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "county_name",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "county_fips",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "state_code",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "property_type",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "property_usage_type",
+          "type": "VARCHAR"
+        },
+        {
+          "name": "built_year",
+          "type": "BIGINT"
+        },
+        {
+          "name": "livable_floor_area",
+          "type": "DOUBLE"
+        },
+        {
+          "name": "total_area",
+          "type": "DOUBLE"
+        }
+      ],
+      "rowCount": 526068,
+      "schemaFingerprint": "2dc308275e2a7707c2390b43e565cae55960aeb10f4c4e76ba48481bd92d0642",
+      "exact": true,
+      "origin": "immutable_parquet_metadata",
+      "profileIdentity": "ce80434105185f78e88e4beae467c84aab0201b71d4226f45941c8b6cdb97d7e"
+    }
+  ]
+}
