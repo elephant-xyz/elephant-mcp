@@ -154,6 +154,18 @@ const PROPERTY_FIELDS = {
     measurable: false,
     description: "ZIP/postal code; safe only as an aggregate grouping.",
   },
+  elephant_uuid: {
+    kind: "text",
+    groupable: true,
+    measurable: false,
+    description: "address:v1 UUIDv5 of the normalized situs signature.",
+  },
+  elephant_token: {
+    kind: "text",
+    groupable: true,
+    measurable: false,
+    description: "SHA-256 of the address:v1 canonical signature.",
+  },
   lot_size_acre: {
     kind: "number",
     groupable: false,

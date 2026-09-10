@@ -32,6 +32,9 @@ const COLUMN_DESCRIPTIONS: Record<string, string> = {
   address_street: "Street line of the situs address.",
   address_city: "City of the situs address.",
   address_zip: "ZIP/postal code of the situs address.",
+  elephant_uuid:
+    "Deterministic address:v1 UUIDv5 from country, state, ZIP5, street, and unit.",
+  elephant_token: "SHA-256 hex of the same address:v1 canonical signature.",
   latitude: "Property centroid latitude (decimal degrees).",
   longitude: "Property centroid longitude (decimal degrees).",
   lot_size_acre: "Lot size in acres.",
