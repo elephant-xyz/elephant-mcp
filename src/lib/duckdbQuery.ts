@@ -986,6 +986,7 @@ export async function runInternalPermitQuery(
  */
 export async function getPermitColumns(
   county: string,
+  signal?: AbortSignal,
 ): Promise<PropertyColumn[]> {
-  return getDatasetColumns(PERMIT_DATASET, county);
+  return getDatasetColumns(PERMIT_DATASET, county, signal);
 }

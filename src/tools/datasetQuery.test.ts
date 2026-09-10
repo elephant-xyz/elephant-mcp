@@ -1,8 +1,8 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DuckDBInstance } from "@duckdb/node-api";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   clearPermitQueryConnections,
   clearPropertyQueryConnections,
@@ -10,11 +10,13 @@ import {
 } from "../lib/duckdbQuery.ts";
 import {
   DATASET_QUERY_CONTRACT_VERSION,
+  clearDatasetQueryCaches,
   compileDatasetQueryPlan,
   executeDatasetQueryPlan,
   getDatasetQueryCapabilities,
   type DatasetQueryPlan,
 } from "../lib/datasetQuery.ts";
+import { datasetQueryProfileInternals } from "../lib/datasetQueryProfile.ts";
 import { registerAllTools } from "./registry.ts";
 
 const savedEnvironment = {
@@ -146,6 +148,134 @@ describe("dataset-query registration and capabilities", () => {
       callerUrlsAllowed: false,
       conjunctionOnly: true,
     });
+  });
+
+  it("serves capabilities and an exact count from one CID-bound profile without a remote scan", async () => {
+    const sourceCid = "QmQhc18TqKTjBymQkfxdsbWNg6SxrDmQ3bfYBJdWWdU7cF";
+    const columns = await getPropertyColumns("fixture");
+    const plan = basePlan({
+      dataset: "properties",
+      measure: { kind: "count" },
+    });
+    const liveResult = await executeDatasetQueryPlan(plan);
+    const profile = datasetQueryProfileInternals.createProfile(
+      {
+        dataset: "properties",
+        countyKey: "fixture",
+        sourceCid,
+      },
+      { columns, rowCount: 5 },
+    );
+    writeFileSync(
+      join(directory, `properties-fixture-${sourceCid}.json`),
+      JSON.stringify(profile),
+    );
+    const previousMap = process.env.PROPERTY_QUERY_TABLE_MAP;
+    const previousFallback =
+      process.env.PROPERTY_QUERY_TABLE_CID_FALLBACK_MAP_ADDITIONS;
+    const previousProfileCache =
+      process.env.DATASET_QUERY_PROFILE_CACHE_DIRECTORY;
+    process.env.PROPERTY_QUERY_TABLE_MAP = JSON.stringify({
+      fixture:
+        "https://ipfs.filebase.io/ipns/k51qzi5uqu5dibuhwyztmkjgvz94v3mkpgfreryxwb3d4neta5e7tsxebfi09s",
+    });
+    process.env.PROPERTY_QUERY_TABLE_CID_FALLBACK_MAP_ADDITIONS =
+      JSON.stringify({ fixture: sourceCid });
+    process.env.DATASET_QUERY_PROFILE_CACHE_DIRECTORY = directory;
+    clearPropertyQueryConnections();
+    clearDatasetQueryCaches();
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockRejectedValue(new Error("remote access was not expected"));
+
+    try {
+      const capabilities = await getDatasetQueryCapabilities("fixture");
+      const first = await executeDatasetQueryPlan(plan);
+      const second = await executeDatasetQueryPlan(plan);
+
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(
+        capabilities.datasets.find(
+          (dataset) => dataset.dataset === "properties",
+        )?.provenance,
+      ).toMatchObject({
+        sourceCid,
+        schemaFingerprint: profile.schemaFingerprint,
+        metadataProfile: {
+          profileIdentity: profile.profileIdentity,
+          profileCid: null,
+          exact: true,
+        },
+      });
+      expect(first).toMatchObject({
+        status: "ok",
+        rows: [
+          {
+            numerator: 5,
+            denominator: 5,
+            measuredCount: 5,
+            scopeCount: 5,
+          },
+        ],
+        completeness: {
+          nullRows: 0,
+          invalidRows: 0,
+          measurementPercent: 100,
+        },
+      });
+      expect(first.rows).toEqual(liveResult.rows);
+      expect(first.totalGroups).toBe(liveResult.totalGroups);
+      expect(second.resultHash).toBe(first.resultHash);
+      expect(second.executedAt).toBe(first.executedAt);
+
+      const cancelled = new AbortController();
+      cancelled.abort();
+      await expect(
+        executeDatasetQueryPlan(plan, cancelled.signal),
+      ).rejects.toMatchObject({ name: "AbortError" });
+      await expect(
+        getDatasetQueryCapabilities("fixture", cancelled.signal),
+      ).rejects.toMatchObject({ name: "AbortError" });
+
+      process.env.PROPERTY_QUERY_TABLE_CID_FALLBACK_MAP_ADDITIONS =
+        JSON.stringify({
+          fixture: "QmcDAHJBt5LHiHAHdDwqCKM2BZqPwTJBrxW4Z5DJ6qEJd2",
+        });
+      clearPropertyQueryConnections();
+      clearDatasetQueryCaches();
+      const unprofiledCapabilities =
+        await getDatasetQueryCapabilities("fixture");
+      expect(
+        unprofiledCapabilities.datasets.find(
+          (dataset) => dataset.dataset === "properties",
+        ),
+      ).toMatchObject({
+        available: false,
+        reason:
+          "properties metadata profile is unavailable; no remote table scan was attempted",
+      });
+      await expect(executeDatasetQueryPlan(plan)).rejects.toThrow(
+        "immutable properties dataset has no CID-bound metadata profile",
+      );
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      process.env.PROPERTY_QUERY_TABLE_MAP = previousMap;
+      if (previousFallback === undefined) {
+        delete process.env.PROPERTY_QUERY_TABLE_CID_FALLBACK_MAP_ADDITIONS;
+      } else {
+        process.env.PROPERTY_QUERY_TABLE_CID_FALLBACK_MAP_ADDITIONS =
+          previousFallback;
+      }
+      if (previousProfileCache === undefined) {
+        delete process.env.DATASET_QUERY_PROFILE_CACHE_DIRECTORY;
+      } else {
+        process.env.DATASET_QUERY_PROFILE_CACHE_DIRECTORY =
+          previousProfileCache;
+      }
+      clearPropertyQueryConnections();
+      clearDatasetQueryCaches();
+      vi.restoreAllMocks();
+    }
   });
 });
 
