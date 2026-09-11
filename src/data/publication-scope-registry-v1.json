@@ -1,8 +1,8 @@
 {
   "schemaVersion": "1.0",
-  "registryVersion": "2026-09-04.1",
+  "registryVersion": "2026-09-11.1",
   "owner": "elephant-mcp/donphan",
-  "reviewedAt": "2026-09-04T19:53:45.000Z",
+  "reviewedAt": "2026-09-11T20:44:00.000Z",
   "entries": [
     {
       "countyKey": "broward",
@@ -157,6 +157,25 @@
       }
     },
     {
+      "countyKey": "osceola",
+      "countyName": "Osceola",
+      "stateCode": "FL",
+      "countyFips": "12097",
+      "queryTableIdentity": "ipns:k51qzi5uqu5dj8lg4xvw7adam696smuk484r5fvb948ivl12xs8ao7ja1hyz5o",
+      "datasetCoverageIdentity": "ipns:k51qzi5uqu5dltdk9j020t8avceyej6z2wrz0fm6nffw9jc1wgki6j2wboyl9c",
+      "publicationScope": {
+        "schemaVersion": "1.0",
+        "level": "partial",
+        "denominatorBasis": "published_subset"
+      },
+      "provenance": {
+        "owner": "elephant-mcp/donphan",
+        "artifactCatalog": "https://raw.githubusercontent.com/soofi-xyz/soofi-xyz-team-kit/main/skills/use-oracle/runtime/catalog/published-counties.json",
+        "classificationEvidence": "https://github.com/soofi-xyz/soofi-xyz-team-kit/pull/144",
+        "reviewedAt": "2026-09-11T20:44:00.000Z"
+      }
+    },
+    {
       "countyKey": "palm-beach",
       "countyName": "Palm Beach",
       "stateCode": "FL",
@@ -181,7 +200,7 @@
       "stateCode": "FL",
       "countyFips": "12101",
       "queryTableIdentity": "ipns:k51qzi5uqu5dlm72r495ei7507h3yl4tw4olszh2ppas8roxrbg2ccko84s8kv",
-      "datasetCoverageIdentity": "ipns:k51qzi5uqu5dl7i1pgx4n755nbj57j2stfob0gvnymfwto13icqbwre3z41y8k",
+      "datasetCoverageIdentity": "ipns:k51qzi5uqu5digt2el7njthtxpgk40887nhi81hwnlo9zpe19yrbbaml0uo2ad",
       "publicationScope": {
         "schemaVersion": "1.0",
         "level": "full",
@@ -189,9 +208,9 @@
       },
       "provenance": {
         "owner": "elephant-mcp/donphan",
-        "artifactCatalog": "https://raw.githubusercontent.com/elephant-xyz/oracle-node/main/catalog/published-counties.json",
-        "classificationEvidence": "https://github.com/elephant-xyz/oracle-node/pull/195",
-        "reviewedAt": "2026-09-03T14:10:00.000Z"
+        "artifactCatalog": "https://raw.githubusercontent.com/soofi-xyz/soofi-xyz-team-kit/main/skills/use-oracle/runtime/catalog/published-counties.json",
+        "classificationEvidence": "https://github.com/soofi-xyz/soofi-xyz-team-kit/pull/144",
+        "reviewedAt": "2026-09-11T20:44:00.000Z"
       }
     },
     {
