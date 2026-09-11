@@ -60,8 +60,8 @@ function syntheticRegistry(level: "full" | "partial" | "pilot" = "full") {
 }
 
 describe("Donphan publication-scope registry", () => {
-  it("contains 14 county identities with Broward explicitly partial", () => {
-    expect(registryJson.entries).toHaveLength(14);
+  it("contains 15 county identities with Broward and Osceola explicitly partial", () => {
+    expect(registryJson.entries).toHaveLength(15);
     expect(
       registryJson.entries
         .filter((entry) => entry.publicationScope.level === "full")
@@ -88,7 +88,7 @@ describe("Donphan publication-scope registry", () => {
       registryJson.entries
         .filter((entry) => entry.publicationScope.level === "partial")
         .map((entry) => entry.countyKey),
-    ).toEqual(["broward"]);
+    ).toEqual(["broward", "osceola"]);
   });
 
   it("resolves a registry-bound full county across equivalent IPNS URL forms", () => {
@@ -100,7 +100,7 @@ describe("Donphan publication-scope registry", () => {
     });
     expect(result.resolution).toMatchObject({
       reason: "registry_match",
-      registryVersion: "2026-09-04.1",
+      registryVersion: "2026-09-11.1",
       registryRevision: getPublicationScopeRegistryRevision(),
       entryIdentity: expect.stringMatching(/^[a-f0-9]{64}$/),
       provenance: { owner: "elephant-mcp/donphan" },
@@ -127,7 +127,7 @@ describe("Donphan publication-scope registry", () => {
     });
     expect(result.resolution).toMatchObject({
       reason: "registry_match",
-      registryVersion: "2026-09-04.1",
+      registryVersion: "2026-09-11.1",
       provenance: {
         owner: "elephant-mcp/donphan",
         artifactCatalog:
@@ -157,6 +157,27 @@ describe("Donphan publication-scope registry", () => {
       schemaVersion: "1.0",
       level: "partial",
       denominatorBasis: "county_total",
+    });
+    expect(result.resolution.reason).toBe("registry_match");
+  });
+
+  it("resolves Osceola as a reviewed published subset", () => {
+    const result = resolvePublicationScope(
+      county({
+        countyKey: "osceola",
+        countyName: "Osceola",
+        countyFips: "12097",
+        queryTableUrl:
+          "https://ipfs.filebase.io/ipns/k51qzi5uqu5dj8lg4xvw7adam696smuk484r5fvb948ivl12xs8ao7ja1hyz5o",
+        datasetCoverageUrl:
+          "https://ipfs.filebase.io/ipns/k51qzi5uqu5dltdk9j020t8avceyej6z2wrz0fm6nffw9jc1wgki6j2wboyl9c",
+      }),
+    );
+
+    expect(result.publicationScope).toEqual({
+      schemaVersion: "1.0",
+      level: "partial",
+      denominatorBasis: "published_subset",
     });
     expect(result.resolution.reason).toBe("registry_match");
   });
