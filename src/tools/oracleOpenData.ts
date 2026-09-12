@@ -851,8 +851,10 @@ export async function getOracleDatasetInfoHandler(
       {
         registry: options.scopeRegistry,
         catalogUnavailable: catalogContext === null,
+        countyKey: queryTable.countyKey ?? undefined,
         explicitScopes,
-        ...(catalogCounty === undefined
+        ...(catalogCounty === undefined &&
+        (!queryTable.served || !coverageLocation.served)
           ? {}
           : {
               runtimeArtifacts: {
