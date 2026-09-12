@@ -31,6 +31,7 @@ export const PublishedCountySchema = z
     status: z.literal("published"),
     publicationScope: PublicationScopeSchema.optional(),
     queryTableUrl: z.string().url(),
+    queryTableCid: z.string().min(1).nullable().optional(),
     datasetCoverageUrl: z.string().url(),
     permitQueryTableUrl: z.string().url().nullable(),
     placesTableUrl: z.string().url().nullable(),

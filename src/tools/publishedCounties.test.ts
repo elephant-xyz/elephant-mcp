@@ -48,6 +48,7 @@ const catalog: PublishedCountyCatalog = {
         denominatorBasis: "county_total",
       },
       queryTableUrl: "https://example.com/palm-beach.parquet",
+      queryTableCid: "QmPalmBeachQueryTable",
       datasetCoverageUrl: "https://example.com/palm-beach-coverage.json",
       permitQueryTableUrl: null,
       placesTableUrl: null,
@@ -65,6 +66,7 @@ const catalog: PublishedCountyCatalog = {
         denominatorBasis: "county_total",
       },
       queryTableUrl: "https://example.com/lee.parquet",
+      queryTableCid: null,
       datasetCoverageUrl: "https://example.com/lee-coverage.json",
       permitQueryTableUrl: null,
       placesTableUrl:
@@ -129,6 +131,10 @@ describe("published county catalog", () => {
     expect(result.counties.map((county) => county.countyKey)).toEqual([
       "lee",
       "palm-beach",
+    ]);
+    expect(result.counties.map((county) => county.queryTableCid)).toEqual([
+      null,
+      "QmPalmBeachQueryTable",
     ]);
   });
 
