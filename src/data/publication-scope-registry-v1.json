@@ -1,8 +1,8 @@
 {
   "schemaVersion": "1.0",
-  "registryVersion": "2026-09-11.1",
+  "registryVersion": "2026-09-12.1",
   "owner": "elephant-mcp/donphan",
-  "reviewedAt": "2026-09-11T20:44:00.000Z",
+  "reviewedAt": "2026-09-12T02:30:00.000Z",
   "entries": [
     {
       "countyKey": "broward",
@@ -287,6 +287,424 @@
         "artifactCatalog": "https://raw.githubusercontent.com/elephant-xyz/oracle-node/main/catalog/published-counties.json",
         "classificationEvidence": "https://github.com/elephant-xyz/oracle-node/pull/209",
         "reviewedAt": "2026-09-03T21:04:26.085Z"
+      }
+    },
+    {
+      "countyKey": "baker",
+      "countyName": "Baker",
+      "stateCode": "FL",
+      "countyFips": "12003",
+      "queryTableIdentity": "https://ipfs.filebase.io/ipfs/QmPWfi8RwFbQNe1nLVzP14ARyMcG2hsacTRBt9iRrdKG2r",
+      "datasetCoverageIdentity": "https://ipfs.filebase.io/ipfs/QmYfcpMeZAcU1A9xMt5NxV9m2utLYKvhSbM1YsRbTKVYm9",
+      "publicationScope": {
+        "schemaVersion": "1.0",
+        "level": "partial",
+        "denominatorBasis": "published_subset"
+      },
+      "provenance": {
+        "owner": "elephant-mcp/donphan",
+        "artifactCatalog": "https://raw.githubusercontent.com/soofi-xyz/soofi-xyz-team-kit/main/skills/use-oracle/runtime/catalog/mcp-overlays.json",
+        "classificationEvidence": "https://github.com/soofi-xyz/soofi-xyz-team-kit/pull/187",
+        "reviewedAt": "2026-09-12T02:30:00.000Z"
+      }
+    },
+    {
+      "countyKey": "bradford",
+      "countyName": "Bradford",
+      "stateCode": "FL",
+      "countyFips": "12007",
+      "queryTableIdentity": "https://ipfs.filebase.io/ipfs/QmQgmgrn274JdyLpWZUscrtHcqauyhGrLx3SbEf2SeuzCL",
+      "datasetCoverageIdentity": "https://ipfs.filebase.io/ipfs/QmVLcZ4QncvLuW5WvEZyT7x4vFTNC6beUWiWNyuRkZEjA6",
+      "publicationScope": {
+        "schemaVersion": "1.0",
+        "level": "partial",
+        "denominatorBasis": "published_subset"
+      },
+      "provenance": {
+        "owner": "elephant-mcp/donphan",
+        "artifactCatalog": "https://raw.githubusercontent.com/soofi-xyz/soofi-xyz-team-kit/main/skills/use-oracle/runtime/catalog/mcp-overlays.json",
+        "classificationEvidence": "https://github.com/soofi-xyz/soofi-xyz-team-kit/pull/187",
+        "reviewedAt": "2026-09-12T02:30:00.000Z"
+      }
+    },
+    {
+      "countyKey": "citrus",
+      "countyName": "Citrus",
+      "stateCode": "FL",
+      "countyFips": "12017",
+      "queryTableIdentity": "https://ipfs.filebase.io/ipfs/QmXTu8Dmseuz6dbTgRAXjrwRqgNpPiAMCrToQSY7pbvcXR",
+      "datasetCoverageIdentity": "https://ipfs.filebase.io/ipfs/QmYAmhpb2XsPjfhNvwLUThq3bF7WPEfFaeDtGm96Cn5M5u",
+      "publicationScope": {
+        "schemaVersion": "1.0",
+        "level": "partial",
+        "denominatorBasis": "published_subset"
+      },
+      "provenance": {
+        "owner": "elephant-mcp/donphan",
+        "artifactCatalog": "https://raw.githubusercontent.com/soofi-xyz/soofi-xyz-team-kit/main/skills/use-oracle/runtime/catalog/mcp-overlays.json",
+        "classificationEvidence": "https://github.com/soofi-xyz/soofi-xyz-team-kit/pull/187",
+        "reviewedAt": "2026-09-12T02:30:00.000Z"
+      }
+    },
+    {
+      "countyKey": "columbia",
+      "countyName": "Columbia",
+      "stateCode": "FL",
+      "countyFips": "12023",
+      "queryTableIdentity": "https://ipfs.filebase.io/ipfs/QmRQUuDP9j71rNC7NJo5V2dkWgUi4xps25PBRsAr8BDhtA",
+      "datasetCoverageIdentity": "https://ipfs.filebase.io/ipfs/QmevrpxkW8adeyxmR3Zk4nQfhG5uX1hZoTWUyLZyHCvxhs",
+      "publicationScope": {
+        "schemaVersion": "1.0",
+        "level": "partial",
+        "denominatorBasis": "published_subset"
+      },
+      "provenance": {
+        "owner": "elephant-mcp/donphan",
+        "artifactCatalog": "https://raw.githubusercontent.com/soofi-xyz/soofi-xyz-team-kit/main/skills/use-oracle/runtime/catalog/mcp-overlays.json",
+        "classificationEvidence": "https://github.com/soofi-xyz/soofi-xyz-team-kit/pull/187",
+        "reviewedAt": "2026-09-12T02:30:00.000Z"
+      }
+    },
+    {
+      "countyKey": "desoto",
+      "countyName": "DeSoto",
+      "stateCode": "FL",
+      "countyFips": "12027",
+      "queryTableIdentity": "https://ipfs.filebase.io/ipfs/QmY8zQXCqoqqKv2MLNR6SRhAFDChhSNJgXRcDKcYwywWbZ",
+      "datasetCoverageIdentity": "https://ipfs.filebase.io/ipfs/QmcvJ8YKgoe4Z6bZcgzWgc77N4MZBH54XvGHFguRcumrqC",
+      "publicationScope": {
+        "schemaVersion": "1.0",
+        "level": "partial",
+        "denominatorBasis": "published_subset"
+      },
+      "provenance": {
+        "owner": "elephant-mcp/donphan",
+        "artifactCatalog": "https://raw.githubusercontent.com/soofi-xyz/soofi-xyz-team-kit/main/skills/use-oracle/runtime/catalog/mcp-overlays.json",
+        "classificationEvidence": "https://github.com/soofi-xyz/soofi-xyz-team-kit/pull/187",
+        "reviewedAt": "2026-09-12T02:30:00.000Z"
+      }
+    },
+    {
+      "countyKey": "highlands",
+      "countyName": "Highlands",
+      "stateCode": "FL",
+      "countyFips": "12055",
+      "queryTableIdentity": "https://ipfs.filebase.io/ipfs/QmZB15b1MZWnqKwLuHNWHtaw6xTbeBqCifci3zChsCxzSA",
+      "datasetCoverageIdentity": "https://ipfs.filebase.io/ipfs/QmXfKqL4JZieGZqFFMCMQcYYaTiuJpyuMkq8juBjRyJSoq",
+      "publicationScope": {
+        "schemaVersion": "1.0",
+        "level": "partial",
+        "denominatorBasis": "published_subset"
+      },
+      "provenance": {
+        "owner": "elephant-mcp/donphan",
+        "artifactCatalog": "https://raw.githubusercontent.com/soofi-xyz/soofi-xyz-team-kit/main/skills/use-oracle/runtime/catalog/mcp-overlays.json",
+        "classificationEvidence": "https://github.com/soofi-xyz/soofi-xyz-team-kit/pull/187",
+        "reviewedAt": "2026-09-12T02:30:00.000Z"
+      }
+    },
+    {
+      "countyKey": "martin",
+      "countyName": "Martin",
+      "stateCode": "FL",
+      "countyFips": "12085",
+      "queryTableIdentity": "https://ipfs.filebase.io/ipfs/QmXMmpcbmzkGMfmRZsq7Nh3sQBs9wxSBTJUiEiYyQYEFL6",
+      "datasetCoverageIdentity": "https://ipfs.filebase.io/ipfs/QmePzo6fL47KG9GpjkrAPwu12w6mudgCxooaxLM7ZbcPNu",
+      "publicationScope": {
+        "schemaVersion": "1.0",
+        "level": "partial",
+        "denominatorBasis": "published_subset"
+      },
+      "provenance": {
+        "owner": "elephant-mcp/donphan",
+        "artifactCatalog": "https://raw.githubusercontent.com/soofi-xyz/soofi-xyz-team-kit/main/skills/use-oracle/runtime/catalog/mcp-overlays.json",
+        "classificationEvidence": "https://github.com/soofi-xyz/soofi-xyz-team-kit/pull/187",
+        "reviewedAt": "2026-09-12T02:30:00.000Z"
+      }
+    },
+    {
+      "countyKey": "nassau",
+      "countyName": "Nassau",
+      "stateCode": "FL",
+      "countyFips": "12089",
+      "queryTableIdentity": "https://ipfs.filebase.io/ipfs/QmbP712KY7RTXPG34LycaUgVrJomKfd72jvz3V8TY8qHMp",
+      "datasetCoverageIdentity": "https://ipfs.filebase.io/ipfs/QmUvBzdn3vQtB6BGJxCkfuwRrEH76eWH1jB5EjLQRG8L7C",
+      "publicationScope": {
+        "schemaVersion": "1.0",
+        "level": "partial",
+        "denominatorBasis": "published_subset"
+      },
+      "provenance": {
+        "owner": "elephant-mcp/donphan",
+        "artifactCatalog": "https://raw.githubusercontent.com/soofi-xyz/soofi-xyz-team-kit/main/skills/use-oracle/runtime/catalog/mcp-overlays.json",
+        "classificationEvidence": "https://github.com/soofi-xyz/soofi-xyz-team-kit/pull/187",
+        "reviewedAt": "2026-09-12T02:30:00.000Z"
+      }
+    },
+    {
+      "countyKey": "putnam",
+      "countyName": "Putnam",
+      "stateCode": "FL",
+      "countyFips": "12107",
+      "queryTableIdentity": "https://ipfs.filebase.io/ipfs/QmVJN2KLGX7m9ZR6ztsSNhaoaiyyBNS1qVesXiAX2MmaQs",
+      "datasetCoverageIdentity": "https://ipfs.filebase.io/ipfs/QmNzD92mwTF7sWoMHXNZQjHFJhrPsE4mcxekTT2Jd7oQBt",
+      "publicationScope": {
+        "schemaVersion": "1.0",
+        "level": "partial",
+        "denominatorBasis": "published_subset"
+      },
+      "provenance": {
+        "owner": "elephant-mcp/donphan",
+        "artifactCatalog": "https://raw.githubusercontent.com/soofi-xyz/soofi-xyz-team-kit/main/skills/use-oracle/runtime/catalog/mcp-overlays.json",
+        "classificationEvidence": "https://github.com/soofi-xyz/soofi-xyz-team-kit/pull/187",
+        "reviewedAt": "2026-09-12T02:30:00.000Z"
+      }
+    },
+    {
+      "countyKey": "st-lucie",
+      "countyName": "St. Lucie",
+      "stateCode": "FL",
+      "countyFips": "12111",
+      "queryTableIdentity": "https://ipfs.filebase.io/ipfs/QmQh7Gp4fQWKKiGXqcg9C6q6UiDaNqss4kseGbV7BzLwV7",
+      "datasetCoverageIdentity": "https://ipfs.filebase.io/ipfs/QmdyWbiJqzJLKvUPLvWsYGHtQk2JPyfdD7GCZCriZVVm5k",
+      "publicationScope": {
+        "schemaVersion": "1.0",
+        "level": "partial",
+        "denominatorBasis": "published_subset"
+      },
+      "provenance": {
+        "owner": "elephant-mcp/donphan",
+        "artifactCatalog": "https://raw.githubusercontent.com/soofi-xyz/soofi-xyz-team-kit/main/skills/use-oracle/runtime/catalog/mcp-overlays.json",
+        "classificationEvidence": "https://github.com/soofi-xyz/soofi-xyz-team-kit/pull/187",
+        "reviewedAt": "2026-09-12T02:30:00.000Z"
+      }
+    },
+    {
+      "countyKey": "santa-rosa",
+      "countyName": "Santa Rosa",
+      "stateCode": "FL",
+      "countyFips": "12113",
+      "queryTableIdentity": "https://ipfs.filebase.io/ipfs/QmUNv4oNsZve2GvdwbmN89QLB8SGd4kZVA2Rr6HS2cJyhM",
+      "datasetCoverageIdentity": "https://ipfs.filebase.io/ipfs/QmTmJTE3eeTQokXxkTB1rht8MiNudoZo7hvQKzM5jwGRsj",
+      "publicationScope": {
+        "schemaVersion": "1.0",
+        "level": "partial",
+        "denominatorBasis": "published_subset"
+      },
+      "provenance": {
+        "owner": "elephant-mcp/donphan",
+        "artifactCatalog": "https://raw.githubusercontent.com/soofi-xyz/soofi-xyz-team-kit/main/skills/use-oracle/runtime/catalog/mcp-overlays.json",
+        "classificationEvidence": "https://github.com/soofi-xyz/soofi-xyz-team-kit/pull/187",
+        "reviewedAt": "2026-09-12T02:30:00.000Z"
+      }
+    },
+    {
+      "countyKey": "baker-hoa-pm",
+      "countyName": "Baker HOA/PM",
+      "stateCode": "FL",
+      "countyFips": "12003",
+      "queryTableIdentity": "https://ipfs.filebase.io/ipfs/QmU5RuyHvY8VFn6f3hQ1jHfnz3i67b6YKHoKVTB5ff3uqQ",
+      "datasetCoverageIdentity": "https://ipfs.filebase.io/ipfs/QmQfCTMjkeYC4eVbNHnpyQDASQk83oNuUqo5k4owHwrK3r",
+      "publicationScope": {
+        "schemaVersion": "1.0",
+        "level": "partial",
+        "denominatorBasis": "published_subset"
+      },
+      "provenance": {
+        "owner": "elephant-mcp/donphan",
+        "artifactCatalog": "https://raw.githubusercontent.com/soofi-xyz/soofi-xyz-team-kit/main/skills/use-oracle/runtime/catalog/mcp-overlays.json",
+        "classificationEvidence": "https://github.com/soofi-xyz/soofi-xyz-team-kit/pull/187",
+        "reviewedAt": "2026-09-12T02:30:00.000Z"
+      }
+    },
+    {
+      "countyKey": "bradford-hoa-pm",
+      "countyName": "Bradford HOA/PM",
+      "stateCode": "FL",
+      "countyFips": "12007",
+      "queryTableIdentity": "https://ipfs.filebase.io/ipfs/QmSzrQ9GMQfpQ5w9w1BgSSnCscpreohxjdAMaiC9KwEdA1",
+      "datasetCoverageIdentity": "https://ipfs.filebase.io/ipfs/Qme5NmnZeWVcDndY4eveTAPpyWU7EREgSmExSjyM9kSBqX",
+      "publicationScope": {
+        "schemaVersion": "1.0",
+        "level": "partial",
+        "denominatorBasis": "published_subset"
+      },
+      "provenance": {
+        "owner": "elephant-mcp/donphan",
+        "artifactCatalog": "https://raw.githubusercontent.com/soofi-xyz/soofi-xyz-team-kit/main/skills/use-oracle/runtime/catalog/mcp-overlays.json",
+        "classificationEvidence": "https://github.com/soofi-xyz/soofi-xyz-team-kit/pull/187",
+        "reviewedAt": "2026-09-12T02:30:00.000Z"
+      }
+    },
+    {
+      "countyKey": "citrus-hoa-pm",
+      "countyName": "Citrus HOA/PM",
+      "stateCode": "FL",
+      "countyFips": "12017",
+      "queryTableIdentity": "https://ipfs.filebase.io/ipfs/QmXbNBj1c1P6D4ze9zGLmbdTYu4yEGqMsc9FaJtVgMzD2K",
+      "datasetCoverageIdentity": "https://ipfs.filebase.io/ipfs/QmTZyEkFZbkjd9Qsdr4f3f1mu2US2tvTnHywcaYFvfMwTZ",
+      "publicationScope": {
+        "schemaVersion": "1.0",
+        "level": "partial",
+        "denominatorBasis": "published_subset"
+      },
+      "provenance": {
+        "owner": "elephant-mcp/donphan",
+        "artifactCatalog": "https://raw.githubusercontent.com/soofi-xyz/soofi-xyz-team-kit/main/skills/use-oracle/runtime/catalog/mcp-overlays.json",
+        "classificationEvidence": "https://github.com/soofi-xyz/soofi-xyz-team-kit/pull/187",
+        "reviewedAt": "2026-09-12T02:30:00.000Z"
+      }
+    },
+    {
+      "countyKey": "columbia-hoa-pm",
+      "countyName": "Columbia HOA/PM",
+      "stateCode": "FL",
+      "countyFips": "12023",
+      "queryTableIdentity": "https://ipfs.filebase.io/ipfs/QmSm78AQ9Sif8Hg1RDEi61Q6Qi9KG4eiTaDjn1wQWfkPgH",
+      "datasetCoverageIdentity": "https://ipfs.filebase.io/ipfs/QmbFRHdREXLCobSCFW3Xux3xfKdnL53zBCkdeGMzoyCZKR",
+      "publicationScope": {
+        "schemaVersion": "1.0",
+        "level": "partial",
+        "denominatorBasis": "published_subset"
+      },
+      "provenance": {
+        "owner": "elephant-mcp/donphan",
+        "artifactCatalog": "https://raw.githubusercontent.com/soofi-xyz/soofi-xyz-team-kit/main/skills/use-oracle/runtime/catalog/mcp-overlays.json",
+        "classificationEvidence": "https://github.com/soofi-xyz/soofi-xyz-team-kit/pull/187",
+        "reviewedAt": "2026-09-12T02:30:00.000Z"
+      }
+    },
+    {
+      "countyKey": "desoto-hoa-pm",
+      "countyName": "DeSoto HOA/PM",
+      "stateCode": "FL",
+      "countyFips": "12027",
+      "queryTableIdentity": "https://ipfs.filebase.io/ipfs/QmdH7dLW6MCTGNBTyjr1dC1zLMGa9m1HPe1CKsTXtyfPvy",
+      "datasetCoverageIdentity": "https://ipfs.filebase.io/ipfs/QmdAVeBC3SzFJxsu4PQETA3KFB1Uh8Cwt1pu4eerMvLPaG",
+      "publicationScope": {
+        "schemaVersion": "1.0",
+        "level": "partial",
+        "denominatorBasis": "published_subset"
+      },
+      "provenance": {
+        "owner": "elephant-mcp/donphan",
+        "artifactCatalog": "https://raw.githubusercontent.com/soofi-xyz/soofi-xyz-team-kit/main/skills/use-oracle/runtime/catalog/mcp-overlays.json",
+        "classificationEvidence": "https://github.com/soofi-xyz/soofi-xyz-team-kit/pull/187",
+        "reviewedAt": "2026-09-12T02:30:00.000Z"
+      }
+    },
+    {
+      "countyKey": "highlands-hoa-pm",
+      "countyName": "Highlands HOA/PM",
+      "stateCode": "FL",
+      "countyFips": "12055",
+      "queryTableIdentity": "https://ipfs.filebase.io/ipfs/QmPvrYHEtFc7TkzGtMveHaooYgFvTiN6saoHdaUeVGiYwm",
+      "datasetCoverageIdentity": "https://ipfs.filebase.io/ipfs/QmVaAo79ppKRmn3mR8qgyNAeavdHFykcuyUXC9PXTv6Qtx",
+      "publicationScope": {
+        "schemaVersion": "1.0",
+        "level": "partial",
+        "denominatorBasis": "published_subset"
+      },
+      "provenance": {
+        "owner": "elephant-mcp/donphan",
+        "artifactCatalog": "https://raw.githubusercontent.com/soofi-xyz/soofi-xyz-team-kit/main/skills/use-oracle/runtime/catalog/mcp-overlays.json",
+        "classificationEvidence": "https://github.com/soofi-xyz/soofi-xyz-team-kit/pull/187",
+        "reviewedAt": "2026-09-12T02:30:00.000Z"
+      }
+    },
+    {
+      "countyKey": "martin-hoa-pm",
+      "countyName": "Martin HOA/PM",
+      "stateCode": "FL",
+      "countyFips": "12085",
+      "queryTableIdentity": "https://ipfs.filebase.io/ipfs/QmRxCggBAcyoinEYcSTxHhocRLSjUunpEsvyDTNhMkRWYK",
+      "datasetCoverageIdentity": "https://ipfs.filebase.io/ipfs/QmWYiGsGTQZTnAWKmSsbTEUfEVDASh5rrgqfWu1VqYYHuK",
+      "publicationScope": {
+        "schemaVersion": "1.0",
+        "level": "partial",
+        "denominatorBasis": "published_subset"
+      },
+      "provenance": {
+        "owner": "elephant-mcp/donphan",
+        "artifactCatalog": "https://raw.githubusercontent.com/soofi-xyz/soofi-xyz-team-kit/main/skills/use-oracle/runtime/catalog/mcp-overlays.json",
+        "classificationEvidence": "https://github.com/soofi-xyz/soofi-xyz-team-kit/pull/187",
+        "reviewedAt": "2026-09-12T02:30:00.000Z"
+      }
+    },
+    {
+      "countyKey": "nassau-hoa-pm",
+      "countyName": "Nassau HOA/PM",
+      "stateCode": "FL",
+      "countyFips": "12089",
+      "queryTableIdentity": "https://ipfs.filebase.io/ipfs/QmS7jqBJJeiw8TspPWP9i91AvCqYg3RaeZhF9yswdXjagF",
+      "datasetCoverageIdentity": "https://ipfs.filebase.io/ipfs/QmdepuASTgfEPBmoxHzyMb86ZKEeK8DFRMhMrvtmozFN7i",
+      "publicationScope": {
+        "schemaVersion": "1.0",
+        "level": "partial",
+        "denominatorBasis": "published_subset"
+      },
+      "provenance": {
+        "owner": "elephant-mcp/donphan",
+        "artifactCatalog": "https://raw.githubusercontent.com/soofi-xyz/soofi-xyz-team-kit/main/skills/use-oracle/runtime/catalog/mcp-overlays.json",
+        "classificationEvidence": "https://github.com/soofi-xyz/soofi-xyz-team-kit/pull/187",
+        "reviewedAt": "2026-09-12T02:30:00.000Z"
+      }
+    },
+    {
+      "countyKey": "putnam-hoa-pm",
+      "countyName": "Putnam HOA/PM",
+      "stateCode": "FL",
+      "countyFips": "12107",
+      "queryTableIdentity": "https://ipfs.filebase.io/ipfs/QmdKAHG9pNCw1NKXBu2yBLRLg65FHAtqmkUwoq5w55Fonn",
+      "datasetCoverageIdentity": "https://ipfs.filebase.io/ipfs/QmcaLVQsgbN4R1yKwVQn2PvkB4TxvFAAFP1HjoPUfZXiDe",
+      "publicationScope": {
+        "schemaVersion": "1.0",
+        "level": "partial",
+        "denominatorBasis": "published_subset"
+      },
+      "provenance": {
+        "owner": "elephant-mcp/donphan",
+        "artifactCatalog": "https://raw.githubusercontent.com/soofi-xyz/soofi-xyz-team-kit/main/skills/use-oracle/runtime/catalog/mcp-overlays.json",
+        "classificationEvidence": "https://github.com/soofi-xyz/soofi-xyz-team-kit/pull/187",
+        "reviewedAt": "2026-09-12T02:30:00.000Z"
+      }
+    },
+    {
+      "countyKey": "santa-rosa-hoa-pm",
+      "countyName": "Santa Rosa HOA/PM",
+      "stateCode": "FL",
+      "countyFips": "12113",
+      "queryTableIdentity": "https://ipfs.filebase.io/ipfs/QmRSn3NEND2N3UGkuvYznUzyL5cPB7bsmpW132CBWSkZGr",
+      "datasetCoverageIdentity": "https://ipfs.filebase.io/ipfs/Qmetn2i9ysFh6hoPA4rLMJ95AdSpcyWMdXCx1HTQuiuCQL",
+      "publicationScope": {
+        "schemaVersion": "1.0",
+        "level": "partial",
+        "denominatorBasis": "published_subset"
+      },
+      "provenance": {
+        "owner": "elephant-mcp/donphan",
+        "artifactCatalog": "https://raw.githubusercontent.com/soofi-xyz/soofi-xyz-team-kit/main/skills/use-oracle/runtime/catalog/mcp-overlays.json",
+        "classificationEvidence": "https://github.com/soofi-xyz/soofi-xyz-team-kit/pull/187",
+        "reviewedAt": "2026-09-12T02:30:00.000Z"
+      }
+    },
+    {
+      "countyKey": "st-lucie-hoa-pm",
+      "countyName": "St. Lucie HOA/PM",
+      "stateCode": "FL",
+      "countyFips": "12111",
+      "queryTableIdentity": "https://ipfs.filebase.io/ipfs/QmNpTdocSgW39Cp2SBWQ2V6jVfWnH4U9fTt2APDaTpfpot",
+      "datasetCoverageIdentity": "https://ipfs.filebase.io/ipfs/QmehrvWQqqDUbzxNDzbWHorsxZtwVzcSRXtizasP25Bpkb",
+      "publicationScope": {
+        "schemaVersion": "1.0",
+        "level": "partial",
+        "denominatorBasis": "published_subset"
+      },
+      "provenance": {
+        "owner": "elephant-mcp/donphan",
+        "artifactCatalog": "https://raw.githubusercontent.com/soofi-xyz/soofi-xyz-team-kit/main/skills/use-oracle/runtime/catalog/mcp-overlays.json",
+        "classificationEvidence": "https://github.com/soofi-xyz/soofi-xyz-team-kit/pull/187",
+        "reviewedAt": "2026-09-12T02:30:00.000Z"
       }
     }
   ]

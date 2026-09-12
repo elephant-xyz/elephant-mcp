@@ -60,8 +60,8 @@ function syntheticRegistry(level: "full" | "partial" | "pilot" = "full") {
 }
 
 describe("Donphan publication-scope registry", () => {
-  it("contains 15 county identities with Broward and Osceola explicitly partial", () => {
-    expect(registryJson.entries).toHaveLength(15);
+  it("contains 37 reviewed county and overlay identities", () => {
+    expect(registryJson.entries).toHaveLength(37);
     expect(
       registryJson.entries
         .filter((entry) => entry.publicationScope.level === "full")
@@ -88,7 +88,32 @@ describe("Donphan publication-scope registry", () => {
       registryJson.entries
         .filter((entry) => entry.publicationScope.level === "partial")
         .map((entry) => entry.countyKey),
-    ).toEqual(["broward", "osceola"]);
+    ).toEqual([
+      "broward",
+      "osceola",
+      "baker",
+      "bradford",
+      "citrus",
+      "columbia",
+      "desoto",
+      "highlands",
+      "martin",
+      "nassau",
+      "putnam",
+      "st-lucie",
+      "santa-rosa",
+      "baker-hoa-pm",
+      "bradford-hoa-pm",
+      "citrus-hoa-pm",
+      "columbia-hoa-pm",
+      "desoto-hoa-pm",
+      "highlands-hoa-pm",
+      "martin-hoa-pm",
+      "nassau-hoa-pm",
+      "putnam-hoa-pm",
+      "santa-rosa-hoa-pm",
+      "st-lucie-hoa-pm",
+    ]);
   });
 
   it("resolves a registry-bound full county across equivalent IPNS URL forms", () => {
@@ -100,7 +125,7 @@ describe("Donphan publication-scope registry", () => {
     });
     expect(result.resolution).toMatchObject({
       reason: "registry_match",
-      registryVersion: "2026-09-11.1",
+      registryVersion: "2026-09-12.1",
       registryRevision: getPublicationScopeRegistryRevision(),
       entryIdentity: expect.stringMatching(/^[a-f0-9]{64}$/),
       provenance: { owner: "elephant-mcp/donphan" },
@@ -127,7 +152,7 @@ describe("Donphan publication-scope registry", () => {
     });
     expect(result.resolution).toMatchObject({
       reason: "registry_match",
-      registryVersion: "2026-09-11.1",
+      registryVersion: "2026-09-12.1",
       provenance: {
         owner: "elephant-mcp/donphan",
         artifactCatalog:
@@ -173,6 +198,51 @@ describe("Donphan publication-scope registry", () => {
           "https://ipfs.filebase.io/ipns/k51qzi5uqu5dltdk9j020t8avceyej6z2wrz0fm6nffw9jc1wgki6j2wboyl9c",
       }),
     );
+
+    expect(result.publicationScope).toEqual({
+      schemaVersion: "1.0",
+      level: "partial",
+      denominatorBasis: "published_subset",
+    });
+    expect(result.resolution.reason).toBe("registry_match");
+  });
+
+  it("resolves an overlay-only county from reviewed runtime artifact identities", () => {
+    const registry = syntheticRegistry("partial");
+    registry.entries[0] = {
+      ...registry.entries[0]!,
+      countyKey: "baker",
+      countyName: "Baker",
+      stateCode: "FL",
+      countyFips: "12003",
+      queryTableIdentity: "https://example.com/baker/query",
+      datasetCoverageIdentity: "https://example.com/baker/coverage",
+      publicationScope: {
+        schemaVersion: "1.0",
+        level: "partial",
+        denominatorBasis: "published_subset",
+      },
+    };
+
+    const result = resolvePublicationScope(null, {
+      registry,
+      catalogUnavailable: true,
+      countyKey: "baker",
+      runtimeArtifacts: {
+        queryTableUrl: "https://example.com/baker/query",
+        datasetCoverageUrl: "https://example.com/baker/coverage",
+      },
+      explicitScopes: [
+        {
+          source: "coverage",
+          value: {
+            schemaVersion: "1.0",
+            level: "partial",
+            denominatorBasis: "published_subset",
+          },
+        },
+      ],
+    });
 
     expect(result.publicationScope).toEqual({
       schemaVersion: "1.0",

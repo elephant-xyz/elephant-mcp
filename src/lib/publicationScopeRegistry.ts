@@ -88,6 +88,7 @@ export interface ExplicitPublicationScope {
 interface ResolvePublicationScopeOptions {
   readonly registry?: unknown;
   readonly catalogUnavailable?: boolean;
+  readonly countyKey?: string;
   readonly explicitScopes?: readonly ExplicitPublicationScope[];
   readonly runtimeArtifacts?: {
     readonly queryTableUrl: string | null;
@@ -200,14 +201,22 @@ export function resolvePublicationScope(
       registryVersion,
     );
   }
-  if (options.catalogUnavailable === true) {
+  const overlayCountyKey = options.countyKey?.trim().toLowerCase() || null;
+  const canResolveOverlay =
+    county === null &&
+    overlayCountyKey !== null &&
+    options.runtimeArtifacts?.queryTableUrl !== null &&
+    options.runtimeArtifacts?.queryTableUrl !== undefined &&
+    options.runtimeArtifacts.datasetCoverageUrl !== null;
+  if (options.catalogUnavailable === true && !canResolveOverlay) {
     return unknownResolution(
       "catalog_unavailable",
       registryRevision,
       registryVersion,
     );
   }
-  if (county === null) {
+  const targetCountyKey = county?.countyKey ?? overlayCountyKey;
+  if (targetCountyKey === null) {
     return unknownResolution(
       "registry_entry_missing",
       registryRevision,
@@ -220,7 +229,7 @@ export function resolvePublicationScope(
       typeof entry === "object" &&
       entry !== null &&
       !Array.isArray(entry) &&
-      (entry as Record<string, unknown>).countyKey === county.countyKey,
+      (entry as Record<string, unknown>).countyKey === targetCountyKey,
   );
   if (candidates.length === 0) {
     return unknownResolution(
@@ -247,14 +256,31 @@ export function resolvePublicationScope(
     );
   }
   const entry = parsedEntry.data;
-  const actualIdentity = PublicationScopeArtifactIdentitySchema.parse({
-    countyKey: county.countyKey,
-    countyName: county.countyName,
-    stateCode: county.stateCode,
-    countyFips: county.countyFips,
-    queryTableIdentity: publicArtifactIdentity(county.queryTableUrl),
-    datasetCoverageIdentity: publicArtifactIdentity(county.datasetCoverageUrl),
-  });
+  const actualIdentity = PublicationScopeArtifactIdentitySchema.parse(
+    county === null
+      ? {
+          countyKey: entry.countyKey,
+          countyName: entry.countyName,
+          stateCode: entry.stateCode,
+          countyFips: entry.countyFips,
+          queryTableIdentity: publicArtifactIdentity(
+            options.runtimeArtifacts!.queryTableUrl!,
+          ),
+          datasetCoverageIdentity: publicArtifactIdentity(
+            options.runtimeArtifacts!.datasetCoverageUrl!,
+          ),
+        }
+      : {
+          countyKey: county.countyKey,
+          countyName: county.countyName,
+          stateCode: county.stateCode,
+          countyFips: county.countyFips,
+          queryTableIdentity: publicArtifactIdentity(county.queryTableUrl),
+          datasetCoverageIdentity: publicArtifactIdentity(
+            county.datasetCoverageUrl,
+          ),
+        },
+  );
   const expectedIdentity = PublicationScopeArtifactIdentitySchema.parse({
     countyKey: entry.countyKey,
     countyName: entry.countyName,
