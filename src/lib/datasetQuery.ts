@@ -190,6 +190,25 @@ const PROPERTY_FIELDS = {
     measurable: true,
     description: "Primary roof covering material.",
   },
+  roof_date: {
+    kind: "date",
+    groupable: false,
+    measurable: true,
+    description: "Canonical roof installation or replacement date.",
+  },
+  roof_age_years: {
+    kind: "number",
+    groupable: false,
+    measurable: true,
+    description: "Whole roof age in years at query-table publication.",
+  },
+  roof_date_source: {
+    kind: "text",
+    groupable: true,
+    measurable: true,
+    description:
+      "Current roof-date source: parcel, derived-from-construction-year, or permit.",
+  },
   property_type: {
     kind: "text",
     groupable: true,
