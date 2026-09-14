@@ -15,6 +15,7 @@ import {
   getDatasetQueryCapabilities,
   type DatasetQueryPlan,
 } from "../lib/datasetQuery.ts";
+import { queryPropertiesHandler } from "./propertyQuery.ts";
 import { registerAllTools } from "./registry.ts";
 
 const savedEnvironment = {
@@ -52,13 +53,14 @@ beforeAll(async () => {
   await connection.run(
     `COPY (
        SELECT * FROM (VALUES
-         ('33901', 1920, 0.5, 'residential', 'brick', true),
-         ('33901', 1940, 2.0, 'residential', 'brick', false),
-         ('33902', 2000, 1.5, 'commercial', 'stucco', true),
-         ('33902', NULL, NULL, NULL, NULL, NULL),
-         ('33903', 1980, 3.0, 'residential', 'wood', false)
+         ('33901', 1920, 0.5, 'residential', 'brick', true, DATE '2020-01-01', 6, 'permit', '{"history":[{"source":"derived-from-construction-year"},{"source":"permit"}]}'),
+         ('33901', 1940, 2.0, 'residential', 'brick', false, DATE '1940-01-01', 86, 'derived-from-construction-year', '{"history":[{"source":"derived-from-construction-year"}]}'),
+         ('33902', 2000, 1.5, 'commercial', 'stucco', true, DATE '2018-05-01', 8, 'parcel', '{"history":[{"source":"parcel"}]}'),
+         ('33902', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+         ('33903', 1980, 3.0, 'residential', 'wood', false, DATE '2022-04-01', 4, 'permit', '{"history":[{"source":"derived-from-construction-year"},{"source":"permit"}]}')
        ) AS rows(address_zip, built_year, lot_size_acre,
-                 property_usage_type, exterior_wall_material, owner_occupied)
+                 property_usage_type, exterior_wall_material, owner_occupied,
+                 roof_date, roof_age_years, roof_date_source, roof_date_lineage)
      ) TO '${propertyPath.replaceAll("'", "''")}' (FORMAT PARQUET)`,
   );
   await connection.run(
@@ -136,6 +138,9 @@ describe("dataset-query registration and capabilities", () => {
         "property_usage_type",
         "exterior_wall_material",
         "owner_occupied",
+        "roof_date",
+        "roof_age_years",
+        "roof_date_source",
       ]),
     );
     expect(properties?.fields.map((field) => field.name)).not.toContain(
@@ -150,6 +155,28 @@ describe("dataset-query registration and capabilities", () => {
 });
 
 describe("typed dataset-query execution", () => {
+  it("queries permit-updated roof lineage through the property MCP surface", async () => {
+    const result = await queryPropertiesHandler({
+      county: "fixture",
+      sql:
+        "SELECT roof_date, roof_age_years, roof_date_source, roof_date_lineage " +
+        "FROM properties WHERE address_zip = '33901' AND roof_date_source = 'permit'",
+    });
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.error).toBeUndefined();
+    expect(payload.rows).toHaveLength(1);
+    expect(payload.rows[0]).toMatchObject({
+      roof_date: "2020-01-01",
+      roof_age_years: 6,
+      roof_date_source: "permit",
+    });
+    expect(
+      JSON.parse(payload.rows[0].roof_date_lineage).history.map(
+        (event: { source: string }) => event.source,
+      ),
+    ).toEqual(["derived-from-construction-year", "permit"]);
+  });
+
   it("parameterizes values and rejects fields outside the server allowlist", async () => {
     const columns = await getPropertyColumns("fixture");
     const compiled = compileDatasetQueryPlan(

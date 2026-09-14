@@ -41,6 +41,13 @@ const COLUMN_DESCRIPTIONS: Record<string, string> = {
   lot_area_sqft: "Lot area in square feet.",
   exterior_wall_material: "Primary exterior wall material.",
   roof_covering_material: "Primary roof covering material.",
+  roof_date:
+    "Canonical roof installation/replacement date (YYYY-MM-DD); construction-year defaults use January 1 and are identified by roof_date_source.",
+  roof_age_years: "Whole roof age in years as of the query-table export date.",
+  roof_date_source:
+    "Current roof-date lineage source: parcel, derived-from-construction-year, or permit.",
+  roof_date_lineage:
+    "JSON lineage history for the construction-year default and any closed-permit override.",
   property_type: "Structural property type classification.",
   property_usage_type:
     "Use/zoning classification (e.g. residential, commercial).",
@@ -69,7 +76,7 @@ const COLUMN_DESCRIPTIONS: Record<string, string> = {
 
 const NULLABILITY_NOTE =
   "Coverage varies by county — fields such as hoa_flag, exterior_wall_material, " +
-  "roof_covering_material, lot_size_acre, and the enrichment flags may be NULL " +
+  "roof_covering_material, roof_date, lot_size_acre, and the enrichment flags may be NULL " +
   "where the county's source data does not provide them.";
 
 const SAFETY_NOTE =
