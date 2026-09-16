@@ -20,6 +20,7 @@ import {
   queryPropertiesHandler,
   getPropertyQuerySchemaHandler,
 } from "./propertyQuery.ts";
+import { queryHoasHandler, getHoaQuerySchemaHandler } from "./hoaQuery.ts";
 import {
   executeDatasetQueryPlanHandler,
   getDatasetQueryCapabilitiesHandler,
@@ -530,6 +531,74 @@ export function registerAllTools(
     },
     async (args: { county: string }, { signal }) => {
       return getPropertyQuerySchemaHandler(args, {
+        signal:
+          requestSignal === undefined
+            ? signal
+            : AbortSignal.any([signal, requestSignal]),
+      });
+    },
+  );
+
+  server.registerTool(
+    "queryHoas",
+    {
+      title: "Query Florida HOA registry (SQL)",
+      description:
+        "Run a read-only SQL SELECT against the statewide likely-ACTIVE Florida association registry (view name 'hoas', one row per Sunbiz document_number). Not a county property table and not Chapter 720 membership. Use getHoaQuerySchema first. SAFETY: a single SELECT statement only (a leading WITH/CTE is allowed); mutating or file/extension keywords are rejected; results are always capped at " +
+        `${MAX_ROW_LIMIT} rows.`,
+      inputSchema: {
+        sql: z
+          .string()
+          .min(1, "sql is required")
+          .describe(
+            "A single read-only SELECT statement over the 'hoas' view.",
+          ),
+        dataset: z
+          .string()
+          .optional()
+          .default("florida-hoa-registry")
+          .describe("Registry dataset key. Default florida-hoa-registry."),
+        limit: z
+          .number()
+          .int()
+          .positive()
+          .max(MAX_ROW_LIMIT)
+          .optional()
+          .default(DEFAULT_ROW_LIMIT)
+          .describe(
+            `Max rows to return (default ${DEFAULT_ROW_LIMIT}, max ${MAX_ROW_LIMIT}). Always enforced.`,
+          ),
+      },
+    },
+    async (
+      args: { sql: string; dataset?: string; limit?: number },
+      { signal },
+    ) => {
+      return queryHoasHandler(args, {
+        signal:
+          requestSignal === undefined
+            ? signal
+            : AbortSignal.any([signal, requestSignal]),
+      });
+    },
+  );
+
+  server.registerTool(
+    "getHoaQuerySchema",
+    {
+      title: "Get Florida HOA registry query schema",
+      description:
+        "Returns the column list of the statewide 'hoas' view so queryHoas can be written without guessing. This dataset is not a county and does not prove Chapter 720 membership.",
+      inputSchema: {
+        dataset: z
+          .string()
+          .optional()
+          .default("florida-hoa-registry")
+          .describe("Registry dataset key. Default florida-hoa-registry."),
+      },
+    },
+    async (args: { dataset?: string }, { signal }) => {
+      return getHoaQuerySchemaHandler(args, {
         signal:
           requestSignal === undefined
             ? signal
