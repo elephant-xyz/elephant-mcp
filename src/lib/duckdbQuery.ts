@@ -47,6 +47,9 @@ export const PROPERTIES_VIEW = "properties";
 /** The stable view name the permit query table is exposed under. */
 export const PERMITS_VIEW = "permits";
 
+/** The stable view name the statewide HOA registry is exposed under. */
+export const HOAS_VIEW = "hoas";
+
 /** Default row cap when the caller does not specify one. */
 export const DEFAULT_ROW_LIMIT = 100;
 
@@ -56,6 +59,8 @@ const PROPERTY_QUERY_CID_FALLBACK_MAP_ENV =
   "PROPERTY_QUERY_TABLE_CID_FALLBACK_MAP_ADDITIONS";
 const PERMIT_QUERY_CID_FALLBACK_MAP_ENV =
   "PERMIT_QUERY_TABLE_CID_FALLBACK_MAP_ADDITIONS";
+const HOA_QUERY_CID_FALLBACK_MAP_ENV =
+  "HOA_QUERY_TABLE_CID_FALLBACK_MAP_ADDITIONS";
 const FILEBASE_CID_PARQUET_PATTERN =
   /^https:\/\/ipfs\.filebase\.io\/ipfs\/(Qm[1-9A-HJ-NP-Za-km-z]{44})\/?$/u;
 const materializedQueryTables = new Map<string, Promise<string>>();
@@ -153,6 +158,15 @@ const PERMIT_DATASET: DatasetConfig = {
   defaultCountyEnv: "PERMIT_QUERY_TABLE_DEFAULT_COUNTY",
   connectionCache: new Map<string, Promise<CountyConnection>>(),
   cidFallbackMapEnv: PERMIT_QUERY_CID_FALLBACK_MAP_ENV,
+};
+
+const HOA_DATASET: DatasetConfig = {
+  view: HOAS_VIEW,
+  mapEnv: "HOA_QUERY_TABLE_MAP",
+  singleEnv: "HOA_QUERY_TABLE",
+  defaultCountyEnv: "HOA_QUERY_TABLE_DEFAULT_DATASET",
+  connectionCache: new Map<string, Promise<CountyConnection>>(),
+  cidFallbackMapEnv: HOA_QUERY_CID_FALLBACK_MAP_ENV,
 };
 
 /**
@@ -549,6 +563,11 @@ export function clearPropertyQueryConnections(): void {
 /** Reset all cached PERMIT DuckDB connections. Intended for tests. */
 export function clearPermitQueryConnections(): void {
   PERMIT_DATASET.connectionCache.clear();
+}
+
+/** Reset all cached HOA registry DuckDB connections. Intended for tests. */
+export function clearHoaQueryConnections(): void {
+  HOA_DATASET.connectionCache.clear();
 }
 
 function isHttpLocation(location: string): boolean {
@@ -988,4 +1007,34 @@ export async function getPermitColumns(
   county: string,
 ): Promise<PropertyColumn[]> {
   return getDatasetColumns(PERMIT_DATASET, county);
+}
+
+const DEFAULT_HOA_DATASET = "florida-hoa-registry";
+
+export function parseHoaQueryTableMap(
+  raw: string | undefined,
+): Record<string, string> {
+  return parseDatasetMap(raw, HOA_DATASET.mapEnv);
+}
+
+export function resolveHoaTableLocation(
+  dataset: string | undefined,
+): QueryTableResolution {
+  return resolveDatasetLocation(HOA_DATASET, dataset ?? DEFAULT_HOA_DATASET);
+}
+
+export async function runHoaQuery(
+  dataset: string,
+  sql: string,
+  limit: number = DEFAULT_ROW_LIMIT,
+  signal?: AbortSignal,
+): Promise<PropertyQueryResult> {
+  return runDatasetQuery(HOA_DATASET, dataset, sql, limit, signal);
+}
+
+export async function getHoaColumns(
+  dataset: string,
+  signal?: AbortSignal,
+): Promise<PropertyColumn[]> {
+  return getDatasetColumns(HOA_DATASET, dataset, signal);
 }
