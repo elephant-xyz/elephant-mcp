@@ -2,7 +2,7 @@ import { DuckDBInstance, type DuckDBConnection } from "@duckdb/node-api";
 import os from "node:os";
 
 import type { AtlasBackend } from "./backend.ts";
-import { escapeAtlasLiteral, quoteAtlasIdentifier } from "./registry.ts";
+import { escapeAtlasLiteral, quoteAtlasIdentifier } from "./tables.ts";
 
 const TARGET_CATALOG = "atlas_target";
 

@@ -10,6 +10,7 @@ Parquet files.
 - [Requirements](#requirements)
 - [Run locally](#run-locally)
 - [Synchronize Atlas](#synchronize-atlas)
+- [Storage layout](#storage-layout)
 - [Hosted deployment](#hosted-deployment)
 - [Tools](#tools)
 - [Configuration](#configuration)
@@ -65,6 +66,33 @@ The command:
 6. Prints the synchronized index CID and per-group counts.
 
 An unchanged index performs no database writes.
+
+## Storage layout
+
+The database holds one table per `CountyTables` table, named exactly as
+published: one per lexicon class (`property`, `address`, `company`, ...), one
+per relationship type (`property_has_address`, ...), and `properties` for the
+per-property data-group roots. Columns come from the Parquet parts
+(`DESCRIBE read_parquet` with `union_by_name`; new columns are added with
+`ALTER TABLE ... ADD COLUMN`) plus `county` and `data_group`.
+
+Primary keys:
+
+| Table | Key |
+|---|---|
+| lexicon class | `(county, data_group, cid, property_cid)` |
+| relationship | `(county, data_group, relationship_cid, property_cid)` |
+| `properties` | `(county, data_group, property_cid)` |
+
+Rows are content-addressed and shared by every property that carries them, so
+`property_cid` is part of the key. Loading a group deletes its
+`county`/`data_group` scope and reinserts it with `ON CONFLICT DO UPDATE`;
+withdrawing a group is the delete alone. Both happen in one transaction.
+
+Control tables: `atlas_state` (one row per loaded county/data group with its
+archive, tables, and schema CIDs) and `atlas_sync_state` (the accepted index
+CID). The `atlas_` prefix is reserved; every other table in the database is
+discovered from the catalog as Atlas content.
 
 ## Hosted deployment
 
@@ -133,5 +161,5 @@ npm run format:check
 ```
 
 Atlas tests cover shape validation, CID verification, SQLite synchronization,
-idempotence, schema evolution, shared content, and withdrawal. The live Atlas
+idempotence, column evolution, shared content, and withdrawal. The live Atlas
 and hosted Neon tests are environment-gated.

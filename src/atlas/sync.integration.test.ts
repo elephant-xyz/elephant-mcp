@@ -11,7 +11,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { parseAtlasDatabaseUrl } from "./backend.ts";
 import { openAtlasConnections } from "./connections.ts";
-import { escapeAtlasLiteral } from "./registry.ts";
+import { escapeAtlasLiteral } from "./tables.ts";
 import { syncAtlas } from "./sync.ts";
 import { KuboUnixFsVerifier } from "./unixfs.ts";
 
@@ -171,24 +171,21 @@ describe("Atlas SQLite synchronization", () => {
       });
       expect(
         await connections.read(
-          `SELECT cid, parcel_identifier, market_value
-             FROM atlas_content__property`,
+          `SELECT county, data_group, cid, parcel_identifier, market_value
+             FROM property`,
         ),
       ).toEqual([
         {
+          county: "lee",
+          data_group: "county",
           cid: "entity-cid",
           parcel_identifier: "parcel-1",
           market_value: 125000,
         },
       ]);
       expect(
-        await connections.read(
-          `SELECT county, data_group, archive_cid
-             FROM atlas_membership`,
-        ),
-      ).toEqual([
-        { county: "lee", data_group: "county", archive_cid: archiveCid },
-      ]);
+        await connections.read("SELECT county, archive_cid FROM atlas_state"),
+      ).toEqual([{ county: "lee", archive_cid: archiveCid }]);
 
       // A later archive adds a column and re-carries the same CID with it set.
       await publish(
@@ -205,9 +202,7 @@ describe("Atlas SQLite synchronization", () => {
       );
       expect(await sync("staging-b")).toMatchObject({ groupsLoaded: 1 });
       expect(
-        await connections.read(
-          "SELECT cid, historic FROM atlas_content__property",
-        ),
+        await connections.read("SELECT cid, historic FROM property"),
       ).toEqual([{ cid: "entity-cid", historic: 1 }]);
 
       bodies.set(
@@ -226,14 +221,10 @@ describe("Atlas SQLite synchronization", () => {
         unchanged: false,
       });
       expect(
-        await connections.read(
-          "SELECT count(*) AS count FROM atlas_membership",
-        ),
+        await connections.read("SELECT count(*) AS count FROM atlas_state"),
       ).toEqual([{ count: 0 }]);
       expect(
-        await connections.read(
-          "SELECT count(*) AS count FROM atlas_content__property",
-        ),
+        await connections.read("SELECT count(*) AS count FROM property"),
       ).toEqual([{ count: 0 }]);
     } finally {
       await connections.close();

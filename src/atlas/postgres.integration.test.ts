@@ -26,33 +26,29 @@ describe.runIf(databaseUrl !== undefined)("Atlas Postgres integration", () => {
       );
       await lock.release();
 
-      const runId = randomUUID();
+      const county = `rollback-${randomUUID()}`;
       await expect(
         first.transaction(async (executor) => {
           await executor.execute(
-            `INSERT INTO atlas_sync_runs (
-                  run_id,
-                  candidate_index_cid,
-                  generated_from,
-                  status,
-                  started_at
-                ) VALUES (?, ?, ?, ?, ?)`,
-            [
-              runId,
-              "test-index",
-              "test-revision",
-              "staging",
-              new Date().toISOString(),
-            ],
+            `INSERT INTO atlas_state (
+                  county,
+                  state,
+                  fips,
+                  data_group,
+                  archive_cid,
+                  tables_cid,
+                  schema_cid,
+                  published_at,
+                  loaded_at
+                ) VALUES (?, 'FL', '00000', 'county', 'a', 't', 's', ?, ?)`,
+            [county, new Date().toISOString(), new Date().toISOString()],
           );
           throw new Error("rollback-test");
         }),
       ).rejects.toThrow("rollback-test");
       expect(
         await first.read(
-          `SELECT run_id
-               FROM atlas_sync_runs
-               WHERE run_id = '${runId}'`,
+          `SELECT county FROM atlas_state WHERE county = '${county}'`,
         ),
       ).toEqual([]);
     } finally {

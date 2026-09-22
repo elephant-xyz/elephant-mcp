@@ -25,6 +25,13 @@ npm run sync
 
 Run the sync command again and verify it reports `unchanged: true`.
 
+Inspect the result: every `CountyTables` table is a same-named SQL table with
+`county` and `data_group` columns, and `atlas_state` lists the loaded groups.
+
+```bash
+sqlite3 /tmp/elephant-atlas.sqlite ".tables" "SELECT county, data_group FROM atlas_state"
+```
+
 ## Test stdio
 
 ```bash

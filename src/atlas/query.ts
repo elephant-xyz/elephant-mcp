@@ -1,6 +1,12 @@
 import { GroupIdentifierSchema, TableIdentifierSchema } from "./contracts.ts";
-import { awaitAtlasReady } from "./runtime.ts";
-import { escapeAtlasLiteral, quoteAtlasIdentifier } from "./registry.ts";
+import { awaitAtlasReady, type AtlasRuntime } from "./runtime.ts";
+import {
+  escapeAtlasLiteral,
+  qualifyAtlasTable,
+  quoteAtlasIdentifier,
+  readAtlasCatalog,
+  type AtlasCatalogColumn,
+} from "./tables.ts";
 import { validateSelectQuery } from "../lib/sqlSafety.ts";
 
 export interface AtlasSource {
@@ -30,6 +36,21 @@ function normalizedRows(
       ]),
     ),
   );
+}
+
+function scope(source: AtlasSource): string {
+  return `county = ${escapeAtlasLiteral(source.county)}
+    AND data_group = ${escapeAtlasLiteral(source.dataGroup)}`;
+}
+
+function catalog(runtime: AtlasRuntime) {
+  return readAtlasCatalog(runtime.connections.read, runtime.backend.kind);
+}
+
+function primaryKeyColumn(columns: AtlasCatalogColumn[]): string {
+  const names = new Set(columns.map((column) => column.name));
+  if (names.has("relationship_cid")) return "relationship_cid";
+  return names.has("cid") ? "cid" : "property_cid";
 }
 
 export async function resolveAtlasSource(
@@ -68,54 +89,6 @@ export async function resolveAtlasSource(
   };
 }
 
-async function scopedRelation(
-  county: string,
-  dataGroup: string,
-  table: string,
-): Promise<{ relation: string; source: AtlasSource }> {
-  const logicalName = TableIdentifierSchema.parse(table);
-  const source = await resolveAtlasSource(county, dataGroup);
-  if (logicalName === "properties") {
-    return {
-      relation: `SELECT
-        property_cid,
-        root_schema_cid,
-        root_cid
-       FROM atlas_property_roots
-       WHERE county = ${escapeAtlasLiteral(source.county)}
-         AND data_group = ${escapeAtlasLiteral(source.dataGroup)}`,
-      source,
-    };
-  }
-
-  const runtime = await awaitAtlasReady();
-  const registry = await runtime.connections.read(
-    `SELECT physical_table_name, primary_key_column
-     FROM atlas_table_registry
-     WHERE table_name = ${escapeAtlasLiteral(logicalName)}`,
-  );
-  const registered = registry[0];
-  if (registered === undefined) {
-    throw new Error(`Atlas table '${logicalName}' is not synchronized`);
-  }
-  const physical = String(registered.physical_table_name);
-  const primaryKey = String(registered.primary_key_column);
-  return {
-    relation: `SELECT
-      content.*,
-      membership.property_cid,
-      membership.parquet_data_group_cid
-     FROM ${quoteAtlasIdentifier(physical)} AS content
-     JOIN atlas_membership AS membership
-       ON membership.table_name = ${escapeAtlasLiteral(logicalName)}
-      AND membership.row_cid =
-        content.${quoteAtlasIdentifier(primaryKey)}
-     WHERE membership.county = ${escapeAtlasLiteral(source.county)}
-       AND membership.data_group = ${escapeAtlasLiteral(source.dataGroup)}`,
-    source,
-  };
-}
-
 function validateScopedQuery(statement: string): string {
   const validation = validateSelectQuery(statement);
   if (!validation.ok) {
@@ -146,16 +119,19 @@ export async function runAtlasQuery(args: {
   table: string;
 }): Promise<AtlasQueryResult> {
   const statement = validateScopedQuery(args.sql);
-  const { relation, source } = await scopedRelation(
-    args.county,
-    args.dataGroup,
-    args.table,
-  );
-  const limit = Math.max(1, Math.min(args.limit, 1000));
+  const table = TableIdentifierSchema.parse(args.table);
+  const source = await resolveAtlasSource(args.county, args.dataGroup);
   const runtime = await awaitAtlasReady();
+  if (!(await catalog(runtime)).has(table)) {
+    throw new Error(`Atlas table '${table}' is not synchronized`);
+  }
+  const limit = Math.max(1, Math.min(args.limit, 1000));
   const rows = normalizedRows(
     await runtime.connections.read(
-      `WITH properties AS (${relation})
+      `WITH properties AS (
+         SELECT * FROM ${qualifyAtlasTable(runtime.backend.kind, table)}
+         WHERE ${scope(source)}
+       )
        SELECT *
        FROM (${statement}) AS atlas_query
        LIMIT ${limit}`,
@@ -171,82 +147,39 @@ export async function getAtlasQuerySchema(args: {
 }) {
   const source = await resolveAtlasSource(args.county, args.dataGroup);
   const runtime = await awaitAtlasReady();
+  const tables = await catalog(runtime);
   if (args.table === undefined) {
-    const tables = await runtime.connections.read(
-      `SELECT
-        registry.table_name,
-        registry.table_kind,
-        registry.primary_key_column,
-        count(membership.row_cid) AS rows
-       FROM atlas_table_registry AS registry
-       LEFT JOIN atlas_membership AS membership
-         ON membership.table_name = registry.table_name
-        AND membership.county = ${escapeAtlasLiteral(source.county)}
-        AND membership.data_group = ${escapeAtlasLiteral(source.dataGroup)}
-       GROUP BY
-         registry.table_name,
-         registry.table_kind,
-         registry.primary_key_column
-       ORDER BY registry.table_name`,
-    );
-    const roots = await runtime.connections.read(
-      `SELECT count(*) AS rows
-       FROM atlas_property_roots
-       WHERE county = ${escapeAtlasLiteral(source.county)}
-         AND data_group = ${escapeAtlasLiteral(source.dataGroup)}`,
-    );
+    const counts =
+      tables.size === 0
+        ? []
+        : await runtime.connections.read(
+            [...tables.keys()]
+              .map(
+                (name) =>
+                  `SELECT ${escapeAtlasLiteral(name)} AS table_name, count(*) AS rows
+                   FROM ${quoteAtlasIdentifier(name)}
+                   WHERE ${scope(source)}`,
+              )
+              .join(" UNION ALL "),
+          );
     return {
-      tables: [
-        {
-          tableName: "properties",
-          tableKind: "property_roots",
-          primaryKeyColumn: "property_cid",
-          rows: Number(roots[0]?.rows ?? 0),
-        },
-        ...tables.map((row) => ({
-          tableName: String(row.table_name),
-          tableKind: String(row.table_kind),
-          primaryKeyColumn: String(row.primary_key_column),
-          rows: Number(row.rows ?? 0),
-        })),
-      ],
+      tables: counts.map((row) => ({
+        tableName: String(row.table_name),
+        primaryKeyColumn: primaryKeyColumn(
+          tables.get(String(row.table_name)) ?? [],
+        ),
+        rows: Number(row.rows ?? 0),
+      })),
       source,
     };
   }
 
   const table = TableIdentifierSchema.parse(args.table);
-  if (table === "properties") {
-    return {
-      columns: [
-        { name: "property_cid", type: "text" },
-        { name: "root_schema_cid", type: "text" },
-        { name: "root_cid", type: "text" },
-      ],
-      table,
-      source,
-    };
-  }
-  const columns = await runtime.connections.read(
-    `SELECT column_name, canonical_type
-     FROM atlas_column_registry
-     WHERE table_name = ${escapeAtlasLiteral(table)}
-     ORDER BY column_name`,
-  );
-  if (columns.length === 0) {
+  const columns = tables.get(table);
+  if (columns === undefined) {
     throw new Error(`Atlas table '${table}' is not synchronized`);
   }
-  return {
-    columns: [
-      ...columns.map((row) => ({
-        name: String(row.column_name),
-        type: String(row.canonical_type),
-      })),
-      { name: "property_cid", type: "text" },
-      { name: "parquet_data_group_cid", type: "text" },
-    ],
-    table,
-    source,
-  };
+  return { columns, table, source };
 }
 
 export async function listAtlasCounties() {
@@ -313,24 +246,24 @@ export async function listAtlasProperties(args: {
 }) {
   const source = await resolveAtlasSource(args.county, args.dataGroup);
   const runtime = await awaitAtlasReady();
+  const limit = Math.max(1, Math.min(args.limit, 500));
+  const offset = Math.max(0, args.offset);
+  if (!(await catalog(runtime)).has("properties")) {
+    return { limit, offset, properties: [], source, total: 0 };
+  }
   const count = await runtime.connections.read(
-    `SELECT count(DISTINCT property_cid) AS count
-     FROM atlas_property_roots
-     WHERE county = ${escapeAtlasLiteral(source.county)}
-       AND data_group = ${escapeAtlasLiteral(source.dataGroup)}`,
+    `SELECT count(*) AS count FROM properties WHERE ${scope(source)}`,
   );
   const rows = await runtime.connections.read(
-    `SELECT property_cid, root_schema_cid, root_cid
-     FROM atlas_property_roots
-     WHERE county = ${escapeAtlasLiteral(source.county)}
-       AND data_group = ${escapeAtlasLiteral(source.dataGroup)}
-     ORDER BY property_cid, root_schema_cid
-     LIMIT ${Math.max(1, Math.min(args.limit, 500))}
-     OFFSET ${Math.max(0, args.offset)}`,
+    `SELECT * FROM properties
+     WHERE ${scope(source)}
+     ORDER BY property_cid
+     LIMIT ${limit}
+     OFFSET ${offset}`,
   );
   return {
-    limit: Math.max(1, Math.min(args.limit, 500)),
-    offset: Math.max(0, args.offset),
+    limit,
+    offset,
     properties: normalizedRows(rows),
     source,
     total: Number(count[0]?.count ?? 0),
@@ -344,48 +277,17 @@ export async function getAtlasProperty(args: {
 }) {
   const source = await resolveAtlasSource(args.county, args.dataGroup);
   const runtime = await awaitAtlasReady();
-  const roots = await runtime.connections.read(
-    `SELECT root_schema_cid, root_cid
-     FROM atlas_property_roots
-     WHERE county = ${escapeAtlasLiteral(source.county)}
-       AND data_group = ${escapeAtlasLiteral(source.dataGroup)}
-       AND property_cid = ${escapeAtlasLiteral(args.propertyCid)}
-     ORDER BY root_schema_cid`,
-  );
-  if (roots.length === 0) {
+  const records: Record<string, Array<Record<string, unknown>>> = {};
+  for (const table of (await catalog(runtime)).keys()) {
+    const rows = await runtime.connections.read(
+      `SELECT * FROM ${quoteAtlasIdentifier(table)}
+       WHERE ${scope(source)}
+         AND property_cid = ${escapeAtlasLiteral(args.propertyCid)}`,
+    );
+    if (rows.length > 0) records[table] = normalizedRows(rows);
+  }
+  if (records.properties === undefined) {
     throw new Error(`CID_NOT_PUBLISHED: ${args.propertyCid}`);
   }
-  const memberships = await runtime.connections.read(
-    `SELECT table_name, row_cid
-     FROM atlas_membership
-     WHERE county = ${escapeAtlasLiteral(source.county)}
-       AND data_group = ${escapeAtlasLiteral(source.dataGroup)}
-       AND property_cid = ${escapeAtlasLiteral(args.propertyCid)}
-     ORDER BY table_name, row_cid`,
-  );
-  const records: Record<string, Array<Record<string, unknown>>> = {};
-  for (const membership of memberships) {
-    const tableName = String(membership.table_name);
-    const registered = await runtime.connections.read(
-      `SELECT physical_table_name, primary_key_column
-       FROM atlas_table_registry
-       WHERE table_name = ${escapeAtlasLiteral(tableName)}`,
-    );
-    const table = registered[0];
-    if (table === undefined) continue;
-    const row = await runtime.connections.read(
-      `SELECT *
-       FROM ${quoteAtlasIdentifier(String(table.physical_table_name))}
-       WHERE ${quoteAtlasIdentifier(
-         String(table.primary_key_column),
-       )} = ${escapeAtlasLiteral(String(membership.row_cid))}`,
-    );
-    (records[tableName] ??= []).push(...normalizedRows(row));
-  }
-  return {
-    propertyCid: args.propertyCid,
-    records,
-    roots: normalizedRows(roots),
-    source,
-  };
+  return { propertyCid: args.propertyCid, records, source };
 }

@@ -29,7 +29,7 @@ import {
   type AtlasStateRow,
   type AtlasSyncStateRow,
 } from "./plan.ts";
-import { inspectAtlasParquet } from "./registry.ts";
+import { inspectAtlasParquet } from "./tables.ts";
 import { cleanupAtlasStages, initializeAtlasSchema } from "./schema.ts";
 
 export interface AtlasGroupSyncSummary {
@@ -145,7 +145,7 @@ async function stageGroup(args: {
   let rows = 0;
   let tableIndex = 0;
 
-  for (const [logicalName, table] of Object.entries(tablesBlock.value.tables)) {
+  for (const [name, table] of Object.entries(tablesBlock.value.tables)) {
     const files: string[] = [];
     for (const part of table.parts) {
       const downloaded = await downloadAtlasPart(
@@ -155,7 +155,7 @@ async function stageGroup(args: {
           args.runDirectory,
           args.group.county,
           args.group.dataGroup,
-          logicalName,
+          name,
         ),
         args.fetchOptions,
       );
@@ -173,13 +173,13 @@ async function stageGroup(args: {
     });
     if (loadedRows !== table.rows) {
       throw new Error(
-        `Atlas table ${logicalName} loaded ${loadedRows} rows, expected ${table.rows}`,
+        `Atlas table ${name} loaded ${loadedRows} rows, expected ${table.rows}`,
       );
     }
     rows += loadedRows;
     stagedTables.push({
       columns,
-      logicalName,
+      name,
       rows: loadedRows,
       stageTable,
     });

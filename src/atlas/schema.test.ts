@@ -35,13 +35,8 @@ describe("Atlas control schema", () => {
       );
 
       expect(tables.map((row) => row.name)).toEqual([
-        "atlas_column_registry",
-        "atlas_membership",
-        "atlas_property_roots",
         "atlas_state",
-        "atlas_sync_runs",
         "atlas_sync_state",
-        "atlas_table_registry",
       ]);
       expect(tables.map((row) => row.name)).not.toContain("functionEmbeddings");
     } finally {

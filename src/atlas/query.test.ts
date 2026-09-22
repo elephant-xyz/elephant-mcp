@@ -10,6 +10,7 @@ import {
   getAtlasProperty,
   getAtlasQuerySchema,
   listAtlasCounties,
+  listAtlasProperties,
   runAtlasQuery,
 } from "./query.ts";
 import {
@@ -30,8 +31,11 @@ afterEach(async () => {
   );
 });
 
+const text = (name: string) =>
+  ({ name, canonicalType: "text", sourceType: "VARCHAR" }) as const;
+
 describe("Atlas query repository", () => {
-  it("queries one scoped normalized table with provenance", async () => {
+  it("queries one scoped table with provenance", async () => {
     const directory = await mkdtemp(path.join(os.tmpdir(), "atlas-query-"));
     directories.push(directory);
     const backend = parseAtlasDatabaseUrl(
@@ -41,7 +45,7 @@ describe("Atlas query repository", () => {
     try {
       await initializeAtlasSchema(connections.write);
       await connections.write.execute(
-        `CREATE TABLE stage_property (
+        `CREATE TABLE atlas_stage__property (
           cid TEXT,
           property_cid TEXT,
           data_group_cid TEXT,
@@ -50,8 +54,14 @@ describe("Atlas query repository", () => {
         )`,
       );
       await connections.write.execute(
-        `INSERT INTO stage_property
+        `INSERT INTO atlas_stage__property
          VALUES ('entity-cid', 'property-cid', 'schema-cid', 'parcel-1', 125000)`,
+      );
+      await connections.write.execute(
+        "CREATE TABLE atlas_stage__properties (property_cid TEXT, bafkreischema TEXT)",
+      );
+      await connections.write.execute(
+        "INSERT INTO atlas_stage__properties VALUES ('property-cid', 'root-cid')",
       );
       await connections.transaction((executor) =>
         applyAtlasIndexTransaction({
@@ -74,35 +84,25 @@ describe("Atlas query repository", () => {
               tables: [
                 {
                   columns: [
-                    {
-                      name: "cid",
-                      canonicalType: "text",
-                      sourceType: "VARCHAR",
-                    },
-                    {
-                      name: "property_cid",
-                      canonicalType: "text",
-                      sourceType: "VARCHAR",
-                    },
-                    {
-                      name: "data_group_cid",
-                      canonicalType: "text",
-                      sourceType: "VARCHAR",
-                    },
-                    {
-                      name: "parcel_identifier",
-                      canonicalType: "text",
-                      sourceType: "VARCHAR",
-                    },
+                    text("cid"),
+                    text("property_cid"),
+                    text("data_group_cid"),
+                    text("parcel_identifier"),
                     {
                       name: "market_value",
                       canonicalType: "int64",
                       sourceType: "BIGINT",
                     },
                   ],
-                  logicalName: "property",
+                  name: "property",
                   rows: 1,
-                  stageTable: "stage_property",
+                  stageTable: "atlas_stage__property",
+                },
+                {
+                  columns: [text("property_cid"), text("bafkreischema")],
+                  name: "properties",
+                  rows: 1,
+                  stageTable: "atlas_stage__properties",
                 },
               ],
             },
@@ -110,18 +110,6 @@ describe("Atlas query repository", () => {
           indexCid: INDEX,
           withdrawals: [],
         }),
-      );
-      await connections.write.execute(
-        `INSERT INTO atlas_property_roots
-         VALUES (
-           'lee',
-           'county',
-           'property-cid',
-           'schema-cid',
-           'root-cid',
-           'archive-cid',
-           'tables-cid'
-         )`,
       );
       setAtlasRuntimeForTests({
         backend,
@@ -140,12 +128,7 @@ describe("Atlas query repository", () => {
       });
       expect(result).toMatchObject({
         rowCount: 1,
-        rows: [
-          {
-            parcel_identifier: "parcel-1",
-            market_value: 125000,
-          },
-        ],
+        rows: [{ parcel_identifier: "parcel-1", market_value: 125000 }],
         source: {
           county: "lee",
           dataGroup: "county",
@@ -153,16 +136,28 @@ describe("Atlas query repository", () => {
           indexCid: INDEX,
         },
       });
-      await expect(
-        runAtlasQuery({
+      expect(
+        await runAtlasQuery({
           county: "lee",
-          dataGroup: "county",
+          dataGroup: "hoa",
           table: "property",
-          sql: "SELECT * FROM atlas_state",
+          sql: "SELECT * FROM properties",
           limit: 10,
-        }),
-      ).rejects.toThrow("logical properties relation");
+        }).catch((error: Error) => error.message),
+      ).toContain("not published");
 
+      expect(
+        await getAtlasQuerySchema({ county: "lee", dataGroup: "county" }),
+      ).toMatchObject({
+        tables: [
+          {
+            tableName: "properties",
+            primaryKeyColumn: "property_cid",
+            rows: 1,
+          },
+          { tableName: "property", primaryKeyColumn: "cid", rows: 1 },
+        ],
+      });
       expect(
         await getAtlasQuerySchema({
           county: "lee",
@@ -172,13 +167,26 @@ describe("Atlas query repository", () => {
       ).toMatchObject({
         table: "property",
         columns: expect.arrayContaining([
-          { name: "market_value", type: "int64" },
+          { name: "market_value", type: "bigint" },
           { name: "property_cid", type: "text" },
         ]),
       });
       expect(await listAtlasCounties()).toMatchObject({
         countyCount: 1,
         indexCid: INDEX,
+      });
+      expect(
+        await listAtlasProperties({
+          county: "lee",
+          dataGroup: "county",
+          limit: 10,
+          offset: 0,
+        }),
+      ).toMatchObject({
+        total: 1,
+        properties: [
+          { property_cid: "property-cid", bafkreischema: "root-cid" },
+        ],
       });
       expect(
         await getAtlasProperty({
@@ -189,15 +197,17 @@ describe("Atlas query repository", () => {
       ).toMatchObject({
         propertyCid: "property-cid",
         records: {
-          property: [
-            {
-              cid: "entity-cid",
-              parcel_identifier: "parcel-1",
-            },
-          ],
+          properties: [{ bafkreischema: "root-cid" }],
+          property: [{ cid: "entity-cid", parcel_identifier: "parcel-1" }],
         },
-        roots: [{ root_cid: "root-cid" }],
       });
+      await expect(
+        getAtlasProperty({
+          county: "lee",
+          dataGroup: "county",
+          propertyCid: "missing",
+        }),
+      ).rejects.toThrow("CID_NOT_PUBLISHED");
     } finally {
       await connections.close();
     }
