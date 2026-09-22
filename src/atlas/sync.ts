@@ -20,7 +20,7 @@ import {
   type AtlasDuckDb,
 } from "./duckdbEtl.ts";
 import type { AtlasGatewayFetchOptions } from "./gateways.ts";
-import { acquireAtlasSyncLock } from "./locks.ts";
+import { acquireAtlasSyncLock, type AtlasSyncLock } from "./locks.ts";
 import {
   planAtlasSync,
   type AtlasGroupTarget,
@@ -192,11 +192,12 @@ export async function syncAtlas(
   const connections =
     options.connections ?? (await openAtlasConnections(backend));
   const ownsConnections = options.connections === undefined;
-  await initializeAtlasSchema(connections.write);
-  const lock = await acquireAtlasSyncLock(backend, connections.write);
-  const runDirectory =
+  // Only ever delete a directory this run created itself.
+  const runDirectory = path.join(
     options.stagingDirectory ??
-    path.join(getDefaultDataDir(), "atlas", "staging", randomUUID());
+      path.join(getDefaultDataDir(), "atlas", "staging"),
+    randomUUID(),
+  );
   const gateways =
     options.gateways ?? configuredGateways(config.ATLAS_GATEWAYS);
   const fetchOptions: AtlasGatewayFetchOptions = {
@@ -204,8 +205,11 @@ export async function syncAtlas(
     gateways,
   };
   let duckdb: AtlasDuckDb | undefined;
+  let lock: AtlasSyncLock | undefined;
 
   try {
+    await initializeAtlasSchema(connections.write);
+    lock = await acquireAtlasSyncLock(backend, connections.write);
     const resolved = await resolveAtlasIndex(
       options.ipns ?? config.ATLAS_IPNS,
       fetchOptions,
@@ -275,7 +279,7 @@ export async function syncAtlas(
     await rm(runDirectory, { recursive: true, force: true }).catch(
       () => undefined,
     );
-    await lock.release();
+    await lock?.release();
     if (ownsConnections) {
       await connections.close();
     }
