@@ -104,6 +104,13 @@ export async function awaitAtlasReady(): Promise<AtlasRuntime> {
     // The status below distinguishes stale data from an uninitialized store.
     await runtime.sync.catch(() => undefined);
   }
+  if (
+    (runtime.status === "uninitialized" || runtime.status === "error") &&
+    (await hasAcceptedSnapshot(runtime.connections))
+  ) {
+    // A separate sync job (hosted mode) landed a snapshot after startup.
+    runtime.status = runtime.status === "error" ? "stale" : "ready";
+  }
   if (runtime.status === "uninitialized" || runtime.status === "error") {
     throw new Error(
       runtime.error === undefined

@@ -83,4 +83,20 @@ describe("Atlas runtime readiness", () => {
       await runtime.connections.close();
     }
   });
+
+  it("notices a snapshot landed by a separate sync job", async () => {
+    const runtime = await open();
+    try {
+      runtime.status = "uninitialized";
+      setAtlasRuntimeForTests(runtime);
+      await expect(awaitAtlasReady()).rejects.toThrow("ATLAS_NOT_INITIALIZED");
+
+      await accept(runtime.connections);
+      await expect(awaitAtlasReady()).resolves.toMatchObject({
+        status: "ready",
+      });
+    } finally {
+      await runtime.connections.close();
+    }
+  });
 });
