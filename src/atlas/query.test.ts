@@ -11,6 +11,7 @@ import {
   getAtlasQuerySchema,
   listAtlasCounties,
   listAtlasProperties,
+  normalizedRows,
   runAtlasQuery,
 } from "./query.ts";
 import {
@@ -381,5 +382,15 @@ describe("Atlas query repository", () => {
     } finally {
       await connections.close();
     }
+  });
+
+  it("normalizes int64 values to numbers when exact and strings otherwise", () => {
+    expect(
+      normalizedRows([
+        { count: 3n, big: 2n ** 63n - 1n, plain: 7, text: "x", none: null },
+      ]),
+    ).toEqual([
+      { count: 3, big: "9223372036854775807", plain: 7, text: "x", none: null },
+    ]);
   });
 });

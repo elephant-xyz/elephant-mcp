@@ -29,14 +29,22 @@ export interface AtlasQueryResult {
   source: AtlasSource;
 }
 
-function normalizedRows(
+/**
+ * int64 values arrive as number (libsql) or bigint (postgres.js with
+ * types.bigint). Both become a JS number when exact, else a decimal string.
+ */
+export function normalizedRows(
   rows: Array<Record<string, unknown>>,
 ): Array<Record<string, unknown>> {
   return rows.map((row) =>
     Object.fromEntries(
       Object.entries(row).map(([key, value]) => [
         key,
-        typeof value === "bigint" ? Number(value) : value,
+        typeof value === "bigint"
+          ? Number.isSafeInteger(Number(value))
+            ? Number(value)
+            : value.toString()
+          : value,
       ]),
     ),
   );

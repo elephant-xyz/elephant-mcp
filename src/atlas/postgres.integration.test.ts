@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { parseAtlasDatabaseUrl } from "./backend.ts";
 import { openAtlasConnections } from "./connections.ts";
 import { acquireAtlasSyncLock } from "./locks.ts";
+import { normalizedRows } from "./query.ts";
 import { initializeAtlasSchema } from "./schema.ts";
 
 const databaseUrl = process.env.ATLAS_POSTGRES_TEST_URL;
@@ -51,6 +52,13 @@ describe.runIf(databaseUrl !== undefined)("Atlas Postgres integration", () => {
           `SELECT county FROM atlas_state WHERE county = '${county}'`,
         ),
       ).toEqual([]);
+      const [counted] = await first.read(
+        "SELECT count(*) AS count, 9007199254740993::bigint AS big FROM atlas_state",
+      );
+      expect(typeof counted?.count).toBe("bigint");
+      expect(normalizedRows([counted ?? {}])[0]).toMatchObject({
+        big: "9007199254740993",
+      });
     } finally {
       await Promise.all([first.close(), second.close()]);
     }

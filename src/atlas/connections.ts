@@ -130,13 +130,17 @@ async function openSqliteConnections(
 async function openPostgresConnections(
   backend: Extract<AtlasBackend, { kind: "postgres" }>,
 ): Promise<AtlasConnections> {
+  // int8 (BIGINT, count(*)) is returned as bigint rather than a string.
+  const types = { bigint: postgres.BigInt };
   const writeClient = postgres(backend.databaseUrl, {
     max: 1,
     prepare: false,
+    types,
   });
   const readClient = postgres(postgresReadUrl(backend.databaseUrl), {
     max: 5,
     prepare: false,
+    types,
   });
   const readDb = createPostgresDrizzle(readClient);
 
