@@ -109,7 +109,7 @@ function failureReason(
  * response. Each request has its own timeout and every failed attempt is
  * retained in the aggregate error.
  */
-export async function fetchFromAtlasGateways(
+async function fetchFromAtlasGateways(
   path: string,
   init: RequestInit,
   options: AtlasGatewayFetchOptions = {},

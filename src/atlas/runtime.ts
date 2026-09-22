@@ -85,7 +85,7 @@ export function initializeAtlasRuntime(options: {
   return runtimePromise;
 }
 
-export async function getAtlasRuntime(): Promise<AtlasRuntime> {
+async function getAtlasRuntime(): Promise<AtlasRuntime> {
   return runtimePromise ?? initializeAtlasRuntime({ startLocalSync: false });
 }
 
@@ -106,14 +106,6 @@ export async function awaitAtlasReady(): Promise<AtlasRuntime> {
     );
   }
   return runtime;
-}
-
-export async function closeAtlasRuntime(): Promise<void> {
-  const current = runtimePromise;
-  runtimePromise = undefined;
-  if (current === undefined) return;
-  const runtime = await current;
-  await runtime.connections.close();
 }
 
 export function resetAtlasRuntimeForTests(): void {

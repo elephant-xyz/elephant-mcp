@@ -45,7 +45,7 @@ export function qualifyAtlasTable(
   return `${backend === "sqlite" ? "main" : "public"}.${quoteAtlasIdentifier(name)}`;
 }
 
-export function canonicalAtlasType(sourceType: string): AtlasCanonicalType {
+function canonicalAtlasType(sourceType: string): AtlasCanonicalType {
   const type = sourceType.trim().toUpperCase();
   if (
     type === "VARCHAR" ||

@@ -54,13 +54,3 @@ export function parseAtlasDatabaseUrl(
 
   throw new Error("DATABASE_URL must use file:, postgres://, or postgresql://");
 }
-
-export function redactDatabaseUrl(databaseUrl: string): string {
-  const url = new URL(databaseUrl);
-  if (url.protocol === "file:") {
-    return url.href;
-  }
-  url.username = url.username === "" ? "" : "[redacted]";
-  url.password = url.password === "" ? "" : "[redacted]";
-  return url.toString();
-}

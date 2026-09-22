@@ -81,7 +81,6 @@
     "h3": "^2.0.1-rc.22",
     "helia": "^5.0.0",
     "ipfs-only-hash": "^4.0.0",
-    "ipfs-unixfs-importer": "^15.4.0",
     "js-tiktoken": "1.0.21",
     "multiformats": "^13.0.0",
     "nitropack": "^2.13.4",

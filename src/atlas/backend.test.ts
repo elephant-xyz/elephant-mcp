@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   getDefaultAtlasDatabaseUrl,
   parseAtlasDatabaseUrl,
-  redactDatabaseUrl,
 } from "./backend.ts";
 
 describe("Atlas database URL", () => {
@@ -44,15 +43,5 @@ describe("Atlas database URL", () => {
     expect(() =>
       parseAtlasDatabaseUrl("file:///tmp/atlas.sqlite?mode=ro"),
     ).toThrow("must not contain query");
-  });
-
-  it("redacts Postgres credentials", () => {
-    expect(
-      redactDatabaseUrl(
-        "postgresql://user:secret@example.com/atlas?sslmode=require",
-      ),
-    ).toBe(
-      "postgresql://%5Bredacted%5D:%5Bredacted%5D@example.com/atlas?sslmode=require",
-    );
   });
 });

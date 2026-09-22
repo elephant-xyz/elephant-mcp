@@ -13,7 +13,6 @@ const sharedExternals = [
   "helia",
   "@helia/json",
   "@ipld/dag-json",
-  "ipfs-unixfs-importer",
   "multiformats",
   "postgres",
   // Optional native (node-gyp) addons — lazy-loaded at runtime by the code

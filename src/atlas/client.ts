@@ -23,7 +23,6 @@ import {
   verifyRawBlockCid,
   verifyUnixFsCid,
 } from "./integrity.ts";
-import { KuboUnixFsVerifier, responseByteSource } from "./unixfs.ts";
 
 export interface ResolvedAtlasIndex {
   bytes: Uint8Array;
@@ -135,13 +134,17 @@ export async function downloadAtlasPart(
 ): Promise<DownloadedAtlasPart> {
   await mkdir(directory, { recursive: true });
   const fetched = await fetchAtlasUnixFs(cid, options);
+  if (fetched.response.body === null) {
+    throw new Error("Atlas gateway response has no body");
+  }
+  const body = fetched.response.body;
   const finalPath = path.join(directory, `${cid}.parquet`);
   const temporaryPath = `${finalPath}.${process.pid}.${randomUUID()}.tmp`;
   const handle = await open(temporaryPath, "wx", 0o600);
 
   try {
     async function* writeAndVerify() {
-      for await (const chunk of responseByteSource(fetched.response)) {
+      for await (const chunk of body) {
         await handle.write(chunk);
         yield chunk;
       }
@@ -150,7 +153,6 @@ export async function downloadAtlasPart(
     const verification = await verifyUnixFsCid(
       writeAndVerify(),
       cid,
-      new KuboUnixFsVerifier(),
       expectedBytes,
     );
     await handle.sync();

@@ -93,6 +93,12 @@ async function openSqliteConnections(
   await mkdir(path.dirname(backend.filePath), { recursive: true });
   const writeClient = createClient({ url: backend.databaseUrl });
   const readClient = createClient({ url: backend.databaseUrl });
+  // WAL lets reads keep serving the accepted snapshot while a sync commits;
+  // busy_timeout covers the brief checkpoint and commit locks.
+  for (const client of [writeClient, readClient]) {
+    await client.execute("PRAGMA journal_mode = WAL");
+    await client.execute("PRAGMA busy_timeout = 5000");
+  }
   await readClient.execute("PRAGMA query_only = ON");
   const readDb = createLibsqlDrizzle(readClient);
 

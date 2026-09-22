@@ -6,7 +6,6 @@ import { describe, expect, it } from "vitest";
 import {
   calculateAtlasIndexCid,
   CidVerificationError,
-  type UnixFsVerifier,
   verifyRawBlockCid,
   verifyUnixFsCid,
 } from "./integrity.ts";
@@ -20,16 +19,6 @@ async function rawCid(bytes: Uint8Array): Promise<string> {
 async function* chunks(...values: Uint8Array[]) {
   yield* values;
 }
-
-const rawLeafVerifier: UnixFsVerifier = {
-  async calculateCid(source) {
-    const parts: Uint8Array[] = [];
-    for await (const part of source) {
-      parts.push(part);
-    }
-    return rawCid(Buffer.concat(parts));
-  },
-};
 
 describe("Atlas CID integrity", () => {
   it("verifies exact raw block bytes without decoding or reserializing", async () => {
@@ -81,7 +70,6 @@ describe("Atlas CID integrity", () => {
       verifyUnixFsCid(
         chunks(first, second),
         expectedCid,
-        rawLeafVerifier,
         first.byteLength + second.byteLength,
       ),
     ).resolves.toEqual({
@@ -91,30 +79,28 @@ describe("Atlas CID integrity", () => {
     });
   });
 
+  it("hashes multi-chunk streams as a Kubo dag-pb root", async () => {
+    const bytes = new Uint8Array(300_000).fill(7);
+
+    await expect(
+      verifyUnixFsCid(
+        chunks(bytes.subarray(0, 1000), bytes.subarray(1000)),
+        await rawCid(bytes),
+      ),
+    ).rejects.toMatchObject({
+      actualCid: expect.stringMatching(/^bafybei/u),
+    });
+  });
+
   it("rejects UnixFS CID and byte-count mismatches", async () => {
     const bytes = encoder.encode("part bytes");
     const expectedCid = await rawCid(bytes);
-    const wrongCid = await rawCid(encoder.encode("other bytes"));
-    const wrongVerifier: UnixFsVerifier = {
-      async calculateCid(source) {
-        for await (const chunk of source) {
-          // Consume the entire stream as a production verifier must.
-          void chunk;
-        }
-        return wrongCid;
-      },
-    };
 
     await expect(
-      verifyUnixFsCid(chunks(bytes), expectedCid, wrongVerifier),
+      verifyUnixFsCid(chunks(bytes), await rawCid(encoder.encode("other"))),
     ).rejects.toBeInstanceOf(CidVerificationError);
     await expect(
-      verifyUnixFsCid(
-        chunks(bytes),
-        expectedCid,
-        rawLeafVerifier,
-        bytes.byteLength + 1,
-      ),
+      verifyUnixFsCid(chunks(bytes), expectedCid, bytes.byteLength + 1),
     ).rejects.toThrow(`UnixFS byte count is ${bytes.byteLength}`);
   });
 });

@@ -1,3 +1,4 @@
+import Hash from "ipfs-only-hash";
 import { CID } from "multiformats/cid";
 import * as raw from "multiformats/codecs/raw";
 import { identity } from "multiformats/hashes/identity";
@@ -116,26 +117,15 @@ export function verifyAtlasIndexRoot(root: string, indexCid: string): void {
   }
 }
 
-export type ByteSource = AsyncIterable<Uint8Array>;
-
 /**
- * Production implementations must consume the source once and calculate the
- * UnixFS root with CIDv1, raw leaves, and the Kubo-compatible default chunker.
- */
-export interface UnixFsVerifier {
-  calculateCid(source: ByteSource): Promise<string>;
-}
-
-/**
- * Verify a streamed UnixFS file without coupling this package to an importer.
- *
- * The byte count is observed while the injected verifier consumes the source,
- * so callers can also enforce the `CountyTables` part size.
+ * Verify a streamed UnixFS file against the CID produced by
+ * `elephant-cli upload` and Kubo's `add --cid-version=1 --raw-leaves=true`.
+ * The byte count is observed while hashing so callers can also enforce the
+ * `CountyTables` part size.
  */
 export async function verifyUnixFsCid(
-  source: ByteSource,
+  source: AsyncIterable<Uint8Array>,
   expectedCid: string,
-  verifier: UnixFsVerifier,
   expectedBytes?: number,
 ): Promise<CidVerificationResult> {
   const canonicalExpectedCid = CidV1Schema.parse(expectedCid);
@@ -149,11 +139,8 @@ export async function verifyUnixFsCid(
   }
 
   let bytes = 0;
-  async function* counted(): ByteSource {
+  async function* counted(): AsyncIterable<Uint8Array> {
     for await (const chunk of source) {
-      if (!(chunk instanceof Uint8Array)) {
-        throw new Error("UnixFS source yielded a non-Uint8Array chunk");
-      }
       const nextBytes = bytes + chunk.byteLength;
       if (!Number.isSafeInteger(nextBytes)) {
         throw new Error("UnixFS byte count exceeds the safe integer range");
@@ -163,7 +150,9 @@ export async function verifyUnixFsCid(
     }
   }
 
-  const actualCid = CidV1Schema.parse(await verifier.calculateCid(counted()));
+  const actualCid = CidV1Schema.parse(
+    await Hash.of(counted(), { cidVersion: 1, rawLeaves: true }),
+  );
   if (actualCid !== canonicalExpectedCid) {
     throw new CidVerificationError(canonicalExpectedCid, actualCid);
   }

@@ -1,4 +1,5 @@
 import { encode as encodeDagJson } from "@ipld/dag-json";
+import Hash from "ipfs-only-hash";
 import { DuckDBInstance } from "@duckdb/node-api";
 import { CID } from "multiformats/cid";
 import * as dagJson from "@ipld/dag-json";
@@ -13,7 +14,6 @@ import { parseAtlasDatabaseUrl } from "./backend.ts";
 import { openAtlasConnections } from "./connections.ts";
 import { escapeAtlasLiteral } from "./tables.ts";
 import { syncAtlas } from "./sync.ts";
-import { KuboUnixFsVerifier } from "./unixfs.ts";
 
 const directories: string[] = [];
 
@@ -38,10 +38,6 @@ async function rawCid(value: string) {
     raw.code,
     await sha256.digest(new TextEncoder().encode(value)),
   );
-}
-
-async function* fileChunks(bytes: Uint8Array) {
-  yield bytes;
 }
 
 async function writeParquet(filePath: string, select: string) {
@@ -71,9 +67,7 @@ async function publish(
     path.join(directory, `${revision}.parquet`),
     select,
   );
-  const partCid = await new KuboUnixFsVerifier().calculateCid(
-    fileChunks(parquet),
-  );
+  const partCid = await Hash.of(parquet, { cidVersion: 1, rawLeaves: true });
   const countyIndex = await dagJsonBlock({
     label: "CountyIndex",
     version: 1,
