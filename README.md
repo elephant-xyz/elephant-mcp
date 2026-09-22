@@ -86,7 +86,10 @@ Primary keys:
 | `properties`  | `(county, data_group, property_cid)`     |
 
 `export-tables` writes each entity and relationship once per archive, with
-`property_cid` set to the first property that referenced it. Loading a group deletes its
+`property_cid` set to the first property that referenced it. `getOracleProperty`
+therefore seeds with the property's own rows and follows relationship rows
+`from_cid` to `to_cid` inside the scope (to a fixpoint or depth 8) to gather
+people, companies, and addresses shared with earlier properties. Loading a group deletes its
 `county`/`data_group` scope and reinserts it with `ON CONFLICT DO UPDATE`;
 withdrawing a group is the delete alone. Both happen in one transaction.
 

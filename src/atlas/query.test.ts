@@ -255,4 +255,112 @@ describe("Atlas query repository", () => {
       await connections.close();
     }
   });
+
+  it("gathers entities shared with an earlier property by walking relationships", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "atlas-walk-"));
+    directories.push(directory);
+    const backend = parseAtlasDatabaseUrl(
+      `file://${path.join(directory, "atlas.sqlite")}`,
+    );
+    const connections = await openAtlasConnections(backend);
+    const entity = (cid: string, property_cid: string) => ({
+      cid,
+      property_cid,
+      data_group_cid: "schema-cid",
+    });
+    const link = (
+      relationship_cid: string,
+      from_cid: string,
+      to_cid: string,
+      property_cid: string,
+    ) => ({
+      relationship_cid,
+      from_cid,
+      to_cid,
+      property_cid,
+      data_group_cid: "schema-cid",
+    });
+    const table = (name: string, rows: Array<Record<string, unknown>>) => ({
+      columns: Object.keys(rows[0] ?? {}).map(text),
+      name,
+      rows: rows.length,
+      async *read() {
+        yield* rows;
+      },
+    });
+    try {
+      await initializeAtlasSchema(connections.write);
+      await connections.transaction((executor) =>
+        applyAtlasIndexTransaction({
+          backend: "sqlite",
+          executor,
+          generatedFrom: "generated",
+          groups: [
+            {
+              group: {
+                action: "load",
+                county: "lee",
+                state: "FL",
+                fips: "12071",
+                dataGroup: "county",
+                archiveCid: "archive-cid",
+                tablesCid: "tables-cid",
+                schemaCid: "schema-cid",
+                publishedAt: "2026-09-21T17:23:52.000Z",
+              },
+              tables: [
+                table("properties", [
+                  { property_cid: "p1" },
+                  { property_cid: "p2" },
+                ]),
+                table("property", [entity("pe1", "p1"), entity("pe2", "p2")]),
+                table("person", [entity("person1", "p1")]),
+                table("address", [entity("mail1", "p1")]),
+                table("property_has_person", [
+                  link("r1", "pe1", "person1", "p1"),
+                  link("r2", "pe2", "person1", "p2"),
+                ]),
+                table("person_has_mailing_address", [
+                  link("r3", "person1", "mail1", "p1"),
+                ]),
+              ],
+            },
+          ],
+          indexCid: INDEX,
+          withdrawals: [],
+        }),
+      );
+      setAtlasRuntimeForTests({ backend, connections, status: "ready" });
+
+      const second = await getAtlasProperty({
+        county: "lee",
+        dataGroup: "county",
+        propertyCid: "p2",
+      });
+      expect(second.records).toMatchObject({
+        property: [{ cid: "pe2" }],
+        person: [{ cid: "person1" }],
+        address: [{ cid: "mail1" }],
+        property_has_person: [{ relationship_cid: "r2" }],
+        person_has_mailing_address: [{ relationship_cid: "r3" }],
+      });
+      expect(second.records.property_has_person).toHaveLength(1);
+
+      const first = await getAtlasProperty({
+        county: "lee",
+        dataGroup: "county",
+        propertyCid: "p1",
+      });
+      expect(first.records.property).toEqual([
+        expect.objectContaining({ cid: "pe1" }),
+      ]);
+      expect(first.records.property_has_person).toEqual([
+        expect.objectContaining({ relationship_cid: "r1" }),
+      ]);
+      expect(first.records.person).toHaveLength(1);
+      expect(first.records.address).toHaveLength(1);
+    } finally {
+      await connections.close();
+    }
+  });
 });

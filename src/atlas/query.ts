@@ -264,6 +264,12 @@ export async function listAtlasProperties(args: {
   };
 }
 
+/**
+ * Assemble one property inside its scope. export-tables stores every entity
+ * and relationship once per archive under the first property that referenced
+ * it, so the property's own rows are only the seed: relationships are then
+ * followed from_cid -> to_cid until nothing new appears or depth 8.
+ */
 export async function getAtlasProperty(args: {
   county: string;
   dataGroup: string;
@@ -271,17 +277,79 @@ export async function getAtlasProperty(args: {
 }) {
   const source = await resolveAtlasSource(args.county, args.dataGroup);
   const runtime = await awaitAtlasReady();
+  const tables = await catalog(runtime);
+  const names = (table: string) =>
+    new Set((tables.get(table) ?? []).map((column) => column.name));
+  const relationshipTables = [...tables.keys()].filter(
+    (table) => names(table).has("from_cid") && names(table).has("to_cid"),
+  );
+  const entityTables = [...tables.keys()].filter(
+    (table) => names(table).has("cid") && !relationshipTables.includes(table),
+  );
+  const keyOf = (table: string) =>
+    relationshipTables.includes(table)
+      ? "relationship_cid"
+      : entityTables.includes(table)
+        ? "cid"
+        : "property_cid";
+
   const records: Record<string, Array<Record<string, unknown>>> = {};
-  for (const table of (await catalog(runtime)).keys()) {
-    const rows = await runtime.connections.read(
-      `SELECT * FROM ${quoteAtlasIdentifier(table)}
-       WHERE ${scope(source)}
-         AND property_cid = ${escapeAtlasLiteral(args.propertyCid)}`,
+  const seen = new Set<string>();
+  const entityCids = new Set<string>();
+  const collect = (table: string, rows: Array<Record<string, unknown>>) => {
+    const fresh = rows.filter(
+      (row) => !seen.has(`${table}\u0000${String(row[keyOf(table)])}`),
     );
-    if (rows.length > 0) records[table] = normalizedRows(rows);
+    for (const row of fresh) {
+      seen.add(`${table}\u0000${String(row[keyOf(table)])}`);
+      if (keyOf(table) === "cid") entityCids.add(String(row.cid));
+    }
+    if (fresh.length > 0) {
+      (records[table] ??= []).push(...normalizedRows(fresh));
+    }
+    return fresh;
+  };
+  const fetch = (table: string, column: string, values: string[]) =>
+    values.length === 0
+      ? Promise.resolve([])
+      : runtime.connections.read(
+          `SELECT * FROM ${quoteAtlasIdentifier(table)}
+           WHERE ${scope(source)}
+             AND ${quoteAtlasIdentifier(column)} IN (${values
+               .map(escapeAtlasLiteral)
+               .join(", ")})`,
+        );
+
+  let pending = new Set<string>();
+  for (const table of tables.keys()) {
+    for (const row of collect(
+      table,
+      await fetch(table, "property_cid", [args.propertyCid]),
+    )) {
+      if (keyOf(table) === "relationship_cid") pending.add(String(row.to_cid));
+    }
   }
   if (records.properties === undefined) {
     throw new Error(`CID_NOT_PUBLISHED: ${args.propertyCid}`);
+  }
+
+  for (let depth = 0; depth < 8 && pending.size > 0; depth += 1) {
+    const targets = [...pending].filter((cid) => !entityCids.has(cid));
+    const reached: string[] = [];
+    for (const table of entityTables) {
+      for (const row of collect(table, await fetch(table, "cid", targets))) {
+        reached.push(String(row.cid));
+      }
+    }
+    pending = new Set();
+    for (const table of relationshipTables) {
+      for (const row of collect(
+        table,
+        await fetch(table, "from_cid", reached),
+      )) {
+        pending.add(String(row.to_cid));
+      }
+    }
   }
   return { propertyCid: args.propertyCid, records, source };
 }
