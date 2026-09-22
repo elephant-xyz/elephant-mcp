@@ -24,25 +24,6 @@ import {
   verifyUnixFsCid,
 } from "./integrity.ts";
 
-export interface ResolvedAtlasIndex {
-  bytes: Uint8Array;
-  gateway: string;
-  index: AtlasIndexV1;
-  indexCid: string;
-}
-
-export interface VerifiedAtlasBlock<T> {
-  bytes: number;
-  gateway: string;
-  value: T;
-}
-
-export interface DownloadedAtlasPart {
-  bytes: number;
-  filePath: string;
-  gateway: string;
-}
-
 function parseJson(bytes: Uint8Array, label: string): unknown {
   try {
     return JSON.parse(new TextDecoder().decode(bytes));
@@ -58,7 +39,7 @@ function parseJson(bytes: Uint8Array, label: string): unknown {
 export async function resolveAtlasIndex(
   ipns: string,
   options: AtlasGatewayFetchOptions = {},
-): Promise<ResolvedAtlasIndex> {
+): Promise<{ index: AtlasIndexV1; indexCid: string }> {
   const fetched = await fetchAtlasIndex(ipns, options);
   const bytes = fetched.value.bytes;
   const indexCid = await calculateAtlasIndexCid(bytes);
@@ -71,8 +52,6 @@ export async function resolveAtlasIndex(
     verifyAtlasIndexRoot(root, indexCid);
   }
   return {
-    bytes,
-    gateway: fetched.gateway,
     index: AtlasIndexV1Schema.parse(parseJson(bytes, "Atlas index")),
     indexCid,
   };
@@ -81,16 +60,11 @@ export async function resolveAtlasIndex(
 async function verifiedDagJson(
   cid: string,
   options: AtlasGatewayFetchOptions,
-): Promise<{ bytes: Uint8Array; gateway: string; value: unknown }> {
-  const fetched = await fetchRawAtlasBlock(cid, options);
-  const bytes = fetched.value;
+): Promise<unknown> {
+  const bytes = (await fetchRawAtlasBlock(cid, options)).value;
   await verifyRawBlockCid(bytes, cid);
   try {
-    return {
-      bytes,
-      gateway: fetched.gateway,
-      value: decodeDagJson(bytes),
-    };
+    return decodeDagJson(bytes);
   } catch (error) {
     throw new Error(
       `Atlas block ${cid} is not DAG-JSON: ${
@@ -103,26 +77,19 @@ async function verifiedDagJson(
 export async function fetchCountyIndex(
   cid: string,
   options: AtlasGatewayFetchOptions = {},
-): Promise<VerifiedAtlasBlock<CountyIndexV1>> {
-  const block = await verifiedDagJson(cid, options);
-  return {
-    bytes: block.bytes.byteLength,
-    gateway: block.gateway,
-    value: CountyIndexV1Schema.parse(block.value),
-  };
+): Promise<CountyIndexV1> {
+  return CountyIndexV1Schema.parse(await verifiedDagJson(cid, options));
 }
 
 export async function fetchCountyTables(
   cid: string,
   expectedCountyRoot: string,
   options: AtlasGatewayFetchOptions = {},
-): Promise<VerifiedAtlasBlock<CountyTablesV1>> {
-  const block = await verifiedDagJson(cid, options);
-  return {
-    bytes: block.bytes.byteLength,
-    gateway: block.gateway,
-    value: parseCountyTablesV1(block.value, expectedCountyRoot),
-  };
+): Promise<CountyTablesV1> {
+  return parseCountyTablesV1(
+    await verifiedDagJson(cid, options),
+    expectedCountyRoot,
+  );
 }
 
 export async function downloadAtlasPart(
@@ -130,7 +97,7 @@ export async function downloadAtlasPart(
   expectedBytes: number,
   directory: string,
   options: AtlasGatewayFetchOptions = {},
-): Promise<DownloadedAtlasPart> {
+): Promise<{ bytes: number; filePath: string }> {
   await mkdir(directory, { recursive: true });
   const finalPath = path.join(directory, `${cid}.parquet`);
   const fetched = await fetchAtlasUnixFs(cid, options, async (body) => {
@@ -143,24 +110,16 @@ export async function downloadAtlasPart(
           yield chunk;
         }
       }
-      const verification = await verifyUnixFsCid(
-        writeAndVerify(),
-        cid,
-        expectedBytes,
-      );
+      const bytes = await verifyUnixFsCid(writeAndVerify(), cid, expectedBytes);
       await handle.sync();
       await handle.close();
       await rename(temporaryPath, finalPath);
-      return verification.bytes;
+      return bytes;
     } catch (error) {
       await handle.close().catch(() => undefined);
       await rm(temporaryPath, { force: true }).catch(() => undefined);
       throw error;
     }
   });
-  return {
-    bytes: fetched.value,
-    filePath: finalPath,
-    gateway: fetched.gateway,
-  };
+  return { bytes: fetched.value, filePath: finalPath };
 }

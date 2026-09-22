@@ -5,7 +5,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   calculateAtlasIndexCid,
-  CidVerificationError,
   verifyRawBlockCid,
   verifyUnixFsCid,
 } from "./integrity.ts";
@@ -26,11 +25,9 @@ describe("Atlas CID integrity", () => {
     const digest = await sha256.digest(bytes);
     const expectedCid = CID.createV1(0x0129, digest).toString();
 
-    await expect(verifyRawBlockCid(bytes, expectedCid)).resolves.toEqual({
-      actualCid: expectedCid,
-      bytes: bytes.byteLength,
-      expectedCid,
-    });
+    await expect(
+      verifyRawBlockCid(bytes, expectedCid),
+    ).resolves.toBeUndefined();
   });
 
   it("reports the calculated CID when raw block bytes are changed", async () => {
@@ -45,13 +42,9 @@ describe("Atlas CID integrity", () => {
       await sha256.digest(tampered),
     ).toString();
 
-    try {
-      await verifyRawBlockCid(tampered, expectedCid);
-      expect.fail("expected CID verification to fail");
-    } catch (error) {
-      expect(error).toBeInstanceOf(CidVerificationError);
-      expect(error).toMatchObject({ actualCid, expectedCid });
-    }
+    await expect(verifyRawBlockCid(tampered, expectedCid)).rejects.toThrow(
+      `CID verification failed: expected ${expectedCid}, calculated ${actualCid}`,
+    );
   });
 
   it("calculates the Atlas index byte CID as a CIDv1 raw leaf", async () => {
@@ -72,11 +65,7 @@ describe("Atlas CID integrity", () => {
         expectedCid,
         first.byteLength + second.byteLength,
       ),
-    ).resolves.toEqual({
-      actualCid: expectedCid,
-      bytes: first.byteLength + second.byteLength,
-      expectedCid,
-    });
+    ).resolves.toBe(first.byteLength + second.byteLength);
   });
 
   it("hashes multi-chunk streams as a Kubo dag-pb root", async () => {
@@ -87,9 +76,7 @@ describe("Atlas CID integrity", () => {
         chunks(bytes.subarray(0, 1000), bytes.subarray(1000)),
         await rawCid(bytes),
       ),
-    ).rejects.toMatchObject({
-      actualCid: expect.stringMatching(/^bafybei/u),
-    });
+    ).rejects.toThrow(/calculated bafybei/u);
   });
 
   it("rejects UnixFS CID and byte-count mismatches", async () => {
@@ -98,7 +85,7 @@ describe("Atlas CID integrity", () => {
 
     await expect(
       verifyUnixFsCid(chunks(bytes), await rawCid(encoder.encode("other"))),
-    ).rejects.toBeInstanceOf(CidVerificationError);
+    ).rejects.toThrow("CID verification failed");
     await expect(
       verifyUnixFsCid(chunks(bytes), expectedCid, bytes.byteLength + 1),
     ).rejects.toThrow(`UnixFS byte count is ${bytes.byteLength}`);

@@ -140,7 +140,7 @@ async function stageGroup(args: {
   let parts = 0;
   let rows = 0;
 
-  for (const [name, table] of Object.entries(tablesBlock.value.tables)) {
+  for (const [name, table] of Object.entries(tablesBlock.tables)) {
     const files: string[] = [];
     for (const part of table.parts) {
       const downloaded = await downloadAtlasPart(

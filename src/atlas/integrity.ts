@@ -1,85 +1,38 @@
 import Hash from "ipfs-only-hash";
 import { CID } from "multiformats/cid";
 import * as raw from "multiformats/codecs/raw";
-import { identity } from "multiformats/hashes/identity";
-import { sha256, sha512 } from "multiformats/hashes/sha2";
+import { sha256 } from "multiformats/hashes/sha2";
 
 import { CidV1Schema } from "./contracts.ts";
 
-export interface CidVerificationResult {
-  actualCid: string;
-  bytes: number;
-  expectedCid: string;
-}
-
-export class CidVerificationError extends Error {
-  readonly actualCid: string;
-  readonly expectedCid: string;
-
-  constructor(expectedCid: string, actualCid: string) {
-    super(
-      `CID verification failed: expected ${expectedCid}, calculated ${actualCid}`,
-    );
-    this.name = "CidVerificationError";
-    this.expectedCid = expectedCid;
-    this.actualCid = actualCid;
-  }
-}
-
-async function cidForBlockBytes(
-  bytes: Uint8Array,
-  expected: CID,
-): Promise<CID> {
-  switch (expected.multihash.code) {
-    case sha256.code:
-      return CID.create(
-        expected.version,
-        expected.code,
-        await sha256.digest(bytes),
-      );
-    case sha512.code:
-      return CID.create(
-        expected.version,
-        expected.code,
-        await sha512.digest(bytes),
-      );
-    case identity.code:
-      return CID.create(
-        expected.version,
-        expected.code,
-        await identity.digest(bytes),
-      );
-    default:
-      throw new Error(
-        `Unsupported Atlas multihash code 0x${expected.multihash.code.toString(16)}`,
-      );
-  }
+function mismatch(expectedCid: string, actualCid: string): Error {
+  return new Error(
+    `CID verification failed: expected ${expectedCid}, calculated ${actualCid}`,
+  );
 }
 
 /**
- * Verify exact encoded IPLD block bytes against their CID.
- *
- * The bytes are hashed directly with the CID's multihash algorithm. They are
- * never parsed or reserialized, which would change the trust boundary.
+ * Verify exact encoded IPLD block bytes against their CID. The producer
+ * hashes with sha256 only; the bytes are never parsed or reserialized.
  */
 export async function verifyRawBlockCid(
   bytes: Uint8Array,
   expectedCid: string,
-): Promise<CidVerificationResult> {
-  const canonicalExpectedCid = CidV1Schema.parse(expectedCid);
-  const expected = CID.parse(canonicalExpectedCid);
-  const actual = await cidForBlockBytes(bytes, expected);
-  const actualCid = actual.toString();
-
-  if (!actual.equals(expected)) {
-    throw new CidVerificationError(canonicalExpectedCid, actualCid);
+): Promise<void> {
+  const expected = CID.parse(CidV1Schema.parse(expectedCid));
+  if (expected.multihash.code !== sha256.code) {
+    throw new Error(
+      `Unsupported Atlas multihash code 0x${expected.multihash.code.toString(16)}`,
+    );
   }
-
-  return {
-    actualCid,
-    bytes: bytes.byteLength,
-    expectedCid: canonicalExpectedCid,
-  };
+  const actual = CID.create(
+    expected.version,
+    expected.code,
+    await sha256.digest(bytes),
+  );
+  if (!actual.equals(expected)) {
+    throw mismatch(expected.toString(), actual.toString());
+  }
 }
 
 /**
@@ -113,39 +66,25 @@ export function verifyAtlasIndexRoot(root: string, indexCid: string): void {
     throw new Error(`Atlas index root ${root} is not a raw leaf`);
   }
   if (cid.toString() !== indexCid) {
-    throw new CidVerificationError(cid.toString(), indexCid);
+    throw mismatch(cid.toString(), indexCid);
   }
 }
 
 /**
  * Verify a streamed UnixFS file against the CID produced by
- * `elephant-cli upload` and Kubo's `add --cid-version=1 --raw-leaves=true`.
- * The byte count is observed while hashing so callers can also enforce the
- * `CountyTables` part size.
+ * `elephant-cli upload` and Kubo's `add --cid-version=1 --raw-leaves=true`
+ * and return its byte count, checked against the declared part size.
  */
 export async function verifyUnixFsCid(
   source: AsyncIterable<Uint8Array>,
   expectedCid: string,
   expectedBytes?: number,
-): Promise<CidVerificationResult> {
+): Promise<number> {
   const canonicalExpectedCid = CidV1Schema.parse(expectedCid);
-  if (
-    expectedBytes !== undefined &&
-    (!Number.isSafeInteger(expectedBytes) || expectedBytes < 0)
-  ) {
-    throw new Error(
-      `Expected UnixFS byte count must be a non-negative safe integer, got ${expectedBytes}`,
-    );
-  }
-
   let bytes = 0;
   async function* counted(): AsyncIterable<Uint8Array> {
     for await (const chunk of source) {
-      const nextBytes = bytes + chunk.byteLength;
-      if (!Number.isSafeInteger(nextBytes)) {
-        throw new Error("UnixFS byte count exceeds the safe integer range");
-      }
-      bytes = nextBytes;
+      bytes += chunk.byteLength;
       yield chunk;
     }
   }
@@ -154,17 +93,12 @@ export async function verifyUnixFsCid(
     await Hash.of(counted(), { cidVersion: 1, rawLeaves: true }),
   );
   if (actualCid !== canonicalExpectedCid) {
-    throw new CidVerificationError(canonicalExpectedCid, actualCid);
+    throw mismatch(canonicalExpectedCid, actualCid);
   }
   if (expectedBytes !== undefined && bytes !== expectedBytes) {
     throw new Error(
       `UnixFS byte count is ${bytes}, expected ${expectedBytes} for ${canonicalExpectedCid}`,
     );
   }
-
-  return {
-    actualCid,
-    bytes,
-    expectedCid: canonicalExpectedCid,
-  };
+  return bytes;
 }
