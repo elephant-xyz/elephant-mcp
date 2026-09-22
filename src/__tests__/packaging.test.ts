@@ -36,13 +36,3 @@ describe("packaging — per-consumer install identity (sanity)", () => {
     expect(readme).toContain("npm run sync");
   });
 });
-
-describe("packaging — retained geo tools", () => {
-  it("README documents the findPropertiesInArea tool", () => {
-    expect(readme).toContain("findPropertiesInArea");
-  });
-
-  it("README documents the sumPropertyValueInArea tool", () => {
-    expect(readme).toContain("sumPropertyValueInArea");
-  });
-});

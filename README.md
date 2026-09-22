@@ -125,8 +125,6 @@ Atlas SQL:
 - `getOracleDatasetInfo`
 - `getPropertyQuerySchema`
 - `queryProperties`
-- `findPropertiesInArea`
-- `sumPropertyValueInArea`
 
 Lexicon and verified scripts:
 
@@ -145,13 +143,25 @@ or a SQL keyword is rejected, so `atlas_state`, catalogs, and schema-qualified
 names fail closed. Responses include the Atlas index, archive, tables, and
 schema CIDs.
 
-`findPropertiesInArea` and `sumPropertyValueInArea` read `table` (default
-`property`) and the `latitudeColumn`, `longitudeColumn`, `parcelColumn`, and
-`valueColumn` names (defaults `latitude`, `longitude`, `parcel_identifier`,
-`avm_value`). A column that does not exist in the scoped table fails with the
-table's column list. Bounding-box counts and sums run in SQL; row lists and
-polygon filters are bounded to 1000 candidates and report `truncated: true`
-with the `rowCap` when the area holds more.
+In the lexicon, coordinates live on `geometry`, parcel numbers on `parcel` and
+`property`, and values on `tax`; reach them by JOIN through the relationship
+tables. Properties in a bounding box with their market value:
+
+```sql
+SELECT p.parcel_identifier, g.latitude, g.longitude,
+       t.property_market_value_amount
+FROM property p
+JOIN property_has_address pa ON pa.from_cid = p.cid
+JOIN address_has_geometry ag ON ag.from_cid = pa.to_cid
+JOIN geometry g ON g.cid = ag.to_cid
+LEFT JOIN property_has_tax pt ON pt.from_cid = p.cid
+LEFT JOIN tax t ON t.cid = pt.to_cid
+WHERE g.latitude BETWEEN 30.2 AND 30.4
+  AND g.longitude BETWEEN -81.8 AND -81.5
+```
+
+Replace the SELECT list with `count(*)` and `sum(t.property_market_value_amount)`
+to aggregate over the area.
 
 ## Configuration
 

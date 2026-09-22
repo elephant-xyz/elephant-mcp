@@ -9,10 +9,6 @@ import {
   listOraclePropertiesHandler,
 } from "./atlasOpenData.ts";
 import {
-  findPropertiesInAreaHandler,
-  sumPropertyValueInAreaHandler,
-} from "./atlasGeo.ts";
-import {
   getPropertySchemaByClassNameHandler,
   listPropertiesByClassNameHandler,
 } from "./classes.ts";
@@ -35,26 +31,6 @@ const atlasScope = {
   county: z.string().min(1).describe("Atlas county key, e.g. 'lee'."),
   dataGroup: atlasIdentifier.describe("Atlas data-group key, e.g. 'county'."),
 };
-const bboxSchema = z.object({
-  minLat: z.number(),
-  minLng: z.number(),
-  maxLat: z.number(),
-  maxLng: z.number(),
-});
-const polygonSchema = z
-  .array(z.object({ lat: z.number(), lng: z.number() }))
-  .min(3);
-const areaScope = {
-  ...atlasScope,
-  table: atlasIdentifier
-    .default("property")
-    .describe("Synchronized table holding the coordinates."),
-  latitudeColumn: atlasIdentifier.default("latitude"),
-  longitudeColumn: atlasIdentifier.default("longitude"),
-  parcelColumn: atlasIdentifier.default("parcel_identifier"),
-  valueColumn: atlasIdentifier.default("avm_value"),
-};
-
 export function registerAllTools(
   server: McpServer,
   _requestSignal?: AbortSignal,
@@ -225,37 +201,5 @@ export function registerAllTools(
       state: string;
       table?: string;
     }) => getPropertyQuerySchemaHandler(args),
-  );
-
-  server.registerTool(
-    "findPropertiesInArea",
-    {
-      title: "Find Atlas properties in an area",
-      description:
-        "Find scoped Atlas rows inside a bounding box or polygon. Unknown columns fail with the table's column list.",
-      inputSchema: {
-        ...areaScope,
-        bbox: bboxSchema.optional(),
-        polygon: polygonSchema.optional(),
-      },
-    },
-    async (args: Parameters<typeof findPropertiesInAreaHandler>[0]) =>
-      findPropertiesInAreaHandler(args),
-  );
-
-  server.registerTool(
-    "sumPropertyValueInArea",
-    {
-      title: "Sum Atlas property value in an area",
-      description:
-        "Sum a selected value column for scoped Atlas rows in an area.",
-      inputSchema: {
-        ...areaScope,
-        bbox: bboxSchema.optional(),
-        polygon: polygonSchema.optional(),
-      },
-    },
-    async (args: Parameters<typeof sumPropertyValueInAreaHandler>[0]) =>
-      sumPropertyValueInAreaHandler(args),
   );
 }

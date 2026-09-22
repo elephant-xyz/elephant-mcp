@@ -13,7 +13,6 @@ describe("MCP 2.0 tool registry", () => {
 
     expect(names.sort()).toEqual(
       [
-        "findPropertiesInArea",
         "getOracleDatasetInfo",
         "getOracleProperty",
         "getPropertyQuerySchema",
@@ -24,7 +23,6 @@ describe("MCP 2.0 tool registry", () => {
         "listPropertiesByClassName",
         "listPublishedCounties",
         "queryProperties",
-        "sumPropertyValueInArea",
       ].sort(),
     );
   });

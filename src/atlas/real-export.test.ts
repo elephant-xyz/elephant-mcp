@@ -23,7 +23,6 @@ import {
 import { setAtlasRuntimeForTests } from "./runtime.ts";
 import { syncAtlas } from "./sync.ts";
 import { keyColumn, readAtlasCatalog } from "./tables.ts";
-import { findPropertiesInAreaHandler } from "../tools/atlasGeo.ts";
 
 const exportDir = process.env.ATLAS_REAL_EXPORT_DIR;
 const scope = { state: "FL", county: "duval", dataGroup: "county" };
@@ -232,31 +231,23 @@ describe.runIf(exportDir !== undefined)("real export-tables output", () => {
       });
       expect(joined.rowCount).toBeGreaterThan(0);
 
-      const geo = {
+      // The README's area recipe: coordinates live on geometry, values on tax.
+      const inArea = await runAtlasQuery({
         ...scope,
-        bbox: { minLat: -90, minLng: -180, maxLat: 90, maxLng: 180 },
-        table: "geometry",
-        latitudeColumn: "latitude",
-        longitudeColumn: "longitude",
-        parcelColumn: "request_identifier",
-        valueColumn: "latitude",
-      };
-      const found = JSON.parse(
-        (await findPropertiesInAreaHandler(geo)).content[0]!.text,
-      );
-      expect(found).toMatchObject({ count: 1, truncated: false });
-      const defaults = JSON.parse(
-        (
-          await findPropertiesInAreaHandler({
-            ...geo,
-            parcelColumn: "parcel_identifier",
-            valueColumn: "avm_value",
-          })
-        ).content[0]!.text,
-      );
-      expect(defaults.details).toContain(
-        "available columns: state, county, data_group, latitude, longitude",
-      );
+        limit: 10,
+        sql: `SELECT p.parcel_identifier, g.latitude, g.longitude,
+                     t.property_market_value_amount
+              FROM property p
+              JOIN property_has_address pa ON pa.from_cid = p.cid
+              JOIN address_has_geometry ag ON ag.from_cid = pa.to_cid
+              JOIN geometry g ON g.cid = ag.to_cid
+              LEFT JOIN property_has_tax pt ON pt.from_cid = p.cid
+              LEFT JOIN tax t ON t.cid = pt.to_cid
+              WHERE g.latitude BETWEEN -90 AND 90
+                AND g.longitude BETWEEN -180 AND 180`,
+      });
+      expect(inArea.rowCount).toBe(1);
+      expect(inArea.rows[0]?.latitude).toEqual(expect.any(Number));
     } finally {
       await connections.close();
     }
