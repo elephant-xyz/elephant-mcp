@@ -40,11 +40,13 @@ const polygonSchema = z
   .min(3);
 const areaScope = {
   ...atlasScope,
-  table: atlasIdentifier.describe("Atlas table containing coordinates."),
-  latitudeColumn: atlasIdentifier.optional(),
-  longitudeColumn: atlasIdentifier.optional(),
-  parcelColumn: atlasIdentifier.optional(),
-  valueColumn: atlasIdentifier.optional(),
+  table: atlasIdentifier
+    .default("property")
+    .describe("Synchronized table holding the coordinates."),
+  latitudeColumn: atlasIdentifier.default("latitude"),
+  longitudeColumn: atlasIdentifier.default("longitude"),
+  parcelColumn: atlasIdentifier.default("parcel_identifier"),
+  valueColumn: atlasIdentifier.default("avm_value"),
 };
 
 export function registerAllTools(
@@ -218,7 +220,8 @@ export function registerAllTools(
     "findPropertiesInArea",
     {
       title: "Find Atlas properties in an area",
-      description: "Find scoped Atlas rows inside a bounding box or polygon.",
+      description:
+        "Find scoped Atlas rows inside a bounding box or polygon. Unknown columns fail with the table's column list.",
       inputSchema: {
         ...areaScope,
         bbox: bboxSchema.optional(),

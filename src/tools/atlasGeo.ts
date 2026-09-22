@@ -1,4 +1,4 @@
-import { runAtlasQuery } from "../atlas/query.ts";
+import { getAtlasQuerySchema, runAtlasQuery } from "../atlas/query.ts";
 import { createTextResult } from "../lib/utils.ts";
 import { logger } from "../logger.ts";
 
@@ -18,20 +18,25 @@ interface AreaArgs {
   county: string;
   dataGroup: string;
   table: string;
-  latitudeColumn?: string;
-  longitudeColumn?: string;
-  parcelColumn?: string;
-  valueColumn?: string;
+  latitudeColumn: string;
+  longitudeColumn: string;
+  parcelColumn: string;
+  valueColumn: string;
 }
 
 const IDENTIFIER = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/u;
 
-function identifier(value: string | undefined, fallback: string): string {
-  const resolved = value ?? fallback;
-  if (!IDENTIFIER.test(resolved)) {
-    throw new Error(`Invalid Atlas column identifier '${resolved}'`);
+/** Quote a table or column name once it is known to exist in the scope. */
+function identifier(value: string, available: readonly string[]): string {
+  if (!IDENTIFIER.test(value)) {
+    throw new Error(`Invalid Atlas identifier '${value}'`);
   }
-  return `"${resolved}"`;
+  if (!available.includes(value)) {
+    throw new Error(
+      `Column '${value}' does not exist; available columns: ${available.join(", ")}`,
+    );
+  }
+  return `"${value}"`;
 }
 
 function bounds(args: AreaArgs) {
@@ -85,10 +90,16 @@ function insidePolygon(lat: number, lng: number, polygon: Point[]): boolean {
 
 async function areaRows(args: AreaArgs) {
   const area = bounds(args);
-  const latitude = identifier(args.latitudeColumn, "latitude");
-  const longitude = identifier(args.longitudeColumn, "longitude");
-  const parcel = identifier(args.parcelColumn, "parcel_identifier");
-  const value = identifier(args.valueColumn, "avm_value");
+  const schema = await getAtlasQuerySchema({
+    county: args.county,
+    dataGroup: args.dataGroup,
+    table: args.table,
+  });
+  const available = schema.columns.map((column) => column.name);
+  const latitude = identifier(args.latitudeColumn, available);
+  const longitude = identifier(args.longitudeColumn, available);
+  const parcel = identifier(args.parcelColumn, available);
+  const value = identifier(args.valueColumn, available);
   const result = await runAtlasQuery({
     county: args.county,
     dataGroup: args.dataGroup,
@@ -98,7 +109,7 @@ async function areaRows(args: AreaArgs) {
       ${latitude} AS latitude,
       ${longitude} AS longitude,
       ${value} AS value
-     FROM ${identifier(args.table, "property")}
+     FROM "${schema.table}"
      WHERE ${latitude} BETWEEN ${area.minLat} AND ${area.maxLat}
        AND ${longitude} BETWEEN ${area.minLng} AND ${area.maxLng}`,
   });

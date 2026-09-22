@@ -141,6 +141,12 @@ or a SQL keyword is rejected, so `atlas_state`, catalogs, and schema-qualified
 names fail closed. Responses include the Atlas index, archive, tables, and
 schema CIDs.
 
+`findPropertiesInArea` and `sumPropertyValueInArea` read `table` (default
+`property`) and the `latitudeColumn`, `longitudeColumn`, `parcelColumn`, and
+`valueColumn` names (defaults `latitude`, `longitude`, `parcel_identifier`,
+`avm_value`). A column that does not exist in the scoped table fails with the
+table's column list.
+
 ## Configuration
 
 | Variable                                   | Purpose                                        | Default                                                          |
