@@ -1,0 +1,95 @@
+import type { AtlasIndexV1 } from "./contracts.ts";
+
+export interface AtlasSyncStateRow {
+  generatedFrom: string;
+  indexCid: string;
+}
+
+export interface AtlasStateRow {
+  archiveCid: string;
+  county: string;
+  dataGroup: string;
+  fips: string;
+  publishedAt: string;
+  schemaCid: string;
+  state: string;
+  tablesCid: string;
+}
+
+export interface AtlasSyncPlan {
+  generatedFrom: string;
+  indexCid: string;
+  unchanged: boolean;
+  load: AtlasStateRow[];
+  skipped: number;
+  withdraw: AtlasStateRow[];
+}
+
+function groupKey(state: string, county: string, dataGroup: string): string {
+  return `${state}\u0000${county}\u0000${dataGroup}`;
+}
+
+function byScope(left: AtlasStateRow, right: AtlasStateRow): number {
+  return (
+    left.state.localeCompare(right.state) ||
+    left.county.localeCompare(right.county) ||
+    left.dataGroup.localeCompare(right.dataGroup)
+  );
+}
+
+export function planAtlasSync(
+  index: AtlasIndexV1,
+  indexCid: string,
+  syncState: AtlasSyncStateRow | null,
+  currentRows: readonly AtlasStateRow[],
+): AtlasSyncPlan {
+  const plan: AtlasSyncPlan = {
+    generatedFrom: index.generated_from,
+    indexCid,
+    unchanged: syncState?.indexCid === indexCid,
+    load: [],
+    skipped: 0,
+    withdraw: [],
+  };
+  if (plan.unchanged) return plan;
+
+  const current = new Map(
+    currentRows.map((row) => [
+      groupKey(row.state, row.county, row.dataGroup),
+      row,
+    ]),
+  );
+  const desired = new Set<string>();
+  for (const county of index.counties) {
+    for (const [dataGroup, group] of Object.entries(county.groups)) {
+      const key = groupKey(county.state, county.county, dataGroup);
+      desired.add(key);
+      const previous = current.get(key);
+      if (
+        previous?.tablesCid === group.tables &&
+        previous.archiveCid === group.cid &&
+        previous.schemaCid === group.schema
+      ) {
+        plan.skipped += 1;
+        continue;
+      }
+      plan.load.push({
+        county: county.county,
+        state: county.state,
+        fips: county.fips,
+        dataGroup,
+        archiveCid: group.cid,
+        tablesCid: group.tables,
+        schemaCid: group.schema,
+        publishedAt: group.published_at,
+      });
+    }
+  }
+  plan.withdraw = currentRows
+    .filter(
+      (row) => !desired.has(groupKey(row.state, row.county, row.dataGroup)),
+    )
+    .sort(byScope);
+  plan.load.sort(byScope);
+  return plan;
+}

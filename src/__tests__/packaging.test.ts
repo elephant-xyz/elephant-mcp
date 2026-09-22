@@ -1,14 +1,3 @@
-/**
- * Story 3 — AC5: packaging / per-consumer install documentation.
- *
- * Scope fence: the MCP is a per-consumer install (npx), there is no central
- * hosted endpoint. These assertions guard the package identity + install
- * surface and drive documentation of the new geo tools.
- *
- * RED part: the README does not yet document the new geo tools
- * (`findPropertiesInArea` / `sumPropertyValueInArea`).
- */
-
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, it, expect } from "vitest";
@@ -19,12 +8,15 @@ const readmePath = fileURLToPath(new URL("../../README.md", import.meta.url));
 const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as {
   name: string;
   bin?: Record<string, string>;
+  scripts?: Record<string, string>;
+  version: string;
 };
 const readme = readFileSync(readmePath, "utf8");
 
 describe("packaging — per-consumer install identity (sanity)", () => {
   it("publishes under the @elephant-xyz/mcp package name", () => {
     expect(pkg.name).toBe("@elephant-xyz/mcp");
+    expect(pkg.version).toBe("2.0.0");
   });
 
   it("exposes an executable bin so it can be launched per-consumer via npx", () => {
@@ -36,14 +28,11 @@ describe("packaging — per-consumer install identity (sanity)", () => {
     expect(readme).toContain("npx");
     expect(readme).toContain("@elephant-xyz/mcp");
   });
-});
 
-describe("packaging — new geo tools are documented (red)", () => {
-  it("README documents the findPropertiesInArea tool", () => {
-    expect(readme).toContain("findPropertiesInArea");
-  });
-
-  it("README documents the sumPropertyValueInArea tool", () => {
-    expect(readme).toContain("sumPropertyValueInArea");
+  it("packages and documents the Atlas sync entry point", () => {
+    expect(pkg.scripts?.sync).toBe("node dist/index.js sync");
+    expect(readme).toContain("ATLAS_IPNS");
+    expect(readme).toContain("DATABASE_URL");
+    expect(readme).toContain("npm run sync");
   });
 });

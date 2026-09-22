@@ -52,15 +52,6 @@ export default defineNitroConfig({
     },
   ],
 
-  // Environment variables forwarded into the runtime
-  runtimeConfig: {
-    oracleOpenDataManifestCid: "",
-    permitHarvestQueueUrl: "",
-    permitHarvestOutputPrefix: "",
-    permitCacheManifestCid: "",
-    awsRegion: "us-east-1",
-  },
-
   // Externalize heavy Node-only packages so preset bundlers don't try to bundle them
   externals: {
     external: [
@@ -71,10 +62,10 @@ export default defineNitroConfig({
       "ipfs-only-hash",
       "pino",
       "pino-pretty",
-      "@aws-sdk/client-sqs",
       "@aws-sdk/credential-providers",
       "drizzle-orm",
       "@libsql/client",
+      "postgres",
       "tree-sitter",
       "tree-sitter-javascript",
     ],

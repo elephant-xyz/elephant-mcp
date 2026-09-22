@@ -7,13 +7,14 @@ const sharedExternals = [
   "@modelcontextprotocol/sdk/server/streamableHttp.js",
   "@modelcontextprotocol/sdk/server/stdio.js",
   "@modelcontextprotocol/sdk/types.js",
-  "@aws-sdk/client-sqs",
   "@aws-sdk/credential-providers",
   "express",
   "h3",
   "helia",
   "@helia/json",
+  "@ipld/dag-json",
   "multiformats",
+  "postgres",
   // Optional native (node-gyp) addons — lazy-loaded at runtime by the code
   // indexer. Keep external so the bundle never hard-requires them and the build
   // succeeds even when the native module is not installed/buildable.
