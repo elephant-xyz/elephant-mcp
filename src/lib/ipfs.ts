@@ -7,7 +7,6 @@ import { base32 } from "multiformats/bases/base32";
 import { equals as u8eq } from "uint8arrays/equals";
 import { logger } from "../logger.ts";
 import Hash from "ipfs-only-hash";
-import { ShardFileSchema, type ShardFile } from "../types/oracleOpenData.ts";
 
 interface VerificationResult {
   valid: boolean;
@@ -53,14 +52,17 @@ export async function getJsonByCid<T>(cidString: string): Promise<T> {
       const data = await json.get(cid);
       return data as T;
     } catch (error) {
-      logger.error("Failed to fetch JSON by CID from both Helia and gateways", {
-        cid: cidString,
-        heliaError: error instanceof Error ? error.message : String(error),
-        gatewayError:
-          gatewayError instanceof Error
-            ? gatewayError.message
-            : String(gatewayError),
-      });
+      logger.error(
+        {
+          cid: cidString,
+          heliaError: error instanceof Error ? error.message : String(error),
+          gatewayError:
+            gatewayError instanceof Error
+              ? gatewayError.message
+              : String(gatewayError),
+        },
+        "Failed to fetch JSON by CID from both Helia and gateways",
+      );
       throw gatewayError;
     }
   }
@@ -153,9 +155,4 @@ export async function verifyFetchedContent(
     expectedHash: cidStr,
     actualHash: recomputedCidStr,
   };
-}
-
-export async function fetchShardByCid(shardCid: string): Promise<ShardFile> {
-  const raw = await getJsonByCid<unknown>(shardCid);
-  return ShardFileSchema.parse(raw);
 }

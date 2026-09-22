@@ -1,241 +1,121 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { listClassesByDataGroupHandler } from "./dataGroups.ts";
+
 import {
-  listPropertiesByClassNameHandler,
-  getPropertySchemaByClassNameHandler,
-} from "./classes.ts";
-import { transformExamplesHandler } from "./transformExamples.ts";
-import {
-  listOraclePropertiesHandler,
-  getOraclePropertyHandler,
   getOracleDatasetInfoHandler,
-} from "./oracleOpenData.ts";
-import { getPropertyPermitsHandler } from "./permits.ts";
+  getOraclePropertyHandler,
+  listOraclePropertiesHandler,
+} from "./atlasOpenData.ts";
 import {
   findPropertiesInAreaHandler,
   sumPropertyValueInAreaHandler,
-} from "./oracleGeo.ts";
+} from "./atlasGeo.ts";
 import {
-  queryPropertiesHandler,
+  getPropertySchemaByClassNameHandler,
+  listPropertiesByClassNameHandler,
+} from "./classes.ts";
+import { listClassesByDataGroupHandler } from "./dataGroups.ts";
+import {
+  DEFAULT_ROW_LIMIT,
   getPropertyQuerySchemaHandler,
+  MAX_ROW_LIMIT,
+  queryPropertiesHandler,
 } from "./propertyQuery.ts";
-import { queryHoasHandler, getHoaQuerySchemaHandler } from "./hoaQuery.ts";
-import {
-  executeDatasetQueryPlanHandler,
-  getDatasetQueryCapabilitiesHandler,
-} from "./datasetQuery.ts";
-import {
-  queryPermitsHandler,
-  getPermitQuerySchemaHandler,
-  getPermitCoverageHandler,
-} from "./permitQuery.ts";
-import {
-  queryPlacesHandler,
-  getPlaceQuerySchemaHandler,
-} from "./placeQuery.ts";
-import {
-  analyzePlaceColocationHandler,
-  discoverPlaceColocationCandidatesHandler,
-} from "./placeColocation.ts";
 import { listPublishedCountiesHandler } from "./publishedCounties.ts";
-import { MAX_ROW_LIMIT, DEFAULT_ROW_LIMIT } from "../lib/duckdbQuery.ts";
-import {
-  DEFAULT_PLACE_LIMIT,
-  MAX_PLACE_OFFSET,
-  type PlaceQueryRequest,
-} from "../lib/placeQuery.ts";
-import {
-  DEFAULT_GRID_CELL_SIZE_METERS,
-  type PlaceColocationRequest,
-} from "../lib/placeColocation.ts";
-import type { PlaceColocationDiscoveryRequest } from "../lib/placeColocationDiscovery.ts";
-import {
-  datasetQueryPlanSchema,
-  type DatasetQueryPlan,
-} from "../lib/datasetQuery.ts";
+import { transformExamplesHandler } from "./transformExamples.ts";
 
-const boundedCountySchema = z
-  .string()
-  .trim()
-  .min(1, "county is required")
-  .max(64, "county is too long")
-  .regex(
-    /^[A-Za-z0-9]+(?:[ -][A-Za-z0-9]+)*$/,
-    "county must be a name or lowercase hyphenated key",
-  );
+const atlasIdentifier = z.string().regex(/^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/u);
+const atlasScope = {
+  county: z.string().min(1).describe("Atlas county key, e.g. 'lee'."),
+  dataGroup: atlasIdentifier.describe("Atlas data-group key, e.g. 'county'."),
+};
+const bboxSchema = z.object({
+  minLat: z.number(),
+  minLng: z.number(),
+  maxLat: z.number(),
+  maxLng: z.number(),
+});
+const polygonSchema = z
+  .array(z.object({ lat: z.number(), lng: z.number() }))
+  .min(3);
+const areaScope = {
+  ...atlasScope,
+  table: atlasIdentifier.describe("Atlas table containing coordinates."),
+  latitudeColumn: atlasIdentifier.optional(),
+  longitudeColumn: atlasIdentifier.optional(),
+  parcelColumn: atlasIdentifier.optional(),
+  valueColumn: atlasIdentifier.optional(),
+};
 
-const taxonomyPrimaryIdentifierSchema = z
-  .string()
-  .trim()
-  .min(1, "category is required")
-  .max(100, "category is too long")
-  .regex(
-    /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/,
-    "category must be an exact lowercase snake-case taxonomy_primary identifier",
-  );
-
-/** Strict caller contract for deterministic place co-location evidence. */
-export const placeColocationInputSchema = z
-  .object({
-    county: boundedCountySchema.describe(
-      "One published county key/name, e.g. 'lee' or 'Lee'.",
-    ),
-    categoryA: taxonomyPrimaryIdentifierSchema.describe(
-      "First exact taxonomy_primary identifier.",
-    ),
-    categoryB: taxonomyPrimaryIdentifierSchema.describe(
-      "Second distinct exact taxonomy_primary identifier.",
-    ),
-    gridCellSizeMeters: z
-      .union([z.literal(400), z.literal(800), z.literal(1600)])
-      .optional()
-      .default(DEFAULT_GRID_CELL_SIZE_METERS)
-      .describe("Fixed grid-cell ground-meter approximation."),
-    hostedService: z
-      .enum(["include", "exclude", "only"])
-      .optional()
-      .default("exclude")
-      .describe(
-        "Include all places, exclude hosted services by default, or include only hosted services.",
-      ),
-    operatingStatus: z
-      .string()
-      .trim()
-      .min(1, "operatingStatus cannot be empty")
-      .max(64, "operatingStatus is too long")
-      .regex(
-        /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/,
-        "operatingStatus must be an exact lowercase snake-case identifier",
-      )
-      .optional(),
-    minConfidence: z.number().min(0).max(1).optional(),
-  })
-  .strict()
-  .superRefine((value, context) => {
-    if (value.categoryA === value.categoryB) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["categoryB"],
-        message: "categoryA and categoryB must be distinct",
-      });
-    }
-  });
-
-/** County-only contract for fixed-method automatic candidate discovery. */
-export const placeColocationDiscoveryInputSchema = z
-  .object({
-    county: boundedCountySchema.describe(
-      "One published county key/name, e.g. 'lee' or 'Lee'.",
-    ),
-  })
-  .strict();
-
-/**
- * Registers all MCP tools onto the given server instance.
- *
- * This is the single source of truth for tool definitions — both the stdio
- * entry (src/index.ts) and the HTTP entry (src/server/http.ts) call this
- * function so there is zero duplication between transports.
- */
 export function registerAllTools(
   server: McpServer,
-  requestSignal?: AbortSignal,
+  _requestSignal?: AbortSignal,
 ): void {
   server.registerTool(
     "listClassesByDataGroup",
     {
       title: "List classes by data group",
-      description:
-        "List classes for an Elephant data group with names and descriptions",
+      description: "List lexicon classes in one Elephant data group.",
       inputSchema: {
-        groupName: z
-          .string()
-          .min(1, "groupName is required")
-          .describe("The data group name, case-insensitive"),
+        groupName: z.string().min(1),
       },
     },
-    async (args: { groupName: string }) => {
-      return listClassesByDataGroupHandler(args.groupName);
-    },
+    async ({ groupName }: { groupName: string }) =>
+      listClassesByDataGroupHandler(groupName),
   );
 
   server.registerTool(
     "listPropertiesByClassName",
     {
-      title: "List properties by class name",
-      description:
-        "Lists JSON Schema property names for an Elephant class (excludes source_http_request)",
+      title: "List properties by class",
+      description: "List non-deprecated lexicon properties for one class.",
       inputSchema: {
-        className: z
-          .string()
-          .min(1, "className is required")
-          .describe("The class name, case-insensitive"),
+        className: z.string().min(1),
       },
     },
-    async (args: { className: string }) => {
-      return listPropertiesByClassNameHandler(args.className);
-    },
+    async ({ className }: { className: string }) =>
+      listPropertiesByClassNameHandler(className),
   );
 
   server.registerTool(
     "getPropertySchema",
     {
-      title: "Get property schema by class and property",
-      description: "Returns the full JSON Schema object for a class property",
+      title: "Get property schema",
+      description: "Return the lexicon schema for one class property.",
       inputSchema: {
-        className: z
-          .string()
-          .min(1, "className is required")
-          .describe("Class name, case-insensitive"),
-        propertyName: z
-          .string()
-          .min(1, "propertyName is required")
-          .describe("Property name, case-insensitive"),
+        className: z.string().min(1),
+        propertyName: z.string().min(1),
       },
     },
-    async (args: { className: string; propertyName: string }) => {
-      return getPropertySchemaByClassNameHandler(
-        args.className,
-        args.propertyName,
-      );
-    },
+    async ({
+      className,
+      propertyName,
+    }: {
+      className: string;
+      propertyName: string;
+    }) => getPropertySchemaByClassNameHandler(className, propertyName),
   );
 
   server.registerTool(
     "getVerifiedScriptExamples",
     {
       title: "Get verified script examples",
-      description:
-        "Get most relevant working examples of the code, that maps data to the Elephant schema",
+      description: "Search verified Elephant transform scripts semantically.",
       inputSchema: {
-        query: z
-          .string()
-          .min(1, "text is required")
-          .describe(
-            "Description of the example meaning. Wll be used to search for similar examples.",
-          ),
-        topK: z
-          .number()
-          .int()
-          .positive()
-          .max(50)
-          .optional()
-          .default(5)
-          .describe("Number of results (default 5)"),
+        query: z.string().min(1),
+        topK: z.number().int().positive().max(50).optional().default(5),
       },
     },
-    async (args: { query: string; topK?: number }) => {
-      return transformExamplesHandler(args.query, args.topK);
-    },
+    async ({ query, topK }: { query: string; topK?: number }) =>
+      transformExamplesHandler(query, topK),
   );
 
   server.registerTool(
     "listPublishedCounties",
     {
-      title: "List published Oracle counties",
+      title: "List published Atlas counties",
       description:
-        "Returns every county in Oracle's canonical published-county catalog, including stable county keys, state codes, public query/coverage/permit URLs, nullable placesTableUrl, update timestamps, and a catalog revision. Use this tool to discover newly published counties and places availability instead of maintaining a hard-coded list.",
+        "List counties and data groups from the synchronized Atlas index.",
       inputSchema: {},
     },
     async () => listPublishedCountiesHandler(),
@@ -244,635 +124,126 @@ export function registerAllTools(
   server.registerTool(
     "listOracleProperties",
     {
-      title: "List Oracle open-data properties",
+      title: "List Atlas properties",
       description:
-        "Paginated discovery of properties for a county. Returns slim entries (propertyId, parcelIdentifier, cid, county, fileSizeBytes) plus summary fields (address, marketValue, ownerName) when served from the query table. Use getOracleProperty to fetch full consolidated data for a specific entry.",
+        "List property CIDs and roots for one synchronized county/data group.",
       inputSchema: {
-        county: z
-          .string()
-          .optional()
-          .describe("Filter by county name (case-insensitive)"),
-        limit: z
-          .number()
-          .int()
-          .positive()
-          .max(500)
-          .optional()
-          .default(50)
-          .describe("Number of results to return (default 50, max 500)"),
-        offset: z
-          .number()
-          .int()
-          .min(0)
-          .optional()
-          .default(0)
-          .describe("Zero-based offset for pagination (default 0)"),
+        ...atlasScope,
+        limit: z.number().int().positive().max(500).optional().default(50),
+        offset: z.number().int().min(0).optional().default(0),
       },
     },
-    async (args: { county?: string; limit?: number; offset?: number }) => {
-      return listOraclePropertiesHandler(args);
-    },
+    async (args: {
+      county: string;
+      dataGroup: string;
+      limit?: number;
+      offset?: number;
+    }) => listOraclePropertiesHandler(args),
   );
 
   server.registerTool(
     "getOracleProperty",
     {
-      title: "Get Oracle open-data property",
+      title: "Get Atlas property",
       description:
-        "Fetch the full consolidated property JSON (appraisal, permits, Sunbiz, BBB) from IPFS. Provide exactly one of parcelIdentifier, propertyId, or cid.",
+        "Reconstruct one property's Atlas roots, class rows, and relationship rows.",
       inputSchema: {
-        parcelIdentifier: z
-          .string()
-          .optional()
-          .describe(
-            "The property parcel identifier (digits) — looked up in the manifest to resolve its IPFS CID",
-          ),
-        propertyId: z
-          .string()
-          .optional()
-          .describe(
-            "The property UUID — looked up in the manifest to resolve its IPFS CID",
-          ),
-        cid: z
-          .string()
-          .optional()
-          .describe("IPFS CID for the consolidated property JSON"),
-        county: z
-          .string()
-          .optional()
-          .describe(
-            "County to look up the parcel/property in (case-insensitive). Selects which county's open data to read when the deployment serves multiple counties.",
-          ),
+        ...atlasScope,
+        propertyCid: z.string().optional(),
+        cid: z.string().optional(),
       },
     },
     async (args: {
-      parcelIdentifier?: string;
-      propertyId?: string;
+      county: string;
+      dataGroup: string;
+      propertyCid?: string;
       cid?: string;
-      county?: string;
-    }) => {
-      return getOraclePropertyHandler(args);
-    },
+    }) => getOraclePropertyHandler(args),
   );
 
   server.registerTool(
     "getOracleDatasetInfo",
     {
-      title: "Get Oracle open-data dataset info",
+      title: "Get Atlas dataset info",
       description:
-        "Returns dataset-level metadata for a county: county, propertyCount (the catalog-bound appraisal row count when canonical coverage is available, otherwise a live query-table count), state, and provenance/CID fields on the legacy path. When per-source coverage is configured, also returns datasets[] with, per source (appraisal, permits, sunbiz, bbb), ingestedCount, expectedCount, completionPercent, and first/last loaded timestamps — so callers can qualify partial answers by coverage. For a coverage-only county (no property dataset served) propertyCount is null and propertyDatasetAvailable is false, so callers can distinguish a missing property table from a county with zero properties.",
-      inputSchema: {
-        county: z
-          .string()
-          .optional()
-          .describe(
-            "County to report dataset info for (case-insensitive). Selects which county's open data to read when the deployment serves multiple counties.",
-          ),
-      },
+        "Return synchronized table counts and publication provenance.",
+      inputSchema: atlasScope,
     },
-    async (args: { county?: string }, { signal }) => {
-      return getOracleDatasetInfoHandler(args, {
-        signal:
-          requestSignal === undefined
-            ? signal
-            : AbortSignal.any([signal, requestSignal]),
-      });
-    },
-  );
-
-  server.registerTool(
-    "getPropertyPermits",
-    {
-      title: "Get property permits (on-demand)",
-      description:
-        "Fetch permit records for a property by parcel ID. Returns cached permits immediately if available. If not cached, enqueues a harvest job (reuses the permit-harvest Lambda) and returns a status indicating the harvest is in progress — poll again after ~90 seconds. Permits are cached to IPFS after harvest completes.",
-      inputSchema: {
-        parcelId: z
-          .string()
-          .min(1, "parcelId is required")
-          .describe(
-            "The property parcel identifier (digits, e.g. '1234567890000')",
-          ),
-        countyFips: z
-          .string()
-          .optional()
-          .default("12071")
-          .describe("County FIPS code (default: 12071 = Lee County FL)"),
-      },
-    },
-    async (args: { parcelId: string; countyFips?: string }) => {
-      return getPropertyPermitsHandler(args);
-    },
-  );
-
-  const bboxSchema = z
-    .object({
-      minLat: z.number().describe("Minimum latitude (south edge)"),
-      minLng: z.number().describe("Minimum longitude (west edge)"),
-      maxLat: z.number().describe("Maximum latitude (north edge)"),
-      maxLng: z.number().describe("Maximum longitude (east edge)"),
-    })
-    .describe("User-supplied bounding box of coordinates");
-
-  const polygonSchema = z
-    .array(
-      z.object({
-        lat: z.number().describe("Vertex latitude"),
-        lng: z.number().describe("Vertex longitude"),
-      }),
-    )
-    .min(3, "A polygon needs at least 3 vertices")
-    .describe("User-supplied polygon ring of coordinates");
-
-  const areaCountySchema = z
-    .string()
-    .optional()
-    .describe(
-      "County whose data to read (case-insensitive). Optional: when the deployment serves a single/default county it is inferred; otherwise names which county's query table to search.",
-    );
-
-  server.registerTool(
-    "findPropertiesInArea",
-    {
-      title: "Find properties in an area",
-      description:
-        "Returns the set of properties whose centroid (latitude/longitude) falls inside a user-supplied bounding box or polygon. Provide exactly one of bbox or polygon. Reads the per-county property query table (falls back to the derived geo index); no NOAA/FEMA geometry is used.",
-      inputSchema: {
-        bbox: bboxSchema.optional(),
-        polygon: polygonSchema.optional(),
-        county: areaCountySchema,
-      },
-    },
-    async (args: {
-      bbox?: { minLat: number; minLng: number; maxLat: number; maxLng: number };
-      polygon?: Array<{ lat: number; lng: number }>;
-      county?: string;
-    }) => {
-      return findPropertiesInAreaHandler(args);
-    },
-  );
-
-  server.registerTool(
-    "sumPropertyValueInArea",
-    {
-      title: "Sum property value in an area",
-      description:
-        "Returns the exact sum of avm_value over the properties whose centroid falls inside a user-supplied bounding box or polygon, plus the in-area count. Null valuations are treated as 0. Provide exactly one of bbox or polygon. Reads the per-county property query table (falls back to the derived geo index).",
-      inputSchema: {
-        bbox: bboxSchema.optional(),
-        polygon: polygonSchema.optional(),
-        county: areaCountySchema,
-      },
-    },
-    async (args: {
-      bbox?: { minLat: number; minLng: number; maxLat: number; maxLng: number };
-      polygon?: Array<{ lat: number; lng: number }>;
-      county?: string;
-    }) => {
-      return sumPropertyValueInAreaHandler(args);
-    },
-  );
-
-  server.registerTool(
-    "getDatasetQueryCapabilities",
-    {
-      title: "Get dataset query capabilities",
-      description:
-        "Describe bounded aggregate query capabilities for a county's property and permit datasets. Returns only allowlisted non-PII fields, types, operators, measures, null semantics, hard budgets, and query-table identity. It returns no source rows and accepts no SQL or data URL.",
-      inputSchema: {
-        county: boundedCountySchema.describe(
-          "One published county key/name, e.g. 'lee' or 'Lee'.",
-        ),
-      },
-    },
-    async (args: { county: string }, { signal }) =>
-      getDatasetQueryCapabilitiesHandler(args, {
-        signal:
-          requestSignal === undefined
-            ? signal
-            : AbortSignal.any([signal, requestSignal]),
-      }),
-  );
-
-  server.registerTool(
-    "executeDatasetQueryPlan",
-    {
-      title: "Execute a dataset query plan",
-      description:
-        "Execute one typed, bounded aggregate plan over a county's property or permit query table. The server independently allowlists fields, operators, grouping, measures, row/group/time budgets, compiles identifiers itself, and binds every value. Callers cannot provide SQL, URLs, joins, projections, expressions, raw-row queries, or mutations. Returns exact numerator, measured denominator, support, null completeness, median where relevant, canonical hashes, and query-table provenance.",
-      inputSchema: {
-        plan: datasetQueryPlanSchema,
-      },
-    },
-    async (args: { plan: DatasetQueryPlan }, { signal }) =>
-      executeDatasetQueryPlanHandler(args, {
-        signal:
-          requestSignal === undefined
-            ? signal
-            : AbortSignal.any([signal, requestSignal]),
-      }),
+    async (args: { county: string; dataGroup: string }) =>
+      getOracleDatasetInfoHandler(args),
   );
 
   server.registerTool(
     "queryProperties",
     {
-      title: "Query properties (SQL)",
+      title: "Query normalized Atlas table",
       description:
-        "Run a read-only SQL SELECT against a county's flat property query table (view name 'properties', one row per property) backed by embedded DuckDB. Use getPropertyQuerySchema first to see available columns. SAFETY: a single SELECT statement only (a leading WITH/CTE is allowed); multiple statements and any mutating or file/extension keyword (INSERT/UPDATE/DELETE/COPY/ATTACH/INSTALL/LOAD/PRAGMA/CALL/SET …) are rejected; results are always capped at " +
-        `${MAX_ROW_LIMIT} rows.`,
+        "Run a scoped read-only SELECT over the logical properties relation.",
       inputSchema: {
-        county: z
-          .string()
-          .min(1, "county is required")
-          .describe("County to query (case-insensitive), e.g. 'Lee'."),
-        sql: z
-          .string()
-          .min(1, "sql is required")
-          .describe(
-            "A single read-only SELECT statement over the 'properties' view.",
-          ),
+        ...atlasScope,
+        table: atlasIdentifier,
+        sql: z.string().min(1),
         limit: z
           .number()
           .int()
           .positive()
           .max(MAX_ROW_LIMIT)
           .optional()
-          .default(DEFAULT_ROW_LIMIT)
-          .describe(
-            `Max rows to return (default ${DEFAULT_ROW_LIMIT}, max ${MAX_ROW_LIMIT}). Always enforced.`,
-          ),
+          .default(DEFAULT_ROW_LIMIT),
       },
     },
-    async (
-      args: { county: string; sql: string; limit?: number },
-      { signal },
-    ) => {
-      return queryPropertiesHandler(args, {
-        signal:
-          requestSignal === undefined
-            ? signal
-            : AbortSignal.any([signal, requestSignal]),
-      });
-    },
+    async (args: {
+      county: string;
+      dataGroup: string;
+      table: string;
+      sql: string;
+      limit?: number;
+    }) => queryPropertiesHandler(args),
   );
 
   server.registerTool(
     "getPropertyQuerySchema",
     {
-      title: "Get property query schema",
+      title: "Get normalized Atlas query schema",
       description:
-        "Returns the column list, DuckDB types, and a one-line description of each column of the 'properties' query table for a county, so queryProperties can be written without guessing. Notes that some coverage-dependent fields may be NULL.",
+        "List available tables or describe one table for queryProperties.",
       inputSchema: {
-        county: z
-          .string()
-          .min(1, "county is required")
-          .describe("County to describe (case-insensitive), e.g. 'Lee'."),
+        ...atlasScope,
+        table: atlasIdentifier.optional(),
       },
     },
-    async (args: { county: string }, { signal }) => {
-      return getPropertyQuerySchemaHandler(args, {
-        signal:
-          requestSignal === undefined
-            ? signal
-            : AbortSignal.any([signal, requestSignal]),
-      });
-    },
+    async (args: { county: string; dataGroup: string; table?: string }) =>
+      getPropertyQuerySchemaHandler(args),
   );
 
   server.registerTool(
-    "queryHoas",
+    "findPropertiesInArea",
     {
-      title: "Query Florida HOA registry (SQL)",
-      description:
-        "Run a read-only SQL SELECT against the statewide likely-ACTIVE Florida association registry (view name 'hoas', one row per Sunbiz document_number). Not a county property table and not Chapter 720 membership. Use getHoaQuerySchema first. SAFETY: a single SELECT statement only (a leading WITH/CTE is allowed); mutating or file/extension keywords are rejected; results are always capped at " +
-        `${MAX_ROW_LIMIT} rows.`,
+      title: "Find Atlas properties in an area",
+      description: "Find scoped Atlas rows inside a bounding box or polygon.",
       inputSchema: {
-        sql: z
-          .string()
-          .min(1, "sql is required")
-          .describe(
-            "A single read-only SELECT statement over the 'hoas' view.",
-          ),
-        dataset: z
-          .string()
-          .optional()
-          .default("florida-hoa-registry")
-          .describe("Registry dataset key. Default florida-hoa-registry."),
-        limit: z
-          .number()
-          .int()
-          .positive()
-          .max(MAX_ROW_LIMIT)
-          .optional()
-          .default(DEFAULT_ROW_LIMIT)
-          .describe(
-            `Max rows to return (default ${DEFAULT_ROW_LIMIT}, max ${MAX_ROW_LIMIT}). Always enforced.`,
-          ),
+        ...areaScope,
+        bbox: bboxSchema.optional(),
+        polygon: polygonSchema.optional(),
       },
     },
-    async (
-      args: { sql: string; dataset?: string; limit?: number },
-      { signal },
-    ) => {
-      return queryHoasHandler(args, {
-        signal:
-          requestSignal === undefined
-            ? signal
-            : AbortSignal.any([signal, requestSignal]),
-      });
-    },
+    async (args: Parameters<typeof findPropertiesInAreaHandler>[0]) =>
+      findPropertiesInAreaHandler(args),
   );
 
   server.registerTool(
-    "getHoaQuerySchema",
+    "sumPropertyValueInArea",
     {
-      title: "Get Florida HOA registry query schema",
+      title: "Sum Atlas property value in an area",
       description:
-        "Returns the column list of the statewide 'hoas' view so queryHoas can be written without guessing. This dataset is not a county and does not prove Chapter 720 membership.",
+        "Sum a selected value column for scoped Atlas rows in an area.",
       inputSchema: {
-        dataset: z
-          .string()
-          .optional()
-          .default("florida-hoa-registry")
-          .describe("Registry dataset key. Default florida-hoa-registry."),
+        ...areaScope,
+        bbox: bboxSchema.optional(),
+        polygon: polygonSchema.optional(),
       },
     },
-    async (args: { dataset?: string }, { signal }) => {
-      return getHoaQuerySchemaHandler(args, {
-        signal:
-          requestSignal === undefined
-            ? signal
-            : AbortSignal.any([signal, requestSignal]),
-      });
-    },
-  );
-
-  const placeTextFilterSchema = z
-    .object({
-      value: z
-        .string()
-        .trim()
-        .min(1, "filter value is required")
-        .max(200, "filter value is too long"),
-      match: z
-        .enum(["exact", "contains"])
-        .optional()
-        .default("exact")
-        .describe("Exact or case-insensitive substring match."),
-    })
-    .strict();
-
-  const placeFiltersSchema = z
-    .object({
-      taxonomyPrimary: placeTextFilterSchema
-        .optional()
-        .describe(
-          "Filter the one primary taxonomy label. Prefer exact for counts.",
-        ),
-      taxonomyHierarchyMember: z
-        .string()
-        .trim()
-        .min(1)
-        .max(200)
-        .optional()
-        .describe(
-          "Exact case-insensitive segment membership in the '/'-delimited taxonomy hierarchy (roll-up filter).",
-        ),
-      basicCategory: placeTextFilterSchema.optional(),
-      nameContains: z
-        .string()
-        .trim()
-        .min(1)
-        .max(200)
-        .optional()
-        .describe("Case-insensitive substring of the primary place name."),
-      normalizedNameContains: z
-        .string()
-        .trim()
-        .min(1)
-        .max(200)
-        .optional()
-        .describe(
-          "Substring after lowercasing and removing punctuation from the primary name.",
-        ),
-      locality: placeTextFilterSchema
-        .optional()
-        .describe("Exact or contains filter over address locality/city."),
-      postcode: z
-        .string()
-        .trim()
-        .min(1)
-        .max(20)
-        .optional()
-        .describe("Exact postal code."),
-      operatingStatus: z
-        .string()
-        .trim()
-        .min(1)
-        .max(100)
-        .optional()
-        .describe("Exact operating status such as open or permanently_closed."),
-      hostedService: z
-        .enum(["include", "exclude", "only"])
-        .optional()
-        .default("include")
-        .describe(
-          "Include all rows (default), exclude advisory hosted services, or return only hosted services.",
-        ),
-      minConfidence: z
-        .number()
-        .min(0)
-        .max(1)
-        .optional()
-        .describe("Inclusive minimum Overture confidence score."),
-    })
-    .strict();
-
-  server.registerTool(
-    "queryPlaces",
-    {
-      title: "Query published Overture places",
-      description:
-        "Run a structured read-only query over a county's catalog-authorized Overture places parquet. Supports exact/contains category filters, '/'-hierarchy roll-ups, name/locality/postcode/status/confidence filters, hosted-service include/exclude/only, deterministic row pages with totalCount, count-only mode, and grouped taxonomy_primary aggregates. Call getPlaceQuerySchema first. Callers cannot provide SQL or data URLs; results are capped at " +
-        `${MAX_ROW_LIMIT}.`,
-      inputSchema: {
-        county: z
-          .string()
-          .trim()
-          .min(1, "county is required")
-          .max(64)
-          .regex(
-            /^[A-Za-z0-9]+(?:[ -][A-Za-z0-9]+)*$/,
-            "county must be a name or lowercase hyphenated key",
-          )
-          .describe("Published county key/name, e.g. 'lee' or 'Lee'."),
-        mode: z
-          .enum(["rows", "count", "groupByPrimaryCategory"])
-          .optional()
-          .default("rows")
-          .describe("Rows page, filtered count, or primary-category groups."),
-        filters: placeFiltersSchema.optional().default({}),
-        sortBy: z
-          .enum(["gersId", "name", "taxonomyPrimary", "locality", "confidence"])
-          .optional()
-          .default("gersId")
-          .describe("Allowlisted row sort field; ignored for grouped mode."),
-        sortDirection: z
-          .enum(["asc", "desc"])
-          .optional()
-          .default("asc")
-          .describe("Row sort direction; ignored for grouped mode."),
-        limit: z
-          .number()
-          .int()
-          .positive()
-          .max(MAX_ROW_LIMIT)
-          .optional()
-          .default(DEFAULT_PLACE_LIMIT)
-          .describe(
-            `Rows/groups per page (default ${DEFAULT_PLACE_LIMIT}, max ${MAX_ROW_LIMIT}).`,
-          ),
-        offset: z
-          .number()
-          .int()
-          .min(0)
-          .max(MAX_PLACE_OFFSET)
-          .optional()
-          .default(0)
-          .describe(
-            `Zero-based page offset (default 0, max ${MAX_PLACE_OFFSET}).`,
-          ),
-      },
-    },
-    async (args: PlaceQueryRequest) => queryPlacesHandler(args),
-  );
-
-  server.registerTool(
-    "analyzePlaceColocation",
-    {
-      title: "Analyze Overture place co-location",
-      description:
-        "Return bounded diagnostic occupied-grid-cell evidence for one exact unordered taxonomy_primary pair in one published county. Spatial evidence is deterministic and uses a fixed-global-origin equirectangular grid plus 199 geography-and-density-conditioned permutations. Semantic evidence uses raw cosine distance over canonical category/hierarchy gloss embeddings, but this single-pair tool does not fabricate the full eligible-universe calibrated percentile. discoverPlaceColocationCandidates is the publishable Class H source unless separate auditable percentile evidence exists. Embedding failure preserves spatial evidence with semanticDistance.value=null. This tool never makes a publish decision.",
-      inputSchema: placeColocationInputSchema,
-    },
-    async (args: PlaceColocationRequest, { signal }) =>
-      analyzePlaceColocationHandler(args, {
-        signal:
-          requestSignal === undefined
-            ? signal
-            : AbortSignal.any([signal, requestSignal]),
-      }),
-  );
-
-  server.registerTool(
-    "discoverPlaceColocationCandidates",
-    {
-      title: "Discover Overture place co-location candidates",
-      description:
-        "Discover a bounded county-wide family of Overture taxonomy_primary co-location candidates using a fixed 800m non-hosted occupied-cell universe and release-derived stratified discovery/validation split. Every eligible category is embedded; all eligible unordered pairs define an outcome-independent semantic reference distribution. Spatial pairs require raw cosine distance >=0.35 and inclusive empirical percentile >=0.80 before the top-32 analytic rank cap, then receive exact stratified hypergeometric validation and Holm adjustment. The county only response includes bounded evidence and canonical corpus/distribution/spatial-ledger digests. Percentile means relative semantic distance, not statistical improbability or a publish decision.",
-      inputSchema: placeColocationDiscoveryInputSchema,
-    },
-    async (args: PlaceColocationDiscoveryRequest, { signal }) =>
-      discoverPlaceColocationCandidatesHandler(args, {
-        signal:
-          requestSignal === undefined
-            ? signal
-            : AbortSignal.any([signal, requestSignal]),
-      }),
-  );
-
-  server.registerTool(
-    "getPlaceQuerySchema",
-    {
-      title: "Get published places query schema",
-      description:
-        "Returns the real published places parquet columns, field descriptions, structured queryPlaces contract, safety limits, Overture release/provenance and licence-gate metadata, and honest null completion semantics for a county.",
-      inputSchema: {
-        county: z
-          .string()
-          .trim()
-          .min(1, "county is required")
-          .max(64)
-          .regex(
-            /^[A-Za-z0-9]+(?:[ -][A-Za-z0-9]+)*$/,
-            "county must be a name or lowercase hyphenated key",
-          )
-          .describe("Published county key/name, e.g. 'lee' or 'Lee'."),
-      },
-    },
-    async (args: { county: string }) => getPlaceQuerySchemaHandler(args),
-  );
-
-  server.registerTool(
-    "queryPermits",
-    {
-      title: "Query permits (SQL)",
-      description:
-        "Run a read-only SQL SELECT against a county's flat permit query table (view name 'permits', one row per building permit) backed by embedded DuckDB. Use getPermitQuerySchema first to see available columns and getPermitCoverage to qualify aggregate answers by source. SAFETY: a single SELECT statement only (a leading WITH/CTE is allowed); multiple statements and any mutating or file/extension keyword (INSERT/UPDATE/DELETE/COPY/ATTACH/INSTALL/LOAD/PRAGMA/CALL/SET …) are rejected; results are always capped at " +
-        `${MAX_ROW_LIMIT} rows.`,
-      inputSchema: {
-        county: z
-          .string()
-          .min(1, "county is required")
-          .describe("County to query (case-insensitive), e.g. 'Lee'."),
-        sql: z
-          .string()
-          .min(1, "sql is required")
-          .describe(
-            "A single read-only SELECT statement over the 'permits' view.",
-          ),
-        limit: z
-          .number()
-          .int()
-          .positive()
-          .max(MAX_ROW_LIMIT)
-          .optional()
-          .default(DEFAULT_ROW_LIMIT)
-          .describe(
-            `Max rows to return (default ${DEFAULT_ROW_LIMIT}, max ${MAX_ROW_LIMIT}). Always enforced.`,
-          ),
-      },
-    },
-    async (args: { county: string; sql: string; limit?: number }) => {
-      return queryPermitsHandler(args);
-    },
-  );
-
-  server.registerTool(
-    "getPermitQuerySchema",
-    {
-      title: "Get permit query schema",
-      description:
-        "Returns the column list, DuckDB types, and a one-line description of each column of the 'permits' query table for a county, so queryPermits can be written without guessing. Notes that date/value fields are frequently NULL depending on the permit source.",
-      inputSchema: {
-        county: z
-          .string()
-          .min(1, "county is required")
-          .describe("County to describe (case-insensitive), e.g. 'Lee'."),
-      },
-    },
-    async (args: { county: string }) => {
-      return getPermitQuerySchemaHandler(args);
-    },
-  );
-
-  server.registerTool(
-    "getPermitCoverage",
-    {
-      title: "Get permit coverage by source",
-      description:
-        "Returns per-source-system permit coverage for a county from the 'permits' query table: each source_system with its permit_count and completion_date range (earliest/latest), plus the overall total. The donphan agent uses this to QUALIFY aggregate permit answers (permit data lags appraisals and some sources may have NULL dates).",
-      inputSchema: {
-        county: z
-          .string()
-          .min(1, "county is required")
-          .describe(
-            "County to report permit coverage for (case-insensitive), e.g. 'Lee'.",
-          ),
-      },
-    },
-    async (args: { county: string }) => {
-      return getPermitCoverageHandler(args);
-    },
+    async (args: Parameters<typeof sumPropertyValueInAreaHandler>[0]) =>
+      sumPropertyValueInAreaHandler(args),
   );
 }

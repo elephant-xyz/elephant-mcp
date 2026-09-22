@@ -31,12 +31,47 @@ describe("config", () => {
     delete process.env.OPENAI_API_KEY;
     delete process.env.AI_GATEWAY_API_KEY;
     delete process.env.VERCEL_OIDC_TOKEN;
+    delete process.env.ATLAS_IPNS;
+    delete process.env.ATLAS_GATEWAYS;
+    delete process.env.DATABASE_URL;
     // Clear any cached config
     vi.clearAllMocks();
   });
 
   afterEach(() => {
     process.env = originalEnv;
+  });
+
+  describe("Atlas configuration", () => {
+    it("uses the canonical Atlas defaults", async () => {
+      const {
+        DEFAULT_ATLAS_GATEWAYS,
+        DEFAULT_ATLAS_IPNS,
+        getConfig,
+      } = await resetConfigModule();
+
+      expect(getConfig()).toMatchObject({
+        ATLAS_IPNS: DEFAULT_ATLAS_IPNS,
+        ATLAS_GATEWAYS: DEFAULT_ATLAS_GATEWAYS.join(","),
+      });
+      expect(getConfig().DATABASE_URL).toBeUndefined();
+    });
+
+    it("accepts Atlas and database overrides", async () => {
+      process.env.ATLAS_IPNS = "k51-custom";
+      process.env.ATLAS_GATEWAYS =
+        "https://gateway-one.example,https://gateway-two.example";
+      process.env.DATABASE_URL = "file:/tmp/atlas.sqlite";
+
+      const { getConfig } = await resetConfigModule();
+
+      expect(getConfig()).toMatchObject({
+        ATLAS_IPNS: "k51-custom",
+        ATLAS_GATEWAYS:
+          "https://gateway-one.example,https://gateway-two.example",
+        DATABASE_URL: "file:/tmp/atlas.sqlite",
+      });
+    });
   });
 
   describe("hasAwsCredentials", () => {

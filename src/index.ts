@@ -11,6 +11,8 @@ import { setDbInstance } from "./db/connectionRef.ts";
 import { indexVerifiedScripts } from "./lib/verifiedIndexer.ts";
 import { verifyEmbeddingProvider } from "./config.ts";
 import { registerAllTools } from "./tools/registry.ts";
+import { initializeAtlasRuntime } from "./atlas/runtime.ts";
+import { syncAtlas } from "./atlas/sync.ts";
 
 const SERVER_NAME =
   typeof packageJson.name === "string" ? packageJson.name : "@elephant-xyz/mcp";
@@ -39,10 +41,10 @@ const getServer = () => {
 let serverRef: McpServer | undefined;
 
 async function main() {
-  logger.info("Starting MCP server with stdio transport", {
-    serverName: SERVER_NAME,
-    version: SERVER_VERSION,
-  });
+  logger.info(
+    { serverName: SERVER_NAME, version: SERVER_VERSION },
+    "Starting MCP server with stdio transport",
+  );
 
   // Detect direct/Gateway auth or verify the AWS credential chain at startup
   const embeddingProviderResult = await verifyEmbeddingProvider();
@@ -68,6 +70,7 @@ async function main() {
   const dbPath = path.join(dataDir, "db", "elephant-mcp.sqlite");
   const { db, dimensionMismatchRebuild } = await initializeDatabase(dbPath);
   setDbInstance(db);
+  await initializeAtlasRuntime({ startLocalSync: true });
 
   if (dimensionMismatchRebuild) {
     logger.info(
@@ -160,10 +163,20 @@ async function main() {
   });
 }
 
-main().catch((error) => {
-  logger.error("Server startup error", {
-    error: error instanceof Error ? error.message : String(error),
-  });
+async function run() {
+  if (process.argv[2] === "sync") {
+    const summary = await syncAtlas();
+    process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`);
+    return;
+  }
+  await main();
+}
+
+run().catch((error) => {
+  logger.error(
+    { error: error instanceof Error ? error.message : String(error) },
+    "Server startup error",
+  );
   // Best-effort MCP logging of startup error if connected
   if (serverRef?.isConnected()) {
     void serverRef

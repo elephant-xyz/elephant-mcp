@@ -4,9 +4,24 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { fromNodeProviderChain } from "@aws-sdk/credential-providers";
 
+export const DEFAULT_ATLAS_IPNS =
+  "k51qzi5uqu5dhzmj1jtn06idud425ozwdjjjn4eu7q01g2t814h7rw4du0nd04";
+export const DEFAULT_ATLAS_GATEWAYS = [
+  "https://ipfs.filebase.io",
+  "https://ipfs.io",
+  "https://dweb.link",
+  "https://w3s.link",
+] as const;
+
 const configSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("production"),
   LOG_LEVEL: z.enum(["error", "warn", "info", "debug"]).default("info"),
+  ATLAS_IPNS: z.string().min(1).default(DEFAULT_ATLAS_IPNS),
+  ATLAS_GATEWAYS: z
+    .string()
+    .min(1)
+    .default(DEFAULT_ATLAS_GATEWAYS.join(",")),
+  DATABASE_URL: z.string().min(1).optional(),
   OPENAI_API_KEY: z.string().min(1).optional(),
   AI_GATEWAY_API_KEY: z.string().min(1).optional(),
   VERCEL_OIDC_TOKEN: z.string().min(1).optional(),

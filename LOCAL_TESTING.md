@@ -1,93 +1,71 @@
-# Local testing — donphan (uxie) → queryProperties → DuckDB → Lee parquet
+# Local Atlas testing
 
-How to run the **local** elephant-mcp build as a stdio MCP server in Cursor and
-drive the DuckDB-backed `queryProperties` / `getPropertyQuerySchema` tools against
-the real Lee query table. Everything here is local — nothing is published to npm.
-
-## 1. Build the local server
-
-The stdio entry (`src/index.ts`) imports `package.json`, which Node ≥26 refuses to
-load as raw TS without JSON import attributes — so run the **built** `dist/index.js`,
-not `src/index.ts` directly.
+## Build and unit tests
 
 ```bash
-cd /Users/stefanmicic/Desktop/Klijenti/elephant/elephant-mcp
-npm run build        # vite build → dist/index.js  (re-run after any src change)
+npm ci
+npm run build
+npm run test -- src/atlas
 ```
 
-Sanity-check the server starts and lists the two tools (optional):
+The integration fixture generates Zstd Parquet, serves Atlas blocks through a
+mock gateway, verifies every CID, and loads a temporary SQLite database.
+
+## Test a local Atlas gateway
+
+Point the server at a local Kubo gateway or fixture server:
 
 ```bash
-node dist/index.js   # Ctrl-C to stop; it speaks JSON-RPC over stdin/stdout
+export ATLAS_IPNS=k51-local-test
+export ATLAS_GATEWAYS=http://127.0.0.1:8080
+export DATABASE_URL=file:/tmp/elephant-atlas.sqlite
+npm run build
+npm run sync
 ```
 
-## 2. Cursor MCP config
+Run the sync command again and verify it reports `unchanged: true`.
 
-Point Cursor at the **local** `dist/index.js` (NOT `npx @elephant-xyz/mcp`). Add this
-server entry to `~/.cursor/mcp.json` (or a project `.cursor/mcp.json`):
+## Test stdio
 
-```json
-{
-  "mcpServers": {
-    "elephant-mcp-local": {
-      "command": "node",
-      "args": [
-        "/Users/stefanmicic/Desktop/Klijenti/elephant/elephant-mcp/dist/index.js"
-      ],
-      "env": {
-        "PROPERTY_QUERY_TABLE_MAP": "{\"lee\":\"/Users/stefanmicic/Desktop/Klijenti/elephant/elephant-query-db/.query-table-export/lee/query-table.parquet\"}"
-      }
-    }
-  }
-}
+```bash
+ATLAS_IPNS="$ATLAS_IPNS" \
+ATLAS_GATEWAYS="$ATLAS_GATEWAYS" \
+DATABASE_URL="$DATABASE_URL" \
+node dist/index.js
 ```
 
-`PROPERTY_QUERY_TABLE_MAP` is a JSON string mapping county → parquet location, so the
-value is JSON-inside-JSON (the inner quotes are escaped). After saving, reload Cursor
-and enable the `elephant-mcp-local` server. You should see `queryProperties` and
-`getPropertyQuerySchema` among its tools.
+Initialize MCP, list tools, then call:
 
-## 3. Invoke donphan (uxie) in Cursor
+1. `listPublishedCounties`
+2. `getPropertyQuerySchema` with a county and data group
+3. `queryProperties` with a normalized table and read-only SQL
+4. `getOracleProperty` with a published property CID
 
-`donphan` is the codename for the `uxie` agent (`soofi-xyz-team-kit/agents/uxie.md`).
-In Cursor, select/invoke the **donphan** (uxie) agent and ask a Lee question. For
-structured/aggregate/attribute questions it will call `getPropertyQuerySchema` for
-`lee` to learn the columns, then write a single `SELECT` and call `queryProperties`.
+Confirm every data response contains Atlas source CIDs.
 
-## 4. Sample questions that WORK on Lee
+## Test hosted Postgres
 
-All five verified against the real Lee parquet (511,695 rows):
+Run the disposable Postgres harness when a dedicated test database is
+available:
 
-| # | Ask | SQL donphan runs | Verified answer |
-|---|-----|------------------|-----------------|
-| 1 | How many Lee properties have an owner named "Bailey"? | `SELECT count(*) AS n FROM properties WHERE owners_text ILIKE '%Bailey%'` | **322** |
-| 2 | How many properties are in Cape Coral? | `SELECT count(*) AS n FROM properties WHERE address_city ILIKE 'Cape Coral'` | **131,446** |
-| 3 | Top 5 properties by market value | `SELECT owners_text, address_city, market_value FROM properties ORDER BY market_value DESC NULLS LAST LIMIT 5` | Lee Health System ($428,658,471) … |
-| 4 | How many properties are worth over $1M? | `SELECT count(*) AS n FROM properties WHERE market_value > 1000000` | **23,900** |
-| 5 | Look up the owner of a specific property | `SELECT owners_text, address_city, market_value FROM properties WHERE owners_text ILIKE '%Bailey%' LIMIT 5` | rows (e.g. "Marta A Bailey", Cape Coral, $44,413) |
+```bash
+ATLAS_POSTGRES_TEST_URL="$NEON_TEST_DIRECT_URL" \
+  npm run test -- src/atlas/postgres.integration.test.ts
+```
 
-Total row count check: `SELECT count(*) FROM properties` → **511,695**.
+Use a direct/unpooled URL for synchronization:
 
-## 5. Questions that do NOT work on Lee (and why)
+```bash
+DATABASE_URL="$NEON_DIRECT_URL" node dist/index.js sync
+```
 
-These columns exist in the schema but are **entirely NULL for Lee** — its appraiser
-source does not provide them (verified: `count()` returns 0 non-null for each):
+Run the HTTP server with a read-only database credential:
 
-- **Acreage** — `lot_size_acre` (0 non-null). "properties over 5 acres" cannot be answered.
-- **Wall / roof material** — `exterior_wall_material`, `roof_covering_material` (0 non-null). "how many have a tile roof" cannot be answered.
-- **HOA** — `hoa_flag` is NULL for **every** county, not just Lee.
+```bash
+DATABASE_URL="$NEON_READ_ONLY_URL" \
+MCP_HTTP_AUTH_TOKEN="$TOKEN" \
+npm run start:http
+```
 
-For these, donphan should check the schema / a `count(<column>)`, then say the data is
-not available for Lee rather than inventing an answer. Well-covered Lee columns include
-`market_value` (511,412 non-null), `address_city` (all 511,695), and `owners_text`
-(498,627 non-null).
-
-## Verified run (evidence)
-
-A JSON-RPC-over-stdio probe (`initialize` → `tools/list` → `tools/call`) against
-`node dist/index.js` with the env above confirmed:
-
-- `queryProperties` and `getPropertyQuerySchema` both appear in `tools/list`.
-- `SELECT count(*) FROM properties` → `{"n":"511695"}`.
-- `owners_text ILIKE '%Bailey%'` → real rows (Bruce Bailey/Boca Grande, Marta A Bailey/Cape Coral, …).
-- `getPropertyQuerySchema` → 37 columns.
+Verify the same query returns equivalent rows over `POST /mcp`. HTTP requests
+must not contact Atlas gateways or invoke DuckDB.

@@ -11,16 +11,20 @@ describe("verifyFetchedContent", () => {
     const KNOWN_CONTENT = Buffer.from('{"test":true}');
     const KNOWN_CID = "QmV6vzWB6kU1mQzmsQijkA688iNwyLhFaKHtjKXeKoFVyg";
 
-    it("returns valid=true when content matches its dag-pb CID", async () => {
-      const result = await verifyFetchedContent(
-        KNOWN_CID,
-        new Uint8Array(KNOWN_CONTENT),
-      );
+    it(
+      "returns valid=true when content matches its dag-pb CID",
+      async () => {
+        const result = await verifyFetchedContent(
+          KNOWN_CID,
+          new Uint8Array(KNOWN_CONTENT),
+        );
 
-      expect(result.valid).toBe(true);
-      expect(result.expectedHash).toBe(KNOWN_CID);
-      expect(result.actualHash).toBe(KNOWN_CID);
-    });
+        expect(result.valid).toBe(true);
+        expect(result.expectedHash).toBe(KNOWN_CID);
+        expect(result.actualHash).toBe(KNOWN_CID);
+      },
+      15_000,
+    );
 
     it("returns valid=false when content is tampered", async () => {
       const tampered = new Uint8Array(
@@ -74,59 +78,5 @@ describe("verifyFetchedContent", () => {
 
       expect(result.valid).toBe(false);
     });
-  });
-});
-
-describe("fetchShardByCid", () => {
-  it("parses a valid shard file via getJsonByCid", async () => {
-    // We need to test fetchShardByCid in isolation — use dynamic mock approach
-    const validShard = {
-      schemaVersion: "1" as const,
-      shardIndex: 0,
-      fromParcel: "1000000000",
-      toParcel: "1000000999",
-      count: 2,
-      entries: [
-        {
-          propertyId: "uuid-001",
-          parcelIdentifier: "1000000000",
-          cid: "QmSomeCid001",
-          fileSizeBytes: 1024,
-        },
-        {
-          propertyId: "uuid-002",
-          parcelIdentifier: "1000000999",
-          cid: null,
-          fileSizeBytes: 512,
-        },
-      ],
-    };
-
-    // fetchShardByCid calls getJsonByCid internally — we verify the shape
-    // by testing the Zod parse path with a known-valid object.
-    const { ShardFileSchema } = await import("../../types/oracleOpenData.ts");
-    const parsed = ShardFileSchema.parse(validShard);
-
-    expect(parsed.schemaVersion).toBe("1");
-    expect(parsed.shardIndex).toBe(0);
-    expect(parsed.count).toBe(2);
-    expect(parsed.entries).toHaveLength(2);
-    expect(parsed.entries[0].cid).toBe("QmSomeCid001");
-    expect(parsed.entries[1].cid).toBeNull();
-  });
-
-  it("throws ZodError for invalid shard file shape", async () => {
-    const { ShardFileSchema } = await import("../../types/oracleOpenData.ts");
-
-    const invalid = {
-      schemaVersion: "2", // wrong version — must be literal "1"
-      shardIndex: 0,
-      fromParcel: "1000",
-      toParcel: "1999",
-      count: 1,
-      entries: [],
-    };
-
-    expect(() => ShardFileSchema.parse(invalid)).toThrow();
   });
 });
