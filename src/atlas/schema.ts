@@ -1,6 +1,4 @@
-import type { AtlasBackend } from "./backend.ts";
 import type { AtlasExecutor } from "./connections.ts";
-import { quoteAtlasIdentifier } from "./tables.ts";
 
 /**
  * Control tables. Content tables are created per CountyTables table by
@@ -35,26 +33,4 @@ export async function initializeAtlasSchema(
   for (const statement of CONTROL_SCHEMA) {
     await executor.execute(statement);
   }
-}
-
-export async function cleanupAtlasStages(
-  executor: AtlasExecutor,
-  backend: AtlasBackend["kind"],
-): Promise<number> {
-  const result = await executor.execute(
-    backend === "sqlite"
-      ? `SELECT name
-         FROM sqlite_master
-         WHERE type = 'table' AND name LIKE 'atlas_stage__%'`
-      : `SELECT table_name AS name
-         FROM information_schema.tables
-         WHERE table_schema = 'public'
-           AND table_name LIKE 'atlas_stage__%'`,
-  );
-  for (const row of result.rows) {
-    await executor.execute(
-      `DROP TABLE IF EXISTS ${quoteAtlasIdentifier(String(row.name))}`,
-    );
-  }
-  return result.rows.length;
 }

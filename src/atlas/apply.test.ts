@@ -41,31 +41,21 @@ const columns = [
   { name: "name", canonicalType: "text", sourceType: "VARCHAR" },
 ] as const;
 
-async function stage(
-  connections: AtlasConnections,
-  table: string,
-  rows: Array<[string, string, string, string]>,
-) {
-  await connections.write.execute(
-    `CREATE TABLE ${table} (
-      cid TEXT,
-      property_cid TEXT,
-      data_group_cid TEXT,
-      name TEXT
-    )`,
-  );
-  for (const row of rows) {
-    await connections.write.execute(
-      `INSERT INTO ${table} VALUES (?, ?, ?, ?)`,
-      row,
-    );
-  }
+type Row = [string, string, string, string];
+
+function rows(...values: Row[]): Array<Record<string, unknown>> {
+  return values.map(([cid, property_cid, data_group_cid, name]) => ({
+    cid,
+    property_cid,
+    data_group_cid,
+    name,
+  }));
 }
 
 function apply(
   connections: AtlasConnections,
   indexCid: string,
-  groups: Array<{ dataGroup: string; stageTable: string }>,
+  groups: Array<{ dataGroup: string; rows: Array<Record<string, unknown>> }>,
   withdrawals: string[] = [],
 ) {
   return connections.transaction((executor) =>
@@ -73,10 +63,17 @@ function apply(
       backend: "sqlite",
       executor,
       generatedFrom: `generated-${indexCid}`,
-      groups: groups.map(({ dataGroup, stageTable }) => ({
+      groups: groups.map(({ dataGroup, rows }) => ({
         group: group(dataGroup),
         tables: [
-          { columns: [...columns], name: "company", rows: 1, stageTable },
+          {
+            columns: [...columns],
+            name: "company",
+            rows: rows.length,
+            async *read() {
+              yield* rows;
+            },
+          },
         ],
       })),
       indexCid,
@@ -98,16 +95,18 @@ describe("Atlas index transaction", () => {
     );
     try {
       await initializeAtlasSchema(connections.write);
-      await stage(connections, "atlas_stage__county", [
-        ["shared-cid", "property-a", "county-schema", "Shared"],
-        ["shared-cid", "property-b", "county-schema", "Shared"],
-      ]);
-      await stage(connections, "atlas_stage__hoa", [
-        ["shared-cid", "property-c", "hoa-schema", "Shared"],
-      ]);
       await apply(connections, INDEX, [
-        { dataGroup: "county", stageTable: "atlas_stage__county" },
-        { dataGroup: "hoa", stageTable: "atlas_stage__hoa" },
+        {
+          dataGroup: "county",
+          rows: rows(
+            ["shared-cid", "property-a", "county-schema", "Shared"],
+            ["shared-cid", "property-b", "county-schema", "Shared"],
+          ),
+        },
+        {
+          dataGroup: "hoa",
+          rows: rows(["shared-cid", "property-c", "hoa-schema", "Shared"]),
+        },
       ]);
       expect(
         await connections.read(
@@ -119,11 +118,11 @@ describe("Atlas index transaction", () => {
         { data_group: "hoa", property_cid: "property-c" },
       ]);
 
-      await stage(connections, "atlas_stage__changed", [
-        ["shared-cid", "property-c", "hoa-schema", "Changed"],
-      ]);
       await apply(connections, `${INDEX.slice(0, -1)}c`, [
-        { dataGroup: "hoa", stageTable: "atlas_stage__changed" },
+        {
+          dataGroup: "hoa",
+          rows: rows(["shared-cid", "property-c", "hoa-schema", "Changed"]),
+        },
       ]);
       expect(
         await connections.read(
@@ -143,6 +142,38 @@ describe("Atlas index transaction", () => {
       expect(
         await connections.read("SELECT count(*) AS count FROM company"),
       ).toEqual([{ count: 0 }]);
+
+      await expect(
+        apply(connections, `${INDEX.slice(0, -1)}d`, [
+          { dataGroup: "hoa", rows: [] },
+        ]).catch((error: Error) => error.message),
+      ).resolves.toBeUndefined();
+      await expect(
+        connections.transaction((executor) =>
+          applyAtlasIndexTransaction({
+            backend: "sqlite",
+            executor,
+            generatedFrom: "short",
+            groups: [
+              {
+                group: group("hoa"),
+                tables: [
+                  {
+                    columns: [...columns],
+                    name: "company",
+                    rows: 2,
+                    async *read() {
+                      yield* rows(["c", "p", "s", "n"]);
+                    },
+                  },
+                ],
+              },
+            ],
+            indexCid: `${INDEX.slice(0, -1)}e`,
+            withdrawals: [],
+          }),
+        ),
+      ).rejects.toThrow("loaded 1 rows, expected 2");
     } finally {
       await connections.close();
     }

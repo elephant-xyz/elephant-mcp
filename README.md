@@ -61,7 +61,8 @@ The command:
 1. Resolves the Atlas IPNS index through the configured gateways.
 2. Computes the index CID from its bytes.
 3. Verifies `CountyIndex`, `CountyTables`, and UnixFS Parquet CIDs.
-4. Loads changed groups into SQL through DuckDB.
+4. Reads changed Parquet parts through DuckDB and loads them into SQL in
+   batches.
 5. Applies replacements and withdrawals atomically.
 6. Prints the synchronized index CID and per-group counts.
 
@@ -78,11 +79,11 @@ per-property data-group roots. Columns come from the Parquet parts
 
 Primary keys:
 
-| Table | Key |
-|---|---|
-| lexicon class | `(county, data_group, cid, property_cid)` |
-| relationship | `(county, data_group, relationship_cid, property_cid)` |
-| `properties` | `(county, data_group, property_cid)` |
+| Table         | Key                                                    |
+| ------------- | ------------------------------------------------------ |
+| lexicon class | `(county, data_group, cid, property_cid)`              |
+| relationship  | `(county, data_group, relationship_cid, property_cid)` |
+| `properties`  | `(county, data_group, property_cid)`                   |
 
 Rows are content-addressed and shared by every property that carries them, so
 `property_cid` is part of the key. Loading a group deletes its
@@ -142,16 +143,16 @@ schema CIDs.
 
 ## Configuration
 
-| Variable | Purpose | Default |
-|---|---|---|
-| `ATLAS_IPNS` | Canonical Atlas IPNS name | `k51qzi5uqu5dhzmj1jtn06idud425ozwdjjjn4eu7q01g2t814h7rw4du0nd04` |
-| `ATLAS_GATEWAYS` | Comma-separated gateway origins in retry order | Filebase, IPFS.io, dweb.link, w3s.link |
-| `DATABASE_URL` | Atlas SQLite or Postgres target | Separate SQLite file under the application-data directory |
-| `MCP_HTTP_AUTH_TOKEN` | Bearer token for HTTP MCP routes | Unset |
-| `LOG_LEVEL` | `error`, `warn`, `info`, or `debug` | `info` |
-| `OPENAI_API_KEY` | OpenAI embeddings for verified scripts | Optional |
-| `AI_GATEWAY_API_KEY` / `VERCEL_OIDC_TOKEN` | Vercel AI Gateway embeddings | Optional |
-| AWS credential chain | Bedrock embeddings | Optional |
+| Variable                                   | Purpose                                        | Default                                                          |
+| ------------------------------------------ | ---------------------------------------------- | ---------------------------------------------------------------- |
+| `ATLAS_IPNS`                               | Canonical Atlas IPNS name                      | `k51qzi5uqu5dhzmj1jtn06idud425ozwdjjjn4eu7q01g2t814h7rw4du0nd04` |
+| `ATLAS_GATEWAYS`                           | Comma-separated gateway origins in retry order | Filebase, IPFS.io, dweb.link, w3s.link                           |
+| `DATABASE_URL`                             | Atlas SQLite or Postgres target                | Separate SQLite file under the application-data directory        |
+| `MCP_HTTP_AUTH_TOKEN`                      | Bearer token for HTTP MCP routes               | Unset                                                            |
+| `LOG_LEVEL`                                | `error`, `warn`, `info`, or `debug`            | `info`                                                           |
+| `OPENAI_API_KEY`                           | OpenAI embeddings for verified scripts         | Optional                                                         |
+| `AI_GATEWAY_API_KEY` / `VERCEL_OIDC_TOKEN` | Vercel AI Gateway embeddings                   | Optional                                                         |
+| AWS credential chain                       | Bedrock embeddings                             | Optional                                                         |
 
 `DATABASE_URL` accepts `file:`, `postgres://`, and `postgresql://`. Database
 credentials are never logged.

@@ -44,25 +44,6 @@ describe("Atlas query repository", () => {
     const connections = await openAtlasConnections(backend);
     try {
       await initializeAtlasSchema(connections.write);
-      await connections.write.execute(
-        `CREATE TABLE atlas_stage__property (
-          cid TEXT,
-          property_cid TEXT,
-          data_group_cid TEXT,
-          parcel_identifier TEXT,
-          market_value BIGINT
-        )`,
-      );
-      await connections.write.execute(
-        `INSERT INTO atlas_stage__property
-         VALUES ('entity-cid', 'property-cid', 'schema-cid', 'parcel-1', 125000)`,
-      );
-      await connections.write.execute(
-        "CREATE TABLE atlas_stage__properties (property_cid TEXT, bafkreischema TEXT)",
-      );
-      await connections.write.execute(
-        "INSERT INTO atlas_stage__properties VALUES ('property-cid', 'root-cid')",
-      );
       await connections.transaction((executor) =>
         applyAtlasIndexTransaction({
           backend: "sqlite",
@@ -96,13 +77,26 @@ describe("Atlas query repository", () => {
                   ],
                   name: "property",
                   rows: 1,
-                  stageTable: "atlas_stage__property",
+                  async *read() {
+                    yield {
+                      cid: "entity-cid",
+                      property_cid: "property-cid",
+                      data_group_cid: "schema-cid",
+                      parcel_identifier: "parcel-1",
+                      market_value: 125000n,
+                    };
+                  },
                 },
                 {
                   columns: [text("property_cid"), text("bafkreischema")],
                   name: "properties",
                   rows: 1,
-                  stageTable: "atlas_stage__properties",
+                  async *read() {
+                    yield {
+                      property_cid: "property-cid",
+                      bafkreischema: "root-cid",
+                    };
+                  },
                 },
               ],
             },

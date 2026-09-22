@@ -15,10 +15,8 @@ import {
 } from "./client.ts";
 import { openAtlasConnections, type AtlasConnections } from "./connections.ts";
 import {
-  attachAtlasTarget,
-  detachAtlasTarget,
   openAtlasDuckDb,
-  stageAtlasParquet,
+  readAtlasParquet,
   type AtlasDuckDb,
 } from "./duckdbEtl.ts";
 import type { AtlasGatewayFetchOptions } from "./gateways.ts";
@@ -30,7 +28,7 @@ import {
   type AtlasSyncStateRow,
 } from "./plan.ts";
 import { inspectAtlasParquet } from "./tables.ts";
-import { cleanupAtlasStages, initializeAtlasSchema } from "./schema.ts";
+import { initializeAtlasSchema } from "./schema.ts";
 
 export interface AtlasGroupSyncSummary {
   bytes: number;
@@ -130,8 +128,6 @@ async function stageGroup(args: {
   fetchOptions: AtlasGatewayFetchOptions;
   group: AtlasGroupTarget;
   runDirectory: string;
-  runToken: string;
-  targetSchema: "main" | "public";
 }): Promise<StagedGroup> {
   await fetchCountyIndex(args.group.archiveCid, args.fetchOptions);
   const tablesBlock = await fetchCountyTables(
@@ -143,7 +139,6 @@ async function stageGroup(args: {
   let bytes = 0;
   let parts = 0;
   let rows = 0;
-  let tableIndex = 0;
 
   for (const [name, table] of Object.entries(tablesBlock.value.tables)) {
     const files: string[] = [];
@@ -164,24 +159,12 @@ async function stageGroup(args: {
       parts += 1;
     }
     const columns = await inspectAtlasParquet(args.duckdb.connection, files);
-    const stageTable = `atlas_stage__${args.runToken}__${tableIndex++}`;
-    const loadedRows = await stageAtlasParquet({
-      connection: args.duckdb.connection,
-      files,
-      stageTable,
-      targetSchema: args.targetSchema,
-    });
-    if (loadedRows !== table.rows) {
-      throw new Error(
-        `Atlas table ${name} loaded ${loadedRows} rows, expected ${table.rows}`,
-      );
-    }
-    rows += loadedRows;
+    rows += table.rows;
     stagedTables.push({
       columns,
       name,
-      rows: loadedRows,
-      stageTable,
+      rows: table.rows,
+      read: () => readAtlasParquet(args.duckdb.connection, files, columns),
     });
   }
 
@@ -211,11 +194,9 @@ export async function syncAtlas(
   const ownsConnections = options.connections === undefined;
   await initializeAtlasSchema(connections.write);
   const lock = await acquireAtlasSyncLock(backend, connections.write);
-  const runId = randomUUID();
-  const runToken = runId.replaceAll("-", "");
   const runDirectory =
     options.stagingDirectory ??
-    path.join(getDefaultDataDir(), "atlas", "staging", runId);
+    path.join(getDefaultDataDir(), "atlas", "staging", randomUUID());
   const gateways =
     options.gateways ?? configuredGateways(config.ATLAS_GATEWAYS);
   const fetchOptions: AtlasGatewayFetchOptions = {
@@ -223,12 +204,8 @@ export async function syncAtlas(
     gateways,
   };
   let duckdb: AtlasDuckDb | undefined;
-  let targetAttached = false;
-  let targetSchema: "main" | "public" = "main";
-  const stageTables: string[] = [];
 
   try {
-    await cleanupAtlasStages(connections.write, backend.kind);
     const resolved = await resolveAtlasIndex(
       options.ipns ?? config.ATLAS_IPNS,
       fetchOptions,
@@ -260,25 +237,16 @@ export async function syncAtlas(
     if (loadGroups.length > 0) {
       await mkdir(runDirectory, { recursive: true });
       duckdb = await openAtlasDuckDb();
-      targetSchema = await attachAtlasTarget(duckdb.connection, backend);
-      targetAttached = true;
       for (const group of loadGroups) {
         const stagedGroup = await stageGroup({
           duckdb,
           fetchOptions,
           group,
           runDirectory,
-          runToken,
-          targetSchema,
         });
         staged.push(stagedGroup);
-        stageTables.push(
-          ...stagedGroup.tables.map((table) => table.stageTable),
-        );
         logger.info(stagedGroup.summary, "Staged Atlas county group");
       }
-      await detachAtlasTarget(duckdb.connection);
-      targetAttached = false;
     }
 
     await connections.transaction((executor) =>
@@ -303,17 +271,7 @@ export async function syncAtlas(
     logger.info(summary, "Atlas synchronization completed");
     return summary;
   } finally {
-    for (const stageTable of stageTables) {
-      await connections.write
-        .execute(`DROP TABLE IF EXISTS "${stageTable}"`)
-        .catch(() => undefined);
-    }
-    if (duckdb !== undefined) {
-      if (targetAttached) {
-        await detachAtlasTarget(duckdb.connection).catch(() => undefined);
-      }
-      duckdb.close();
-    }
+    duckdb?.close();
     await rm(runDirectory, { recursive: true, force: true }).catch(
       () => undefined,
     );

@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { parseAtlasDatabaseUrl } from "./backend.ts";
 import { openAtlasConnections } from "./connections.ts";
-import { cleanupAtlasStages, initializeAtlasSchema } from "./schema.ts";
+import { initializeAtlasSchema } from "./schema.ts";
 
 const directories: string[] = [];
 
@@ -56,34 +56,6 @@ describe("Atlas control schema", () => {
       await expect(
         initializeAtlasSchema(connections.write),
       ).resolves.toBeUndefined();
-    } finally {
-      await connections.close();
-    }
-  });
-
-  it("removes abandoned synchronization stages", async () => {
-    const directory = await mkdtemp(path.join(os.tmpdir(), "atlas-schema-"));
-    directories.push(directory);
-    const connections = await openAtlasConnections(
-      parseAtlasDatabaseUrl(`file://${path.join(directory, "atlas.sqlite")}`),
-    );
-
-    try {
-      await initializeAtlasSchema(connections.write);
-      await connections.write.execute(
-        "CREATE TABLE atlas_stage__abandoned (value TEXT)",
-      );
-
-      await expect(
-        cleanupAtlasStages(connections.write, "sqlite"),
-      ).resolves.toBe(1);
-      expect(
-        await connections.read(
-          `SELECT name
-           FROM sqlite_master
-           WHERE name = 'atlas_stage__abandoned'`,
-        ),
-      ).toEqual([]);
     } finally {
       await connections.close();
     }

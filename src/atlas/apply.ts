@@ -5,7 +5,6 @@ import {
   atlasKeyColumns,
   describeAtlasTable,
   ensureAtlasTable,
-  escapeAtlasLiteral,
   quoteAtlasIdentifier,
   readAtlasCatalog,
   type AtlasParquetColumn,
@@ -15,8 +14,11 @@ export interface AtlasStagedTable {
   columns: AtlasParquetColumn[];
   name: string;
   rows: number;
-  stageTable: string;
+  read(): AsyncIterable<Record<string, unknown>>;
 }
+
+/** Rows per INSERT, bounded by SQLite's default 32766 bind parameters. */
+const PARAMETER_BUDGET = 32_000;
 
 async function removeGroup(
   executor: AtlasExecutor,
@@ -47,26 +49,50 @@ async function loadTable(
   await ensureAtlasTable(executor, backend, table);
   const keys = atlasKeyColumns(table);
   const columns = table.columns.map((column) => column.name);
-  const quoted = columns.map(quoteAtlasIdentifier).join(", ");
+  const quoted = ["county", "data_group", ...columns].map(quoteAtlasIdentifier);
   const updates = columns
     .filter((column) => !keys.includes(column))
     .map(
       (column) =>
         `${quoteAtlasIdentifier(column)} = excluded.${quoteAtlasIdentifier(column)}`,
     );
-  await executor.execute(
-    `INSERT INTO ${quoteAtlasIdentifier(table.name)} ("county", "data_group", ${quoted})
-     SELECT ${escapeAtlasLiteral(group.county)}, ${escapeAtlasLiteral(
-       group.dataGroup,
-     )}, ${quoted}
-     FROM ${quoteAtlasIdentifier(staged.stageTable)}
-     WHERE true
-     ON CONFLICT (${keys.map(quoteAtlasIdentifier).join(", ")}) ${
-       updates.length === 0
-         ? "DO NOTHING"
-         : `DO UPDATE SET ${updates.join(", ")}`
-     }`,
-  );
+  const tuple = `(${quoted.map(() => "?").join(", ")})`;
+  const batchSize = Math.max(1, Math.floor(PARAMETER_BUDGET / quoted.length));
+  const insert = (batch: Array<Record<string, unknown>>) =>
+    executor.execute(
+      `INSERT INTO ${quoteAtlasIdentifier(table.name)} (${quoted.join(", ")})
+       VALUES ${batch.map(() => tuple).join(", ")}
+       ON CONFLICT (${keys.map(quoteAtlasIdentifier).join(", ")}) ${
+         updates.length === 0
+           ? "DO NOTHING"
+           : `DO UPDATE SET ${updates.join(", ")}`
+       }`,
+      batch.flatMap((row) => [
+        group.county,
+        group.dataGroup,
+        ...columns.map((column) => row[column] ?? null),
+      ]),
+    );
+
+  let loaded = 0;
+  let batch: Array<Record<string, unknown>> = [];
+  for await (const row of staged.read()) {
+    batch.push(row);
+    if (batch.length === batchSize) {
+      await insert(batch);
+      loaded += batch.length;
+      batch = [];
+    }
+  }
+  if (batch.length > 0) {
+    await insert(batch);
+    loaded += batch.length;
+  }
+  if (loaded !== staged.rows) {
+    throw new Error(
+      `Atlas table ${staged.name} loaded ${loaded} rows, expected ${staged.rows}`,
+    );
+  }
 }
 
 export async function applyAtlasIndexTransaction(args: {
