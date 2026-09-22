@@ -1,6 +1,6 @@
 {
   "name": "@elephant-xyz/mcp",
-  "version": "2.0.0",
+  "version": "1.13.0",
   "description": "MCP server for CID-verified Elephant Atlas data and lexicon tooling",
   "type": "module",
   "main": "dist/index.js",

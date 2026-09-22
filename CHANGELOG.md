@@ -1,3 +1,10 @@
+# [1.13.0](https://github.com/elephant-xyz/elephant-mcp/compare/v1.12.1...v1.13.0) (2026-09-22)
+
+
+### Features
+
+* back mcp with atlas sql ([#77](https://github.com/elephant-xyz/elephant-mcp/issues/77)) ([a06d267](https://github.com/elephant-xyz/elephant-mcp/commit/a06d267b4c1b872201b7a80680f15636ba48e6ed))
+
 ## [1.12.1](https://github.com/elephant-xyz/elephant-mcp/compare/v1.12.0...v1.12.1) (2026-09-04)
 
 
