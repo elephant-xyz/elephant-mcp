@@ -3,18 +3,7 @@ import {
   getAtlasQuerySchema,
   listAtlasProperties,
 } from "../atlas/query.ts";
-import { createTextResult } from "../lib/utils.ts";
-import { logger } from "../logger.ts";
-
-function toolError(message: string, error: unknown) {
-  return {
-    ...createTextResult({
-      error: message,
-      details: error instanceof Error ? error.message : String(error),
-    }),
-    isError: true,
-  };
-}
+import { createTextResult, toolError } from "../lib/utils.ts";
 
 export async function listOraclePropertiesHandler(args: {
   county: string;
@@ -34,10 +23,6 @@ export async function listOraclePropertiesHandler(args: {
       }),
     );
   } catch (error) {
-    logger.error(
-      { error: error instanceof Error ? error.message : String(error) },
-      "listOracleProperties failed",
-    );
     return toolError("Failed to list Atlas properties", error);
   }
 }
@@ -46,36 +31,11 @@ export async function getOraclePropertyHandler(args: {
   county: string;
   dataGroup: string;
   state: string;
-  propertyCid?: string;
-  cid?: string;
+  propertyCid: string;
 }) {
-  const propertyCid = args.propertyCid ?? args.cid;
-  if (propertyCid === undefined) {
-    return toolError(
-      "Failed to get Atlas property",
-      new Error("Provide exactly one of propertyCid or cid"),
-    );
-  }
-  if (args.propertyCid !== undefined && args.cid !== undefined) {
-    return toolError(
-      "Failed to get Atlas property",
-      new Error("Provide exactly one of propertyCid or cid"),
-    );
-  }
   try {
-    return createTextResult(
-      await getAtlasProperty({
-        county: args.county,
-        dataGroup: args.dataGroup,
-        state: args.state,
-        propertyCid,
-      }),
-    );
+    return createTextResult(await getAtlasProperty(args));
   } catch (error) {
-    logger.error(
-      { error: error instanceof Error ? error.message : String(error) },
-      "getOracleProperty failed",
-    );
     return toolError("Failed to get Atlas property", error);
   }
 }
@@ -96,10 +56,6 @@ export async function getOracleDatasetInfoHandler(args: {
       syncedAt: source.syncedAt,
     });
   } catch (error) {
-    logger.error(
-      { error: error instanceof Error ? error.message : String(error) },
-      "getOracleDatasetInfo failed",
-    );
     return toolError("Failed to get Atlas dataset info", error);
   }
 }

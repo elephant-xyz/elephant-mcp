@@ -1,6 +1,5 @@
 import { getAtlasQuerySchema, runAtlasQuery } from "../atlas/query.ts";
-import { createTextResult } from "../lib/utils.ts";
-import { logger } from "../logger.ts";
+import { createTextResult, toolError } from "../lib/utils.ts";
 
 export const DEFAULT_ROW_LIMIT = 100;
 export const MAX_ROW_LIMIT = 1000;
@@ -23,22 +22,7 @@ export async function queryPropertiesHandler(args: {
       }),
     );
   } catch (error) {
-    logger.error(
-      {
-        county: args.county,
-        dataGroup: args.dataGroup,
-        state: args.state,
-        error: error instanceof Error ? error.message : String(error),
-      },
-      "queryProperties failed",
-    );
-    return {
-      ...createTextResult({
-        error: "Failed to run Atlas property query",
-        details: error instanceof Error ? error.message : String(error),
-      }),
-      isError: true,
-    };
+    return toolError("Failed to run Atlas property query", error);
   }
 }
 
@@ -51,22 +35,6 @@ export async function getPropertyQuerySchemaHandler(args: {
   try {
     return createTextResult(await getAtlasQuerySchema(args));
   } catch (error) {
-    logger.error(
-      {
-        county: args.county,
-        dataGroup: args.dataGroup,
-        state: args.state,
-        error: error instanceof Error ? error.message : String(error),
-        table: args.table,
-      },
-      "getPropertyQuerySchema failed",
-    );
-    return {
-      ...createTextResult({
-        error: "Failed to fetch Atlas property query schema",
-        details: error instanceof Error ? error.message : String(error),
-      }),
-      isError: true,
-    };
+    return toolError("Failed to fetch Atlas property query schema", error);
   }
 }

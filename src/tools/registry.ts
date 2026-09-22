@@ -158,16 +158,14 @@ export function registerAllTools(
         "Reconstruct one property's Atlas roots, class rows, and relationship rows.",
       inputSchema: {
         ...atlasScope,
-        propertyCid: z.string().optional(),
-        cid: z.string().optional(),
+        propertyCid: z.string().min(1),
       },
     },
     async (args: {
       county: string;
       dataGroup: string;
       state: string;
-      propertyCid?: string;
-      cid?: string;
+      propertyCid: string;
     }) => getOraclePropertyHandler(args),
   );
 

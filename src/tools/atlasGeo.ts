@@ -1,7 +1,5 @@
-import { ATLAS_IDENTIFIER_PATTERN } from "../atlas/contracts.ts";
 import { getAtlasQuerySchema, runAtlasQuery } from "../atlas/query.ts";
-import { createTextResult } from "../lib/utils.ts";
-import { logger } from "../logger.ts";
+import { createTextResult, toolError } from "../lib/utils.ts";
 
 interface Point {
   lat: number;
@@ -26,11 +24,8 @@ interface AreaArgs {
   valueColumn: string;
 }
 
-/** Quote a table or column name once it is known to exist in the scope. */
+/** Quote a column name once it is known to exist in the scoped table. */
 function identifier(value: string, available: readonly string[]): string {
-  if (!ATLAS_IDENTIFIER_PATTERN.test(value)) {
-    throw new Error(`Invalid Atlas identifier '${value}'`);
-  }
   if (!available.includes(value)) {
     throw new Error(
       `Column '${value}' does not exist; available columns: ${available.join(", ")}`,
@@ -104,7 +99,7 @@ async function area(args: AreaArgs, withRows: boolean) {
     state: args.state,
     table: args.table,
   });
-  const available = schema.columns.map((column) => column.name);
+  const available = (schema.columns ?? []).map((column) => column.name);
   const latitude = identifier(args.latitudeColumn, available);
   const longitude = identifier(args.longitudeColumn, available);
   const parcel = identifier(args.parcelColumn, available);
@@ -163,20 +158,6 @@ async function area(args: AreaArgs, withRows: boolean) {
   };
 }
 
-function errorResult(message: string, error: unknown) {
-  logger.error(
-    { error: error instanceof Error ? error.message : String(error) },
-    message,
-  );
-  return {
-    ...createTextResult({
-      error: message,
-      details: error instanceof Error ? error.message : String(error),
-    }),
-    isError: true,
-  };
-}
-
 export async function findPropertiesInAreaHandler(args: AreaArgs) {
   try {
     const { count, rows, source, truncated } = await area(args, true);
@@ -188,7 +169,7 @@ export async function findPropertiesInAreaHandler(args: AreaArgs) {
       truncated,
     });
   } catch (error) {
-    return errorResult("Failed to find Atlas properties in area", error);
+    return toolError("Failed to find Atlas properties in area", error);
   }
 }
 
@@ -203,6 +184,6 @@ export async function sumPropertyValueInAreaHandler(args: AreaArgs) {
       truncated,
     });
   } catch (error) {
-    return errorResult("Failed to sum Atlas property values in area", error);
+    return toolError("Failed to sum Atlas property values in area", error);
   }
 }
