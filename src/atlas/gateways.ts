@@ -22,17 +22,23 @@ export class AtlasGatewayFetchError extends Error {
   }
 }
 
-export interface AtlasGatewayFetchResult {
+export interface AtlasGatewayFetchResult<T> {
   gateway: string;
-  response: Response;
   url: string;
+  value: T;
 }
 
 export interface AtlasGatewayFetchOptions {
   gateways?: readonly string[];
   fetcher?: typeof globalThis.fetch;
+  /** Applies to the response headers and to each gap between body chunks. */
   timeoutMs?: number;
 }
+
+type AtlasBodyConsumer<T> = (
+  body: AsyncIterable<Uint8Array>,
+  response: Response,
+) => Promise<T>;
 
 function normalizeGateway(gateway: string): string {
   let url: URL;
@@ -83,57 +89,95 @@ function validateOptions(options: AtlasGatewayFetchOptions): {
   };
 }
 
-async function cancel(response: Response): Promise<void> {
-  await response.body?.cancel().catch(() => undefined);
-}
-
 function failureReason(
   error: unknown,
-  timeout: AbortSignal,
+  signal: AbortSignal,
   timeoutMs: number,
 ): string {
-  if (timeout.aborted) {
+  if (signal.aborted) {
     return `timeout after ${timeoutMs}ms`;
   }
   return error instanceof Error ? error.message : String(error);
 }
 
+async function collect(body: AsyncIterable<Uint8Array>): Promise<Uint8Array> {
+  const chunks: Uint8Array[] = [];
+  for await (const chunk of body) chunks.push(chunk);
+  return new Uint8Array(Buffer.concat(chunks));
+}
+
 /**
- * Fetch a path from gateways in order, returning the first successful 2xx
- * response. Each request has its own timeout and every failed attempt is
- * retained in the aggregate error.
+ * Fetch a path from gateways in order and hand the first 2xx body to the
+ * consumer. The timeout covers the headers and then re-arms on every body
+ * chunk; a stalled or broken stream, or a consumer that rejects (for
+ * example on a CID mismatch), moves on to the next gateway. Every failed
+ * attempt is retained in the aggregate error.
  */
-async function fetchFromAtlasGateways(
+async function fetchFromAtlasGateways<T>(
   path: string,
   init: RequestInit,
-  options: AtlasGatewayFetchOptions = {},
-): Promise<AtlasGatewayFetchResult> {
+  options: AtlasGatewayFetchOptions,
+  consume: AtlasBodyConsumer<T>,
+): Promise<AtlasGatewayFetchResult<T>> {
   const { gateways, fetcher, timeoutMs } = validateOptions(options);
   const attempts: AtlasGatewayAttempt[] = [];
 
   for (const gateway of gateways) {
     const url = `${gateway}${path}`;
-    const timeout = AbortSignal.timeout(timeoutMs);
+    const controller = new AbortController();
+    let timer: NodeJS.Timeout | undefined;
+    const arm = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => controller.abort(), timeoutMs);
+    };
+    arm();
 
     try {
-      const response = await fetcher(url, { ...init, signal: timeout });
-      if (response.ok) {
-        return { gateway, response, url };
-      }
-
-      attempts.push({
-        url,
-        reason: `HTTP ${response.status}${
-          response.statusText === "" ? "" : ` ${response.statusText}`
-        }`,
-        status: response.status,
+      const response = await fetcher(url, {
+        ...init,
+        signal: controller.signal,
       });
-      await cancel(response);
+      if (!response.ok) {
+        attempts.push({
+          url,
+          reason: `HTTP ${response.status}${
+            response.statusText === "" ? "" : ` ${response.statusText}`
+          }`,
+          status: response.status,
+        });
+        await response.body?.cancel().catch(() => undefined);
+        continue;
+      }
+      const aborted = new Promise<never>((_resolve, reject) => {
+        controller.signal.addEventListener(
+          "abort",
+          () => reject(new Error(`timeout after ${timeoutMs}ms`)),
+          { once: true },
+        );
+      });
+      async function* body() {
+        if (response.body === null) return;
+        const reader = response.body.getReader();
+        try {
+          for (;;) {
+            const next = await Promise.race([reader.read(), aborted]);
+            if (next.done) return;
+            arm();
+            yield next.value;
+          }
+        } finally {
+          await reader.cancel().catch(() => undefined);
+        }
+      }
+      return { gateway, url, value: await consume(body(), response) };
     } catch (error) {
       attempts.push({
         url,
-        reason: failureReason(error, timeout, timeoutMs),
+        reason: failureReason(error, controller.signal, timeoutMs),
       });
+      controller.abort();
+    } finally {
+      clearTimeout(timer);
     }
   }
 
@@ -148,12 +192,15 @@ function ipnsName(name: string): string {
 }
 
 /**
- * Resolve the Atlas index bytes through `/ipns/<name>?format=raw`.
+ * Resolve the Atlas index bytes through `/ipns/<name>?format=raw`, with the
+ * root the gateway reports in `X-Ipfs-Roots`.
  */
 export function fetchAtlasIndex(
   name: string,
   options: AtlasGatewayFetchOptions = {},
-): Promise<AtlasGatewayFetchResult> {
+): Promise<
+  AtlasGatewayFetchResult<{ bytes: Uint8Array; roots: string | null }>
+> {
   return fetchFromAtlasGateways(
     `/ipns/${ipnsName(name)}?format=raw`,
     {
@@ -163,6 +210,10 @@ export function fetchAtlasIndex(
       },
     },
     options,
+    async (body, response) => ({
+      bytes: await collect(body),
+      roots: response.headers.get("x-ipfs-roots"),
+    }),
   );
 }
 
@@ -172,26 +223,24 @@ export function fetchAtlasIndex(
 export function fetchRawAtlasBlock(
   cid: string,
   options: AtlasGatewayFetchOptions = {},
-): Promise<AtlasGatewayFetchResult> {
+): Promise<AtlasGatewayFetchResult<Uint8Array>> {
   const canonicalCid = CidV1Schema.parse(cid);
   return fetchFromAtlasGateways(
     `/ipfs/${canonicalCid}?format=raw`,
-    {
-      headers: {
-        Accept: "application/vnd.ipld.raw",
-      },
-    },
+    { headers: { Accept: "application/vnd.ipld.raw" } },
     options,
+    collect,
   );
 }
 
 /**
- * Stream the UnixFS file represented by a CID.
+ * Stream the UnixFS file represented by a CID into the consumer.
  */
-export function fetchAtlasUnixFs(
+export function fetchAtlasUnixFs<T>(
   cid: string,
-  options: AtlasGatewayFetchOptions = {},
-): Promise<AtlasGatewayFetchResult> {
+  options: AtlasGatewayFetchOptions,
+  consume: AtlasBodyConsumer<T>,
+): Promise<AtlasGatewayFetchResult<T>> {
   const canonicalCid = CidV1Schema.parse(cid);
-  return fetchFromAtlasGateways(`/ipfs/${canonicalCid}`, {}, options);
+  return fetchFromAtlasGateways(`/ipfs/${canonicalCid}`, {}, options, consume);
 }

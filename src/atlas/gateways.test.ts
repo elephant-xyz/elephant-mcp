@@ -37,7 +37,7 @@ describe("Atlas gateway fetching", () => {
 
     expect(result.gateway).toBe("https://second.test");
     expect(result.url).toBe("https://second.test/ipns/k51atlas?format=raw");
-    expect(await result.response.text()).toBe("index bytes");
+    expect(new TextDecoder().decode(result.value.bytes)).toBe("index bytes");
     expect(seen.map(({ url }) => url)).toEqual([
       "https://first.test/ipns/k51atlas?format=raw",
       "https://second.test/ipns/k51atlas?format=raw",
@@ -59,7 +59,9 @@ describe("Atlas gateway fetching", () => {
     };
 
     await fetchRawAtlasBlock(expectedCid, options);
-    await fetchAtlasUnixFs(expectedCid, options);
+    await fetchAtlasUnixFs(expectedCid, options, async (body) => {
+      for await (const chunk of body) void chunk;
+    });
 
     expect(seen).toEqual([
       `https://gateway.test/ipfs/${expectedCid}?format=raw`,
@@ -123,5 +125,84 @@ describe("Atlas gateway fetching", () => {
       const aggregate = error as AtlasGatewayFetchError;
       expect(aggregate.attempts[0].reason).toBe("timeout after 5ms");
     }
+  });
+
+  it("falls back to the next gateway when a body stream breaks or stalls", async () => {
+    const expectedCid = await cid("part");
+    const broken = () =>
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode("partial"));
+          controller.error(new Error("stream reset"));
+        },
+      });
+    const stalled = () =>
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode("first chunk"));
+        },
+      });
+    const fetcher: typeof fetch = async (input) => {
+      const url = String(input);
+      if (url.startsWith("https://broken.test/")) return new Response(broken());
+      if (url.startsWith("https://stalled.test/"))
+        return new Response(stalled());
+      return new Response("complete");
+    };
+
+    const result = await fetchAtlasUnixFs(
+      expectedCid,
+      {
+        gateways: [
+          "https://broken.test",
+          "https://stalled.test",
+          "https://good.test",
+        ],
+        fetcher,
+        timeoutMs: 20,
+      },
+      async (body) => {
+        const chunks: Uint8Array[] = [];
+        for await (const chunk of body) chunks.push(chunk);
+        return new TextDecoder().decode(Buffer.concat(chunks));
+      },
+    );
+    expect(result).toMatchObject({
+      gateway: "https://good.test",
+      value: "complete",
+    });
+
+    await expect(
+      fetchAtlasUnixFs(
+        expectedCid,
+        {
+          gateways: ["https://broken.test", "https://stalled.test"],
+          fetcher,
+          timeoutMs: 20,
+        },
+        async (body) => {
+          for await (const chunk of body) void chunk;
+        },
+      ),
+    ).rejects.toThrow(/stream reset.*timeout after 20ms/su);
+  });
+
+  it("retries the next gateway when the consumer rejects the body", async () => {
+    const expectedCid = await cid("part");
+    const fetcher: typeof fetch = async (input) =>
+      new Response(String(input).includes("bad.test") ? "tampered" : "genuine");
+
+    const result = await fetchAtlasUnixFs(
+      expectedCid,
+      { gateways: ["https://bad.test", "https://good.test"], fetcher },
+      async (body) => {
+        const chunks: Uint8Array[] = [];
+        for await (const chunk of body) chunks.push(chunk);
+        const text = new TextDecoder().decode(Buffer.concat(chunks));
+        if (text !== "genuine") throw new Error(`CID mismatch for ${text}`);
+        return text;
+      },
+    );
+    expect(result.gateway).toBe("https://good.test");
   });
 });

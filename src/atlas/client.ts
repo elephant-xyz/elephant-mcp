@@ -60,10 +60,9 @@ export async function resolveAtlasIndex(
   options: AtlasGatewayFetchOptions = {},
 ): Promise<ResolvedAtlasIndex> {
   const fetched = await fetchAtlasIndex(ipns, options);
-  const bytes = new Uint8Array(await fetched.response.arrayBuffer());
+  const bytes = fetched.value.bytes;
   const indexCid = await calculateAtlasIndexCid(bytes);
-  const root = fetched.response.headers
-    .get("x-ipfs-roots")
+  const root = fetched.value.roots
     ?.split(",")
     .map((value) => value.trim())
     .filter(Boolean)
@@ -84,7 +83,7 @@ async function verifiedDagJson(
   options: AtlasGatewayFetchOptions,
 ): Promise<{ bytes: Uint8Array; gateway: string; value: unknown }> {
   const fetched = await fetchRawAtlasBlock(cid, options);
-  const bytes = new Uint8Array(await fetched.response.arrayBuffer());
+  const bytes = fetched.value;
   await verifyRawBlockCid(bytes, cid);
   try {
     return {
@@ -133,39 +132,35 @@ export async function downloadAtlasPart(
   options: AtlasGatewayFetchOptions = {},
 ): Promise<DownloadedAtlasPart> {
   await mkdir(directory, { recursive: true });
-  const fetched = await fetchAtlasUnixFs(cid, options);
-  if (fetched.response.body === null) {
-    throw new Error("Atlas gateway response has no body");
-  }
-  const body = fetched.response.body;
   const finalPath = path.join(directory, `${cid}.parquet`);
-  const temporaryPath = `${finalPath}.${process.pid}.${randomUUID()}.tmp`;
-  const handle = await open(temporaryPath, "wx", 0o600);
-
-  try {
-    async function* writeAndVerify() {
-      for await (const chunk of body) {
-        await handle.write(chunk);
-        yield chunk;
+  const fetched = await fetchAtlasUnixFs(cid, options, async (body) => {
+    const temporaryPath = `${finalPath}.${process.pid}.${randomUUID()}.tmp`;
+    const handle = await open(temporaryPath, "wx", 0o600);
+    try {
+      async function* writeAndVerify() {
+        for await (const chunk of body) {
+          await handle.write(chunk);
+          yield chunk;
+        }
       }
+      const verification = await verifyUnixFsCid(
+        writeAndVerify(),
+        cid,
+        expectedBytes,
+      );
+      await handle.sync();
+      await handle.close();
+      await rename(temporaryPath, finalPath);
+      return verification.bytes;
+    } catch (error) {
+      await handle.close().catch(() => undefined);
+      await rm(temporaryPath, { force: true }).catch(() => undefined);
+      throw error;
     }
-
-    const verification = await verifyUnixFsCid(
-      writeAndVerify(),
-      cid,
-      expectedBytes,
-    );
-    await handle.sync();
-    await handle.close();
-    await rename(temporaryPath, finalPath);
-    return {
-      bytes: verification.bytes,
-      filePath: finalPath,
-      gateway: fetched.gateway,
-    };
-  } catch (error) {
-    await handle.close().catch(() => undefined);
-    await rm(temporaryPath, { force: true }).catch(() => undefined);
-    throw error;
-  }
+  });
+  return {
+    bytes: fetched.value,
+    filePath: finalPath,
+    gateway: fetched.gateway,
+  };
 }
