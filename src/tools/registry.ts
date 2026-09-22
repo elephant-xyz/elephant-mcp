@@ -176,12 +176,11 @@ export function registerAllTools(
   server.registerTool(
     "queryProperties",
     {
-      title: "Query normalized Atlas table",
+      title: "Query Atlas tables",
       description:
-        "Run a scoped read-only SELECT over the logical properties relation.",
+        "Run a read-only SELECT over the synchronized tables of one county/data group. Table names are those from getPropertyQuerySchema (property, address, properties, ...).",
       inputSchema: {
         ...atlasScope,
-        table: atlasIdentifier,
         sql: z.string().min(1),
         limit: z
           .number()
@@ -195,7 +194,6 @@ export function registerAllTools(
     async (args: {
       county: string;
       dataGroup: string;
-      table: string;
       sql: string;
       limit?: number;
     }) => queryPropertiesHandler(args),

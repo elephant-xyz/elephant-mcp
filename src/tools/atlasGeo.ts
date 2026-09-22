@@ -92,14 +92,13 @@ async function areaRows(args: AreaArgs) {
   const result = await runAtlasQuery({
     county: args.county,
     dataGroup: args.dataGroup,
-    table: args.table,
     limit: 1000,
     sql: `SELECT
       ${parcel} AS parcel_identifier,
       ${latitude} AS latitude,
       ${longitude} AS longitude,
       ${value} AS value
-     FROM properties
+     FROM ${identifier(args.table, "property")}
      WHERE ${latitude} BETWEEN ${area.minLat} AND ${area.maxLat}
        AND ${longitude} BETWEEN ${area.minLng} AND ${area.maxLng}`,
   });

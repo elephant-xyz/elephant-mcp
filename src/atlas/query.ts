@@ -7,7 +7,7 @@ import {
   readAtlasCatalog,
   type AtlasCatalogColumn,
 } from "./tables.ts";
-import { validateSelectQuery } from "../lib/sqlSafety.ts";
+import { validateScopedSelect } from "../lib/sqlSafety.ts";
 
 export interface AtlasSource {
   archiveCid: string;
@@ -89,51 +89,45 @@ export async function resolveAtlasSource(
   };
 }
 
-function validateScopedQuery(statement: string): string {
-  const validation = validateSelectQuery(statement);
-  if (!validation.ok) {
-    throw new Error(validation.error);
-  }
-  if (/^\s*WITH\b/iu.test(validation.sql)) {
-    throw new Error("CTEs are not supported by Atlas scoped queries");
-  }
-  if (/\bJOIN\b/iu.test(validation.sql)) {
-    throw new Error("JOIN is not supported by Atlas scoped queries");
-  }
-  const targets = [
-    ...validation.sql.matchAll(/\bFROM\s+([A-Za-z_][A-Za-z0-9_]*)/giu),
-  ].map((match) => match[1]?.toLowerCase());
-  if (targets.length !== 1 || targets[0] !== "properties") {
-    throw new Error(
-      "Atlas SQL must read only from the logical properties relation",
-    );
-  }
-  return validation.sql;
-}
-
+/**
+ * Run a read-only SELECT over the county/data-group scope. Every content
+ * table the statement names is shadowed by a same-named CTE filtered to the
+ * scope, and the statement may reference nothing outside those tables.
+ */
 export async function runAtlasQuery(args: {
   county: string;
   dataGroup: string;
   limit: number;
   sql: string;
-  table: string;
 }): Promise<AtlasQueryResult> {
-  const statement = validateScopedQuery(args.sql);
-  const table = TableIdentifierSchema.parse(args.table);
   const source = await resolveAtlasSource(args.county, args.dataGroup);
   const runtime = await awaitAtlasReady();
-  if (!(await catalog(runtime)).has(table)) {
-    throw new Error(`Atlas table '${table}' is not synchronized`);
+  const tables = await catalog(runtime);
+  const validation = validateScopedSelect(
+    args.sql,
+    new Map(
+      [...tables].map(([name, columns]) => [
+        name,
+        columns.map((column) => column.name),
+      ]),
+    ),
+  );
+  if (!validation.ok) {
+    throw new Error(validation.error);
   }
+  const scoped = validation.relations.map(
+    (name) =>
+      `${quoteAtlasIdentifier(name)} AS (
+         SELECT * FROM ${qualifyAtlasTable(runtime.backend.kind, name)}
+         WHERE ${scope(source)}
+       )`,
+  );
   const limit = Math.max(1, Math.min(args.limit, 1000));
   const rows = normalizedRows(
     await runtime.connections.read(
-      `WITH properties AS (
-         SELECT * FROM ${qualifyAtlasTable(runtime.backend.kind, table)}
-         WHERE ${scope(source)}
-       )
+      `${scoped.length === 0 ? "" : `WITH ${scoped.join(", ")}`}
        SELECT *
-       FROM (${statement}) AS atlas_query
+       FROM (${validation.sql}) AS atlas_query
        LIMIT ${limit}`,
     ),
   );

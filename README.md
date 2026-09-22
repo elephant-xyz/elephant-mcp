@@ -131,9 +131,14 @@ Lexicon and verified scripts:
 - `getPropertySchema`
 - `getVerifiedScriptExamples`
 
-Atlas data tools require explicit county and data-group scope. Query tools use
-normalized class and relationship tables, not the pre-2.0 wide property view.
-Responses include the Atlas index, archive, tables, and schema CIDs.
+Atlas data tools require explicit county and data-group scope. `queryProperties`
+accepts one read-only SELECT that names the synchronized tables directly
+(`property`, `address`, `property_has_address`, `properties`, ...); each one is
+shadowed by a CTE filtered to the requested county and data group, and any
+identifier that is not one of those tables, their columns, an alias, a function,
+or a SQL keyword is rejected, so `atlas_state`, catalogs, and schema-qualified
+names fail closed. Responses include the Atlas index, archive, tables, and
+schema CIDs.
 
 ## Configuration
 

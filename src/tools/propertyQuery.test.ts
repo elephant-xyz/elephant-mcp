@@ -33,7 +33,6 @@ describe("queryPropertiesHandler — safety (no Parquet needed)", () => {
     const result = await queryPropertiesHandler({
       county: "lee",
       dataGroup: "county",
-      table: "property",
       sql: "DROP VIEW properties",
     });
     const parsed = parse(result);
@@ -45,7 +44,6 @@ describe("queryPropertiesHandler — safety (no Parquet needed)", () => {
     const result = await queryPropertiesHandler({
       county: "lee",
       dataGroup: "county",
-      table: "property",
       sql: "SELECT 1; SELECT 2",
     });
     expect(parse(result).error).toBeDefined();
@@ -54,9 +52,8 @@ describe("queryPropertiesHandler — safety (no Parquet needed)", () => {
     const result = await queryPropertiesHandler({
       county: "lee",
       dataGroup: "county",
-      table: "property",
       sql: "SELECT * FROM atlas_state",
     });
-    expect(parse(result).details).toContain("logical properties relation");
+    expect(parse(result).error).toBeDefined();
   });
 });

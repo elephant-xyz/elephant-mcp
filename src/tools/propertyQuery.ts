@@ -8,7 +8,6 @@ export const MAX_ROW_LIMIT = 1000;
 export async function queryPropertiesHandler(args: {
   county: string;
   dataGroup: string;
-  table: string;
   sql: string;
   limit?: number;
 }) {
@@ -17,7 +16,6 @@ export async function queryPropertiesHandler(args: {
       await runAtlasQuery({
         county: args.county,
         dataGroup: args.dataGroup,
-        table: args.table,
         sql: args.sql,
         limit: args.limit ?? DEFAULT_ROW_LIMIT,
       }),
@@ -28,7 +26,6 @@ export async function queryPropertiesHandler(args: {
         county: args.county,
         dataGroup: args.dataGroup,
         error: error instanceof Error ? error.message : String(error),
-        table: args.table,
       },
       "queryProperties failed",
     );

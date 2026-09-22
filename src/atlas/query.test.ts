@@ -117,15 +117,19 @@ describe("Atlas query repository", () => {
         status: "ready",
       });
 
-      const result = await runAtlasQuery({
-        county: "lee",
-        dataGroup: "county",
-        table: "property",
-        sql: `SELECT parcel_identifier, market_value
-              FROM properties
-              WHERE market_value > 100000`,
-        limit: 10,
-      });
+      // A row from another scope must never be visible.
+      await connections.write.execute(
+        `INSERT INTO property VALUES
+         ('lee', 'hoa', 'other-cid', 'other-property', 'hoa-schema', 'parcel-9', 1)`,
+      );
+      const query = (sql: string) =>
+        runAtlasQuery({ county: "lee", dataGroup: "county", sql, limit: 10 });
+
+      const result = await query(
+        `SELECT parcel_identifier, market_value
+         FROM property
+         WHERE market_value > 100000`,
+      );
       expect(result).toMatchObject({
         rowCount: 1,
         rows: [{ parcel_identifier: "parcel-1", market_value: 125000 }],
@@ -137,11 +141,56 @@ describe("Atlas query repository", () => {
         },
       });
       expect(
+        (
+          await query(
+            `SELECT count(*) AS n, p.bafkreischema AS root
+             FROM property AS c
+             JOIN properties p ON p.property_cid = c.property_cid
+             GROUP BY p.bafkreischema`,
+          )
+        ).rows,
+      ).toEqual([{ n: 1, root: "root-cid" }]);
+      expect(
+        (await query("WITH x AS (SELECT * FROM property) SELECT cid FROM x"))
+          .rows,
+      ).toEqual([{ cid: "entity-cid" }]);
+
+      const rejected = (sql: string) =>
+        query(sql).then(
+          () => "accepted",
+          (error: Error) => error.message,
+        );
+      expect(await rejected("SELECT * FROM property, atlas_state")).toContain(
+        "atlas_state",
+      );
+      expect(
+        await rejected(
+          "SELECT * FROM (SELECT index_cid FROM atlas_sync_state) AS s",
+        ),
+      ).toContain("atlas_sync_state");
+      expect(
+        await rejected(
+          "WITH property AS (SELECT * FROM atlas_state) SELECT * FROM property",
+        ),
+      ).toContain("atlas_state");
+      expect(await rejected('SELECT * FROM "atlas_state"')).toContain(
+        "atlas_state",
+      );
+      expect(await rejected("SELECT * FROM main.property")).toContain("main");
+      expect(await rejected("SELECT * FROM sqlite_master")).toContain(
+        "sqlite_master",
+      );
+      expect(await rejected("SELECT * FROM atlas_stage__x")).toContain(
+        "atlas_stage__x",
+      );
+      expect(await rejected("SELECT * FROM unknown_table")).toContain(
+        "unknown_table",
+      );
+      expect(
         await runAtlasQuery({
           county: "lee",
           dataGroup: "hoa",
-          table: "property",
-          sql: "SELECT * FROM properties",
+          sql: "SELECT * FROM property",
           limit: 10,
         }).catch((error: Error) => error.message),
       ).toContain("not published");

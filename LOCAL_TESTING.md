@@ -45,7 +45,7 @@ Initialize MCP, list tools, then call:
 
 1. `listPublishedCounties`
 2. `getPropertyQuerySchema` with a county and data group
-3. `queryProperties` with a normalized table and read-only SQL
+3. `queryProperties` with read-only SQL naming a synchronized table
 4. `getOracleProperty` with a published property CID
 
 Confirm every data response contains Atlas source CIDs.
