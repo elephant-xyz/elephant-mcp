@@ -53,7 +53,16 @@ const DENIED_IDENTIFIER =
 
 const TOKEN = /(?<![0-9A-Za-z_])[A-Za-z_][A-Za-z0-9_]*|[().,]/gu;
 
-function stripLiteralsAndComments(statement: string): string {
+interface StrippedStatement {
+  literals: string[];
+  /** `E'...'`, `U&'...'`, `U&"..."`, `N'...'`, `B'...'`, `X'...'` seen. */
+  prefixed: boolean;
+  text: string;
+}
+
+function stripLiteralsAndComments(statement: string): StrippedStatement {
+  const literals: string[] = [];
+  let prefixed = false;
   let output = "";
   let position = 0;
 
@@ -80,7 +89,20 @@ function stripLiteralsAndComments(statement: string): string {
       output += " ";
       continue;
     }
-    if (character === "'") {
+    if (character === "'" || character === '"') {
+      const before = statement.slice(Math.max(0, position - 2), position);
+      if (
+        /^u&$/iu.test(before) ||
+        (character === "'" && /(?:^|[^A-Za-z0-9_])[enbx]$/iu.test(before))
+      ) {
+        prefixed = true;
+      }
+      if (character === '"') {
+        output += character;
+        position += 1;
+        continue;
+      }
+      const start = position + 1;
       position += 1;
       while (position < statement.length) {
         if (statement[position] === "'") {
@@ -88,18 +110,19 @@ function stripLiteralsAndComments(statement: string): string {
             position += 2;
             continue;
           }
-          position += 1;
           break;
         }
         position += 1;
       }
+      literals.push(statement.slice(start, position));
+      position += 1;
       output += " ";
       continue;
     }
     output += character;
     position += 1;
   }
-  return output;
+  return { literals, prefixed, text: output };
 }
 
 export type SelectValidation =
@@ -111,7 +134,7 @@ export function validateSelectQuery(sql: string): SelectValidation {
   if (trimmed === "") {
     return { ok: false, error: "SQL query must not be empty." };
   }
-  const analyzed = stripLiteralsAndComments(trimmed);
+  const analyzed = stripLiteralsAndComments(trimmed).text;
   const withoutTrailing = analyzed.replace(/;\s*$/u, "");
   if (withoutTrailing.includes(";")) {
     return {
@@ -146,11 +169,47 @@ export type ScopedSelectValidation =
   | { readonly ok: true; readonly sql: string; readonly relations: string[] }
   | { readonly ok: false; readonly error: string };
 
+/** Value functions a scoped SELECT may call. Everything else is rejected. */
+const FUNCTIONS = new Set(
+  `count sum avg min max total group_concat string_agg
+   abs round ceil ceiling floor sqrt power pow mod sign exp ln log log10
+   lower upper length char_length character_length substr substring trim
+   ltrim rtrim replace instr strpos position concat concat_ws left right lpad
+   rpad reverse starts_with printf format hex
+   date time datetime strftime julianday unixepoch now current_date
+   current_timestamp date_trunc date_part extract to_char to_date to_timestamp
+   age coalesce nullif ifnull iif typeof greatest least nvl
+   json_extract json_valid json_extract_path_text
+   row_number rank dense_rank lag lead first_value last_value ntile`
+    .split(/\s+/u)
+    .filter(Boolean),
+);
+
+const OPENS_RELATIONS = new Set(["from", "join"]);
+const CLOSES_RELATIONS = new Set([
+  "where",
+  "group",
+  "order",
+  "having",
+  "limit",
+  "offset",
+  "on",
+  "using",
+  "union",
+  "intersect",
+  "except",
+  "select",
+  "window",
+  "fetch",
+]);
+
 /**
  * Accept a SELECT whose every identifier is a known relation, one of its
- * columns, an alias the statement itself defines, a function call, or a SQL
- * keyword. Quoted identifiers are scanned like bare ones, so no spelling of a
- * control table, catalog, or schema qualifier gets through.
+ * columns, an alias the statement itself defines, an allowed function, or a
+ * SQL keyword. Quoted identifiers are scanned like bare ones, prefixed and
+ * dollar-quoted literals are refused, string literals may not name control
+ * tables or catalogs, and an alias may only stand as a qualifier, never as a
+ * relation in FROM or JOIN.
  */
 export function validateScopedSelect(
   sql: string,
@@ -158,38 +217,38 @@ export function validateScopedSelect(
 ): ScopedSelectValidation {
   const base = validateSelectQuery(sql);
   if (!base.ok) return base;
+  const stripped = stripLiteralsAndComments(base.sql);
+  if (stripped.prefixed) {
+    return {
+      ok: false,
+      error: "Prefixed literals (E'', U&'', U&\"\") are not supported.",
+    };
+  }
+  if (/\$[A-Za-z_]*\$/u.test(stripped.text)) {
+    return { ok: false, error: "Dollar-quoted strings are not supported." };
+  }
+  const literal = stripped.literals.find((value) =>
+    /atlas_|sqlite_|pg_|pragma_|information_schema/iu.test(value),
+  );
+  if (literal !== undefined) {
+    return {
+      ok: false,
+      error: `String literal '${literal}' names a control table or catalog.`,
+    };
+  }
 
   const allowed = new Set(relations.keys());
   for (const columns of relations.values()) {
     for (const column of columns) allowed.add(column);
   }
-  const tokens = [...stripLiteralsAndComments(base.sql).matchAll(TOKEN)].map(
-    (match) => match[0].toLowerCase(),
+  const tokens = [...stripped.text.matchAll(TOKEN)].map((match) =>
+    match[0].toLowerCase(),
   );
+  const isWord = (token: string | undefined) =>
+    token !== undefined && /^[a-z_]/u.test(token);
   const words = tokens
     .map((token, index) => ({ token, index }))
-    .filter(({ token }) => /^[a-z_]/u.test(token));
-  const isFunction = ({ index }: { index: number }) =>
-    tokens[index + 1] === "(";
-
-  // Aliases may be used before they are defined, so collect them first.
-  const aliases = new Set<string>();
-  for (const word of words) {
-    const { token, index } = word;
-    if (KEYWORDS.has(token) || allowed.has(token) || isFunction(word)) continue;
-    const previous = tokens[index - 1];
-    if (
-      previous === "as" ||
-      previous === ")" ||
-      (tokens[index + 1] === "as" && tokens[index + 2] === "(") ||
-      (previous !== undefined &&
-        /^[a-z_]/u.test(previous) &&
-        !KEYWORDS.has(previous) &&
-        (allowed.has(previous) || aliases.has(previous)))
-    ) {
-      aliases.add(token);
-    }
-  }
+    .filter(({ token }) => isWord(token));
 
   const denied = words.find(({ token }) => DENIED_IDENTIFIER.test(token));
   if (denied !== undefined) {
@@ -199,16 +258,71 @@ export function validateScopedSelect(
     };
   }
 
-  const referenced = new Set<string>();
-  for (const word of words) {
-    const { token } = word;
-    if (relations.has(token)) referenced.add(token);
+  // Whether each token sits in a FROM/JOIN relation list; parentheses
+  // restore the enclosing context when they close.
+  const inRelations: boolean[] = [];
+  const enclosing: boolean[] = [];
+  let current = false;
+  for (const token of tokens) {
+    if (token === "(") enclosing.push(current);
+    else if (token === ")") current = enclosing.pop() ?? false;
+    else if (OPENS_RELATIONS.has(token)) current = true;
+    else if (CLOSES_RELATIONS.has(token)) current = false;
+    inRelations.push(current);
+  }
+
+  // Aliases may be used before they are defined, so collect them first.
+  const ctes = new Set<string>();
+  const aliases = new Set<string>();
+  const definitions = new Set<number>();
+  for (const { token, index } of words) {
     if (
       KEYWORDS.has(token) ||
       allowed.has(token) ||
-      aliases.has(token) ||
-      isFunction(word)
+      tokens[index + 1] === "("
     ) {
+      continue;
+    }
+    const previous = tokens[index - 1];
+    if (tokens[index + 1] === "as" && tokens[index + 2] === "(") {
+      ctes.add(token);
+      definitions.add(index);
+    } else if (
+      previous === "as" ||
+      previous === ")" ||
+      (isWord(previous) &&
+        !KEYWORDS.has(previous) &&
+        (allowed.has(previous) || aliases.has(previous) || ctes.has(previous)))
+    ) {
+      aliases.add(token);
+      definitions.add(index);
+    }
+  }
+
+  const referenced = new Set<string>();
+  for (const { token, index } of words) {
+    if (KEYWORDS.has(token)) continue;
+    if (tokens[index + 1] === "(") {
+      if (FUNCTIONS.has(token)) continue;
+      return { ok: false, error: `Function '${token}' is not allowed.` };
+    }
+    if (relations.has(token)) referenced.add(token);
+    if (allowed.has(token) || ctes.has(token)) continue;
+    if (aliases.has(token)) {
+      const previous = tokens[index - 1];
+      if (
+        !definitions.has(index) &&
+        tokens[index + 1] !== "." &&
+        inRelations[index] === true &&
+        (previous === "," ||
+          previous === "(" ||
+          OPENS_RELATIONS.has(previous ?? ""))
+      ) {
+        return {
+          ok: false,
+          error: `Alias '${token}' cannot be used as a relation.`,
+        };
+      }
       continue;
     }
     return {

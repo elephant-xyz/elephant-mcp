@@ -39,7 +39,7 @@ describe("scoped SQL validation", () => {
         `WITH recent AS (SELECT p.cid, count(*) total FROM property p GROUP BY p.cid)
          SELECT r.cid, lower(x.property_cid) AS owner
          FROM recent AS r JOIN properties x ON x.property_cid = r.cid
-         WHERE r.total > 1e3 AND x.property_cid NOT LIKE 'atlas_state%'`,
+         WHERE r.total > 1e3 AND x.property_cid NOT LIKE 'bafy%'`,
       ),
     ).toMatchObject({ ok: true, relations: ["property", "properties"] });
   });
@@ -59,5 +59,56 @@ describe("scoped SQL validation", () => {
     ]) {
       expect(validate(sql), sql).toMatchObject({ ok: false });
     }
+  });
+
+  it("rejects the function, literal, and quoting bypasses", () => {
+    for (const [sql, message] of [
+      [
+        "SELECT query_to_xml('select * from atlas_state', true, false, '') FROM property",
+        "names a control table",
+      ],
+      [
+        "SELECT * FROM xmltable('/x' PASSING cid COLUMNS a text) AS t",
+        "not allowed",
+      ],
+      [
+        "SELECT * FROM dblink('dbname=atlas', 'select 1') AS t(a int)",
+        "not allowed",
+      ],
+      [
+        "SELECT set_config('search_path', 'other', false) FROM property",
+        "not allowed",
+      ],
+      ["SELECT current_setting('search_path') FROM property", "not allowed"],
+      ["SELECT pg_sleep(10) FROM property", "must not reference"],
+      ['SELECT * FROM U&"atlas\\005Fstate"', "Prefixed"],
+      ["SELECT E'\\x41' FROM property", "Prefixed"],
+      ["SELECT $$atlas_state$$ FROM property", "Dollar-quoted"],
+      ["SELECT 'atlas_state' AS name FROM property", "names a control table"],
+    ] as const) {
+      expect(validate(sql), sql).toMatchObject({
+        ok: false,
+        error: expect.stringContaining(message),
+      });
+    }
+  });
+
+  it("lets aliases qualify columns but never stand as relations", () => {
+    expect(
+      validate("SELECT * FROM property AS documents, documents"),
+    ).toMatchObject({ ok: false, error: expect.stringContaining("documents") });
+    expect(
+      validate("SELECT * FROM property AS documents JOIN documents ON 1 = 1"),
+    ).toMatchObject({ ok: false });
+    expect(
+      validate(
+        "SELECT count(*) AS n, p.cid FROM property p GROUP BY p.cid ORDER BY n",
+      ),
+    ).toMatchObject({ ok: true });
+    expect(
+      validate(
+        "WITH recent AS (SELECT cid FROM property) SELECT * FROM recent",
+      ),
+    ).toMatchObject({ ok: true, relations: ["property"] });
   });
 });
