@@ -154,13 +154,12 @@ export function describeAtlasTable(
 }
 
 /**
- * A row is identified by its scope, its content CID, and the property that
- * carried it; content-addressed rows are shared by several properties.
+ * export-tables writes each entity and relationship CID once per archive, so
+ * a row is identified by its scope and its content CID; `property_cid` is the
+ * first property that referenced it.
  */
 export function atlasKeyColumns(table: AtlasTable): string[] {
-  return [
-    ...new Set(["county", "data_group", table.primaryKey, "property_cid"]),
-  ];
+  return ["county", "data_group", table.primaryKey];
 }
 
 /**

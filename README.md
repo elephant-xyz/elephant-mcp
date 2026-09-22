@@ -79,14 +79,14 @@ per-property data-group roots. Columns come from the Parquet parts
 
 Primary keys:
 
-| Table         | Key                                                    |
-| ------------- | ------------------------------------------------------ |
-| lexicon class | `(county, data_group, cid, property_cid)`              |
-| relationship  | `(county, data_group, relationship_cid, property_cid)` |
-| `properties`  | `(county, data_group, property_cid)`                   |
+| Table         | Key                                      |
+| ------------- | ---------------------------------------- |
+| lexicon class | `(county, data_group, cid)`              |
+| relationship  | `(county, data_group, relationship_cid)` |
+| `properties`  | `(county, data_group, property_cid)`     |
 
-Rows are content-addressed and shared by every property that carries them, so
-`property_cid` is part of the key. Loading a group deletes its
+`export-tables` writes each entity and relationship once per archive, with
+`property_cid` set to the first property that referenced it. Loading a group deletes its
 `county`/`data_group` scope and reinserts it with `ON CONFLICT DO UPDATE`;
 withdrawing a group is the delete alone. Both happen in one transaction.
 

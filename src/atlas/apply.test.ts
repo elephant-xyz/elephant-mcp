@@ -100,7 +100,7 @@ describe("Atlas index transaction", () => {
           dataGroup: "county",
           rows: rows(
             ["shared-cid", "property-a", "county-schema", "Shared"],
-            ["shared-cid", "property-b", "county-schema", "Shared"],
+            ["other-cid", "property-b", "county-schema", "Other"],
           ),
         },
         {

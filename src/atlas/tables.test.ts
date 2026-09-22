@@ -43,12 +43,7 @@ describe("Atlas content tables", () => {
   it("classifies producer table shapes and their keys", () => {
     const property = describeAtlasTable("property", baseColumns);
     expect(property.primaryKey).toBe("cid");
-    expect(atlasKeyColumns(property)).toEqual([
-      "county",
-      "data_group",
-      "cid",
-      "property_cid",
-    ]);
+    expect(atlasKeyColumns(property)).toEqual(["county", "data_group", "cid"]);
     expect(
       describeAtlasTable("property_has_address", [
         column("relationship_cid"),
