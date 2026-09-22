@@ -89,14 +89,20 @@ async function getAtlasRuntime(): Promise<AtlasRuntime> {
   return runtimePromise ?? initializeAtlasRuntime({ startLocalSync: false });
 }
 
+/**
+ * Resolve once an accepted snapshot can be served. A running sync only
+ * blocks callers while there is no snapshot yet; otherwise reads continue
+ * against the accepted snapshot and the sync lands in the background.
+ */
 export async function awaitAtlasReady(): Promise<AtlasRuntime> {
   const runtime = await getAtlasRuntime();
-  if (runtime.status === "syncing" && runtime.sync !== undefined) {
-    try {
-      await runtime.sync;
-    } catch {
-      // The status below distinguishes stale data from an uninitialized store.
-    }
+  if (
+    runtime.status === "syncing" &&
+    runtime.sync !== undefined &&
+    !(await hasAcceptedSnapshot(runtime.connections))
+  ) {
+    // The status below distinguishes stale data from an uninitialized store.
+    await runtime.sync.catch(() => undefined);
   }
   if (runtime.status === "uninitialized" || runtime.status === "error") {
     throw new Error(
