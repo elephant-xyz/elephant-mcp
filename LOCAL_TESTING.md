@@ -11,6 +11,21 @@ npm run test -- src/atlas
 The integration fixture generates Zstd Parquet, serves Atlas blocks through a
 mock gateway, verifies every CID, and loads a temporary SQLite database.
 
+## Test a real `export-tables` output
+
+`src/atlas/real-export.test.ts` loads an `elephant-cli` archive and its
+`export-tables` directory (`county.car`, `export.json`, `tables/tables.car`,
+`tables/<table>/part-*.parquet`) through the fake gateway into a temporary
+SQLite file and exercises every Atlas tool against it. It is skipped unless
+the directory is given:
+
+```bash
+ATLAS_REAL_EXPORT_DIR=/path/to/export npx vitest run src/atlas/real-export.test.ts
+```
+
+The run prints the catalog the loader built (table, key column, columns with
+their SQL types).
+
 ## Test a local Atlas gateway
 
 Point the server at a local Kubo gateway or fixture server:
