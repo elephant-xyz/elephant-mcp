@@ -1,9 +1,7 @@
 import {
   getAtlasProperty,
   getAtlasQuerySchema,
-  listAtlasCounties,
   listAtlasProperties,
-  resolveAtlasSource,
 } from "../atlas/query.ts";
 import { createTextResult } from "../lib/utils.ts";
 import { logger } from "../logger.ts";
@@ -88,21 +86,14 @@ export async function getOracleDatasetInfoHandler(args: {
   state: string;
 }) {
   try {
-    const [source, schema, published] = await Promise.all([
-      resolveAtlasSource(args.state, args.county, args.dataGroup),
-      getAtlasQuerySchema(args),
-      listAtlasCounties(),
-    ]);
-    const county = published.counties.find(
-      (entry) => entry.county === source.county,
-    );
+    const { source, tables } = await getAtlasQuerySchema(args);
     return createTextResult({
-      county: county?.county ?? source.county,
-      state: county?.state ?? null,
-      fips: county?.fips ?? null,
-      tables: schema.tables,
+      county: source.county,
+      state: source.state,
+      fips: source.fips,
+      tables,
       source,
-      syncedAt: published.syncedAt,
+      syncedAt: source.syncedAt,
     });
   } catch (error) {
     logger.error(
