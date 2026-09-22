@@ -1,27 +1,6 @@
 import { DEFAULT_ATLAS_GATEWAYS } from "../config.ts";
 import { CidV1Schema } from "./contracts.ts";
 
-export interface AtlasGatewayAttempt {
-  url: string;
-  reason: string;
-  status?: number;
-}
-
-export class AtlasGatewayFetchError extends Error {
-  readonly attempts: readonly AtlasGatewayAttempt[];
-  readonly path: string;
-
-  constructor(path: string, attempts: readonly AtlasGatewayAttempt[]) {
-    const details = attempts
-      .map((attempt) => `${attempt.url}: ${attempt.reason}`)
-      .join("; ");
-    super(`Atlas gateway fetch failed for ${path}: ${details}`);
-    this.name = "AtlasGatewayFetchError";
-    this.path = path;
-    this.attempts = attempts;
-  }
-}
-
 export interface AtlasGatewayFetchResult<T> {
   gateway: string;
   url: string;
@@ -40,29 +19,13 @@ type AtlasBodyConsumer<T> = (
   response: Response,
 ) => Promise<T>;
 
+/** The origin only: credentials, path, query, and hash are dropped. */
 function normalizeGateway(gateway: string): string {
-  let url: URL;
-  try {
-    url = new URL(gateway);
-  } catch {
-    throw new Error(`Invalid Atlas gateway URL: ${gateway}`);
-  }
-
-  if (url.protocol !== "https:" && url.protocol !== "http:") {
+  const origin = new URL(gateway).origin;
+  if (origin === "null") {
     throw new Error(`Atlas gateway must use HTTP or HTTPS: ${gateway}`);
   }
-  if (
-    url.username !== "" ||
-    url.password !== "" ||
-    url.search !== "" ||
-    url.hash !== ""
-  ) {
-    throw new Error(
-      `Atlas gateway must be an uncredentialed base URL: ${gateway}`,
-    );
-  }
-
-  return url.href.replace(/\/+$/u, "");
+  return origin;
 }
 
 function validateOptions(options: AtlasGatewayFetchOptions): {
@@ -89,17 +52,6 @@ function validateOptions(options: AtlasGatewayFetchOptions): {
   };
 }
 
-function failureReason(
-  error: unknown,
-  signal: AbortSignal,
-  timeoutMs: number,
-): string {
-  if (signal.aborted) {
-    return `timeout after ${timeoutMs}ms`;
-  }
-  return error instanceof Error ? error.message : String(error);
-}
-
 async function collect(body: AsyncIterable<Uint8Array>): Promise<Uint8Array> {
   const chunks: Uint8Array[] = [];
   for await (const chunk of body) chunks.push(chunk);
@@ -120,7 +72,7 @@ async function fetchFromAtlasGateways<T>(
   consume: AtlasBodyConsumer<T>,
 ): Promise<AtlasGatewayFetchResult<T>> {
   const { gateways, fetcher, timeoutMs } = validateOptions(options);
-  const attempts: AtlasGatewayAttempt[] = [];
+  const attempts: string[] = [];
 
   for (const gateway of gateways) {
     const url = `${gateway}${path}`;
@@ -138,50 +90,42 @@ async function fetchFromAtlasGateways<T>(
         signal: controller.signal,
       });
       if (!response.ok) {
-        attempts.push({
-          url,
-          reason: `HTTP ${response.status}${
+        attempts.push(
+          `${url}: HTTP ${response.status}${
             response.statusText === "" ? "" : ` ${response.statusText}`
           }`,
-          status: response.status,
-        });
+        );
         await response.body?.cancel().catch(() => undefined);
         continue;
       }
-      const aborted = new Promise<never>((_resolve, reject) => {
-        controller.signal.addEventListener(
-          "abort",
-          () => reject(new Error(`timeout after ${timeoutMs}ms`)),
-          { once: true },
-        );
-      });
+      // The fetch carries the abort signal, so a read rejects on timeout.
       async function* body() {
         if (response.body === null) return;
-        const reader = response.body.getReader();
-        try {
-          for (;;) {
-            const next = await Promise.race([reader.read(), aborted]);
-            if (next.done) return;
-            arm();
-            yield next.value;
-          }
-        } finally {
-          await reader.cancel().catch(() => undefined);
+        for await (const chunk of response.body) {
+          arm();
+          yield chunk;
         }
       }
       return { gateway, url, value: await consume(body(), response) };
     } catch (error) {
-      attempts.push({
-        url,
-        reason: failureReason(error, controller.signal, timeoutMs),
-      });
+      attempts.push(
+        `${url}: ${
+          controller.signal.aborted
+            ? `timeout after ${timeoutMs}ms`
+            : error instanceof Error
+              ? error.message
+              : String(error)
+        }`,
+      );
       controller.abort();
     } finally {
       clearTimeout(timer);
     }
   }
 
-  throw new AtlasGatewayFetchError(path, attempts);
+  throw new Error(
+    `Atlas gateway fetch failed for ${path}: ${attempts.join("; ")}`,
+  );
 }
 
 function ipnsName(name: string): string {

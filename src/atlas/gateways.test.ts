@@ -4,7 +4,6 @@ import { sha256 } from "multiformats/hashes/sha2";
 import { describe, expect, it } from "vitest";
 
 import {
-  AtlasGatewayFetchError,
   fetchAtlasIndex,
   fetchAtlasUnixFs,
   fetchRawAtlasBlock,
@@ -81,23 +80,16 @@ describe("Atlas gateway fetching", () => {
       throw new Error("connection refused");
     };
 
-    try {
-      await fetchRawAtlasBlock(expectedCid, {
+    await expect(
+      fetchRawAtlasBlock(expectedCid, {
         gateways: ["https://first.test", "https://second.test"],
         fetcher,
-      });
-      expect.fail("expected all gateways to fail");
-    } catch (error) {
-      expect(error).toBeInstanceOf(AtlasGatewayFetchError);
-      const aggregate = error as AtlasGatewayFetchError;
-      expect(aggregate.attempts).toHaveLength(2);
-      expect(aggregate.message).toContain(
-        `https://first.test/ipfs/${expectedCid}?format=raw: HTTP 502 Bad Gateway`,
-      );
-      expect(aggregate.message).toContain(
+      }),
+    ).rejects.toThrow(
+      `Atlas gateway fetch failed for /ipfs/${expectedCid}?format=raw: ` +
+        `https://first.test/ipfs/${expectedCid}?format=raw: HTTP 502 Bad Gateway; ` +
         `https://second.test/ipfs/${expectedCid}?format=raw: connection refused`,
-      );
-    }
+    );
   });
 
   it("times out a stalled gateway request", async () => {
@@ -113,18 +105,15 @@ describe("Atlas gateway fetching", () => {
         });
       });
 
-    try {
-      await fetchAtlasIndex("k51atlas", {
+    await expect(
+      fetchAtlasIndex("k51atlas", {
         gateways: ["https://slow.test"],
         fetcher,
         timeoutMs: 5,
-      });
-      expect.fail("expected the gateway to time out");
-    } catch (error) {
-      expect(error).toBeInstanceOf(AtlasGatewayFetchError);
-      const aggregate = error as AtlasGatewayFetchError;
-      expect(aggregate.attempts[0].reason).toBe("timeout after 5ms");
-    }
+      }),
+    ).rejects.toThrow(
+      "https://slow.test/ipns/k51atlas?format=raw: timeout after 5ms",
+    );
   });
 
   it("falls back to the next gateway when a body stream breaks or stalls", async () => {
@@ -136,17 +125,22 @@ describe("Atlas gateway fetching", () => {
           controller.error(new Error("stream reset"));
         },
       });
-    const stalled = () =>
+    // Like fetch, the stalled body errors when the request signal aborts.
+    const stalled = (signal: AbortSignal | null | undefined) =>
       new ReadableStream<Uint8Array>({
         start(controller) {
           controller.enqueue(new TextEncoder().encode("first chunk"));
+          signal?.addEventListener("abort", () =>
+            controller.error(signal.reason),
+          );
         },
       });
-    const fetcher: typeof fetch = async (input) => {
+    const fetcher: typeof fetch = async (input, init) => {
       const url = String(input);
       if (url.startsWith("https://broken.test/")) return new Response(broken());
-      if (url.startsWith("https://stalled.test/"))
-        return new Response(stalled());
+      if (url.startsWith("https://stalled.test/")) {
+        return new Response(stalled(init?.signal));
+      }
       return new Response("complete");
     };
 
