@@ -2,10 +2,10 @@ import { AtlasIdentifierSchema } from "./contracts.ts";
 import { awaitAtlasReady, type AtlasRuntime } from "./runtime.ts";
 import {
   escapeAtlasLiteral,
+  keyColumn,
   qualifyAtlasTable,
   quoteAtlasIdentifier,
   readAtlasCatalog,
-  type AtlasCatalogColumn,
 } from "./tables.ts";
 import { validateScopedSelect } from "../lib/sqlSafety.ts";
 
@@ -13,7 +13,6 @@ export interface AtlasSource {
   archiveCid: string;
   county: string;
   dataGroup: string;
-  state: string;
   fips: string;
   indexCid: string;
   schemaCid: string;
@@ -58,12 +57,6 @@ function scope(source: AtlasSource): string {
 
 function catalog(runtime: AtlasRuntime) {
   return readAtlasCatalog(runtime.connections.read, runtime.backend.kind);
-}
-
-function primaryKeyColumn(columns: AtlasCatalogColumn[]): string {
-  const names = new Set(columns.map((column) => column.name));
-  if (names.has("relationship_cid")) return "relationship_cid";
-  return names.has("cid") ? "cid" : "property_cid";
 }
 
 export async function resolveAtlasSource(
@@ -190,8 +183,10 @@ export async function getAtlasQuerySchema(args: {
     return {
       tables: counts.map((row) => ({
         tableName: String(row.table_name),
-        primaryKeyColumn: primaryKeyColumn(
-          tables.get(String(row.table_name)) ?? [],
+        primaryKeyColumn: keyColumn(
+          (tables.get(String(row.table_name)) ?? []).map(
+            (column) => column.name,
+          ),
         ),
         rows: Number(row.rows ?? 0),
       })),
@@ -228,35 +223,28 @@ export async function listAtlasCounties() {
      FROM atlas_state
      ORDER BY state, county, data_group`,
   );
-  const counties = new Map<
-    string,
-    {
-      county: string;
-      state: string;
-      fips: string;
-      groups: Record<string, unknown>;
-    }
-  >();
-  for (const row of groups) {
-    const key = `${row.state}/${row.county}`;
-    const county = counties.get(key) ?? {
-      county: String(row.county),
-      state: String(row.state),
-      fips: String(row.fips),
-      groups: {},
-    };
-    county.groups[String(row.data_group)] = {
-      archiveCid: String(row.archive_cid),
-      tablesCid: String(row.tables_cid),
-      schemaCid: String(row.schema_cid),
-      publishedAt: String(row.published_at),
-      loadedAt: String(row.loaded_at),
-    };
-    counties.set(key, county);
-  }
+  const counties = Object.values(
+    Object.groupBy(groups, (row) => `${row.state}/${row.county}`),
+  ).map((rows = []) => ({
+    county: String(rows[0]?.county),
+    state: String(rows[0]?.state),
+    fips: String(rows[0]?.fips),
+    groups: Object.fromEntries(
+      rows.map((row) => [
+        String(row.data_group),
+        {
+          archiveCid: String(row.archive_cid),
+          tablesCid: String(row.tables_cid),
+          schemaCid: String(row.schema_cid),
+          publishedAt: String(row.published_at),
+          loadedAt: String(row.loaded_at),
+        },
+      ]),
+    ),
+  }));
   return {
-    counties: [...counties.values()],
-    countyCount: counties.size,
+    counties,
+    countyCount: counties.length,
     generatedFrom: String(sync[0]?.generated_from ?? ""),
     indexCid: String(sync[0]?.index_cid ?? ""),
     syncedAt: String(sync[0]?.synced_at ?? ""),
@@ -278,9 +266,6 @@ export async function listAtlasProperties(args: {
   const runtime = await awaitAtlasReady();
   const limit = Math.max(1, Math.min(args.limit, 500));
   const offset = Math.max(0, args.offset);
-  if (!(await catalog(runtime)).has("properties")) {
-    return { limit, offset, properties: [], source, total: 0 };
-  }
   const count = await runtime.connections.read(
     `SELECT count(*) AS count FROM properties WHERE ${scope(source)}`,
   );
@@ -319,20 +304,14 @@ export async function getAtlasProperty(args: {
   );
   const runtime = await awaitAtlasReady();
   const tables = await catalog(runtime);
-  const names = (table: string) =>
-    new Set((tables.get(table) ?? []).map((column) => column.name));
+  const keyOf = (table: string) =>
+    keyColumn((tables.get(table) ?? []).map((column) => column.name));
   const relationshipTables = [...tables.keys()].filter(
-    (table) => names(table).has("from_cid") && names(table).has("to_cid"),
+    (table) => keyOf(table) === "relationship_cid",
   );
   const entityTables = [...tables.keys()].filter(
-    (table) => names(table).has("cid") && !relationshipTables.includes(table),
+    (table) => keyOf(table) === "cid",
   );
-  const keyOf = (table: string) =>
-    relationshipTables.includes(table)
-      ? "relationship_cid"
-      : entityTables.includes(table)
-        ? "cid"
-        : "property_cid";
 
   const records: Record<string, Array<Record<string, unknown>>> = {};
   const seen = new Set<string>();

@@ -35,10 +35,10 @@ function group(dataGroup: string, state = "FL"): AtlasGroupTarget {
 }
 
 const columns = [
-  { name: "cid", canonicalType: "text", sourceType: "VARCHAR" },
-  { name: "property_cid", canonicalType: "text", sourceType: "VARCHAR" },
-  { name: "data_group_cid", canonicalType: "text", sourceType: "VARCHAR" },
-  { name: "name", canonicalType: "text", sourceType: "VARCHAR" },
+  { name: "cid", canonicalType: "text" },
+  { name: "property_cid", canonicalType: "text" },
+  { name: "data_group_cid", canonicalType: "text" },
+  { name: "name", canonicalType: "text" },
 ] as const;
 
 type Row = [string, string, string, string];

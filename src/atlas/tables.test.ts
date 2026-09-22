@@ -9,6 +9,7 @@ import {
   atlasKeyColumns,
   describeAtlasTable,
   ensureAtlasTable,
+  keyColumn,
   readAtlasCatalog,
   type AtlasParquetColumn,
 } from "./tables.ts";
@@ -28,7 +29,7 @@ function column(
   name: string,
   canonicalType: AtlasParquetColumn["canonicalType"] = "text",
 ): AtlasParquetColumn {
-  return { canonicalType, name, sourceType: canonicalType };
+  return { canonicalType, name };
 }
 
 const baseColumns = [
@@ -42,7 +43,6 @@ const baseColumns = [
 describe("Atlas content tables", () => {
   it("classifies producer table shapes and their keys", () => {
     const property = describeAtlasTable("property", baseColumns);
-    expect(property.primaryKey).toBe("cid");
     expect(atlasKeyColumns(property)).toEqual([
       "state",
       "county",
@@ -50,13 +50,15 @@ describe("Atlas content tables", () => {
       "cid",
     ]);
     expect(
-      describeAtlasTable("property_has_address", [
-        column("relationship_cid"),
-        column("from_cid"),
-        column("to_cid"),
-        column("property_cid"),
-        column("data_group_cid"),
-      ]).primaryKey,
+      keyColumn(
+        describeAtlasTable("property_has_address", [
+          column("relationship_cid"),
+          column("from_cid"),
+          column("to_cid"),
+          column("property_cid"),
+          column("data_group_cid"),
+        ]).columns.map((column) => column.name),
+      ),
     ).toBe("relationship_cid");
     const properties = describeAtlasTable("properties", [
       column("property_cid"),

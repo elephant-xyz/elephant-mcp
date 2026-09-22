@@ -32,8 +32,7 @@ afterEach(async () => {
   );
 });
 
-const text = (name: string) =>
-  ({ name, canonicalType: "text", sourceType: "VARCHAR" }) as const;
+const text = (name: string) => ({ name, canonicalType: "text" }) as const;
 
 describe("Atlas query repository", () => {
   it("queries one scoped table with provenance", async () => {
@@ -73,7 +72,6 @@ describe("Atlas query repository", () => {
                     {
                       name: "market_value",
                       canonicalType: "int64",
-                      sourceType: "BIGINT",
                     },
                   ],
                   name: "property",

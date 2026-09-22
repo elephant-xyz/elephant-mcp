@@ -9,13 +9,23 @@ export type AtlasCanonicalType = "text" | "boolean" | "int64" | "double";
 export interface AtlasParquetColumn {
   canonicalType: AtlasCanonicalType;
   name: string;
-  sourceType: string;
 }
 
 export interface AtlasTable {
   columns: AtlasParquetColumn[];
   name: string;
-  primaryKey: "cid" | "relationship_cid" | "property_cid";
+}
+
+/**
+ * The column that identifies a row: relationship tables carry
+ * relationship_cid, class tables cid, and `properties` only property_cid.
+ */
+export function keyColumn(
+  columnNames: Iterable<string>,
+): "cid" | "relationship_cid" | "property_cid" {
+  const names = new Set(columnNames);
+  if (names.has("relationship_cid")) return "relationship_cid";
+  return names.has("cid") ? "cid" : "property_cid";
 }
 
 export interface AtlasCatalogColumn {
@@ -103,11 +113,7 @@ export async function inspectAtlasParquet(
     if (!ATLAS_IDENTIFIER_PATTERN.test(name)) {
       throw new Error(`Invalid Atlas Parquet column identifier ${name}`);
     }
-    return {
-      canonicalType: canonicalAtlasType(sourceType),
-      name,
-      sourceType,
-    };
+    return { canonicalType: canonicalAtlasType(sourceType), name };
   });
 }
 
@@ -127,7 +133,7 @@ export function describeAtlasTable(
     throw new Error(`Atlas table ${name} must contain property_cid`);
   }
   if (name === "properties") {
-    return { columns: [...columns], name, primaryKey: "property_cid" };
+    return { columns: [...columns], name };
   }
 
   const relationship = names.has("relationship_cid");
@@ -144,11 +150,7 @@ export function describeAtlasTable(
   if (!names.has("data_group_cid")) {
     throw new Error(`Atlas table ${name} must contain data_group_cid`);
   }
-  return {
-    columns: [...columns],
-    name,
-    primaryKey: relationship ? "relationship_cid" : "cid",
-  };
+  return { columns: [...columns], name };
 }
 
 /**
@@ -157,7 +159,12 @@ export function describeAtlasTable(
  * first property that referenced it.
  */
 export function atlasKeyColumns(table: AtlasTable): string[] {
-  return ["state", "county", "data_group", table.primaryKey];
+  return [
+    "state",
+    "county",
+    "data_group",
+    keyColumn(table.columns.map((column) => column.name)),
+  ];
 }
 
 /**
