@@ -5,7 +5,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { parseAtlasDatabaseUrl } from "./backend.ts";
 import { openAtlasConnections, type AtlasConnections } from "./connections.ts";
-import { acquireAtlasSyncLock } from "./locks.ts";
 import { syncAtlas } from "./sync.ts";
 
 const opened = vi.hoisted(() => [] as AtlasConnections[]);
@@ -121,12 +120,13 @@ describe("Atlas synchronization", () => {
       "keep",
     );
 
+    // Another sync holds the write transaction; this one must fail fast.
     const holder = await openAtlasConnections(
       parseAtlasDatabaseUrl(databaseUrl),
     );
-    const lock = await acquireAtlasSyncLock(
-      parseAtlasDatabaseUrl(databaseUrl),
-      holder.write,
+    let release = () => undefined as void;
+    const holding = holder.transaction(
+      () => new Promise<void>((resolve) => (release = resolve)),
     );
     try {
       opened.length = 0;
@@ -138,12 +138,13 @@ describe("Atlas synchronization", () => {
           ipns: "k51-test",
           stagingDirectory: directory,
         }),
-      ).rejects.toThrow("already running");
+      ).rejects.toThrow(/SQLITE_BUSY|database is locked/u);
       expect(opened).toHaveLength(1);
       expect(opened[0].close).toHaveBeenCalledTimes(1);
     } finally {
-      await lock.release();
+      release();
+      await holding;
       await holder.close();
     }
-  });
+  }, 20_000);
 });

@@ -13,14 +13,17 @@ import {
   fetchCountyTables,
   resolveAtlasIndex,
 } from "./client.ts";
-import { openAtlasConnections, type AtlasConnections } from "./connections.ts";
+import {
+  openAtlasConnections,
+  type AtlasConnections,
+  type AtlasExecutor,
+} from "./connections.ts";
 import {
   openAtlasDuckDb,
   readAtlasParquet,
   type AtlasDuckDb,
 } from "./duckdbEtl.ts";
 import type { AtlasGatewayFetchOptions } from "./gateways.ts";
-import { acquireAtlasSyncLock, type AtlasSyncLock } from "./locks.ts";
 import {
   planAtlasSync,
   type AtlasStateRow,
@@ -28,6 +31,9 @@ import {
 } from "./plan.ts";
 import { inspectAtlasParquet } from "./tables.ts";
 import { initializeAtlasSchema } from "./schema.ts";
+
+/** Postgres advisory lock key; SQLite uses the write transaction itself. */
+export const ATLAS_SYNC_LOCK_ID = 1_163_151_188;
 
 export interface AtlasGroupSyncSummary {
   bytes: number;
@@ -75,17 +81,19 @@ function toStateRow(row: Record<string, unknown>): AtlasStateRow {
   };
 }
 
-async function readCurrentState(connections: AtlasConnections): Promise<{
+async function readCurrentState(executor: AtlasExecutor): Promise<{
   state: AtlasStateRow[];
   syncState: AtlasSyncStateRow | null;
 }> {
-  const [syncRows, stateRows] = await Promise.all([
-    connections.read(
+  const syncRows = (
+    await executor.execute(
       `SELECT index_cid, generated_from
        FROM atlas_sync_state
        WHERE singleton_key = 1`,
-    ),
-    connections.read(
+    )
+  ).rows;
+  const stateRows = (
+    await executor.execute(
       `SELECT
         county,
         state,
@@ -96,8 +104,8 @@ async function readCurrentState(connections: AtlasConnections): Promise<{
         schema_cid,
         published_at
        FROM atlas_state`,
-    ),
-  ]);
+    )
+  ).rows;
   const sync = syncRows[0];
   return {
     syncState:
@@ -195,75 +203,85 @@ export async function syncAtlas(
         .filter(Boolean),
   };
   let duckdb: AtlasDuckDb | undefined;
-  let lock: AtlasSyncLock | undefined;
 
   try {
     await initializeAtlasSchema(connections.write);
-    lock = await acquireAtlasSyncLock(backend, connections.write);
-    const resolved = await resolveAtlasIndex(
-      options.ipns ?? config.ATLAS_IPNS,
-      fetchOptions,
-    );
-    const current = await readCurrentState(connections);
-    const plan = planAtlasSync(
-      resolved.index,
-      resolved.indexCid,
-      current.syncState,
-      current.state,
-    );
-    if (plan.unchanged) {
-      logger.info(
-        { indexCid: resolved.indexCid },
-        "Atlas index already synchronized",
-      );
-    }
-
-    const staged: StagedGroup[] = [];
-    if (plan.load.length > 0) {
-      await mkdir(runDirectory, { recursive: true });
-      duckdb = await openAtlasDuckDb();
-      for (const group of plan.load) {
-        const stagedGroup = await stageGroup({
-          duckdb,
-          fetchOptions,
-          group,
-          runDirectory,
-        });
-        staged.push(stagedGroup);
-        logger.info(stagedGroup.summary, "Staged Atlas county group");
+    // The write transaction is the sync lock: BEGIN IMMEDIATE on SQLite, a
+    // transaction-scoped advisory lock on Postgres. A concurrent sync fails
+    // fast (SQLITE_BUSY after busy_timeout, or "already running"), while
+    // readers keep serving the accepted snapshot under WAL.
+    return await connections.transaction(async (executor) => {
+      if (backend.kind === "postgres") {
+        const locked = await executor.execute(
+          "SELECT pg_try_advisory_xact_lock(?) AS acquired",
+          [ATLAS_SYNC_LOCK_ID],
+        );
+        if (locked.rows[0]?.acquired !== true) {
+          throw new Error("Atlas synchronization is already running");
+        }
       }
-    }
+      const resolved = await resolveAtlasIndex(
+        options.ipns ?? config.ATLAS_IPNS,
+        fetchOptions,
+      );
+      const current = await readCurrentState(executor);
+      const plan = planAtlasSync(
+        resolved.index,
+        resolved.indexCid,
+        current.syncState,
+        current.state,
+      );
+      if (plan.unchanged) {
+        logger.info(
+          { indexCid: resolved.indexCid },
+          "Atlas index already synchronized",
+        );
+      }
 
-    // An unchanged index performs no database writes.
-    if (!plan.unchanged) {
-      await connections.transaction((executor) =>
-        applyAtlasIndexTransaction({
+      const staged: StagedGroup[] = [];
+      if (plan.load.length > 0) {
+        await mkdir(runDirectory, { recursive: true });
+        duckdb = await openAtlasDuckDb();
+        for (const group of plan.load) {
+          const stagedGroup = await stageGroup({
+            duckdb,
+            fetchOptions,
+            group,
+            runDirectory,
+          });
+          staged.push(stagedGroup);
+          logger.info(stagedGroup.summary, "Staged Atlas county group");
+        }
+      }
+
+      // An unchanged index performs no database writes.
+      if (!plan.unchanged) {
+        await applyAtlasIndexTransaction({
           backend: backend.kind,
           executor,
           generatedFrom: plan.generatedFrom,
           groups: staged,
           indexCid: plan.indexCid,
           withdrawals: plan.withdraw,
-        }),
-      );
-    }
+        });
+      }
 
-    const summary: AtlasSyncSummary = {
-      groupsLoaded: staged.length,
-      groupsSkipped: plan.skipped,
-      groupsWithdrawn: plan.withdraw.length,
-      indexCid: plan.indexCid,
-      unchanged: plan.unchanged,
-      loaded: staged.map((group) => group.summary),
-    };
-    logger.info(summary, "Atlas synchronization completed");
-    return summary;
+      const summary: AtlasSyncSummary = {
+        groupsLoaded: staged.length,
+        groupsSkipped: plan.skipped,
+        groupsWithdrawn: plan.withdraw.length,
+        indexCid: plan.indexCid,
+        unchanged: plan.unchanged,
+        loaded: staged.map((group) => group.summary),
+      };
+      logger.info(summary, "Atlas synchronization completed");
+      return summary;
+    });
   } finally {
     duckdb?.close();
     await rm(runDirectory, { recursive: true, force: true }).catch(
       () => undefined,
     );
-    await lock?.release();
     if (ownsConnections) {
       await connections.close();
     }

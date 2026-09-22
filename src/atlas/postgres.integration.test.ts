@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 
 import { parseAtlasDatabaseUrl } from "./backend.ts";
 import { openAtlasConnections } from "./connections.ts";
-import { acquireAtlasSyncLock } from "./locks.ts";
 import { normalizedRows } from "./query.ts";
+import { ATLAS_SYNC_LOCK_ID } from "./sync.ts";
 import { initializeAtlasSchema } from "./schema.ts";
 
 const databaseUrl = process.env.ATLAS_POSTGRES_TEST_URL;
@@ -21,11 +21,17 @@ describe.runIf(databaseUrl !== undefined)("Atlas Postgres integration", () => {
     const second = await openAtlasConnections(backend);
     try {
       await initializeAtlasSchema(first.write);
-      const lock = await acquireAtlasSyncLock(backend, first.write);
-      await expect(acquireAtlasSyncLock(backend, second.write)).rejects.toThrow(
-        "already running",
-      );
-      await lock.release();
+      const tryLock = (executor: { execute: typeof first.write.execute }) =>
+        executor
+          .execute("SELECT pg_try_advisory_xact_lock(?) AS acquired", [
+            ATLAS_SYNC_LOCK_ID,
+          ])
+          .then((result) => result.rows[0]?.acquired);
+      await first.transaction(async (executor) => {
+        expect(await tryLock(executor)).toBe(true);
+        await expect(second.transaction(tryLock)).resolves.toBe(false);
+      });
+      await expect(second.transaction(tryLock)).resolves.toBe(true);
 
       const county = `rollback-${randomUUID()}`;
       await expect(
