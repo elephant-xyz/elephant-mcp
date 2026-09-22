@@ -239,10 +239,6 @@ export function parseCountyTablesV1(
   }).parse(value);
 }
 
-export type AtlasGroupV1 = z.infer<typeof AtlasGroupV1Schema>;
-export type AtlasCountyV1 = z.infer<typeof AtlasCountyV1Schema>;
 export type AtlasIndexV1 = z.infer<typeof AtlasIndexV1Schema>;
 export type CountyIndexV1 = z.infer<typeof CountyIndexV1Schema>;
-export type CountyTablePartV1 = z.infer<typeof CountyTablePartV1Schema>;
-export type CountyTableV1 = z.infer<typeof CountyTableV1Schema>;
 export type CountyTablesV1 = z.infer<typeof CountyTablesV1Schema>;

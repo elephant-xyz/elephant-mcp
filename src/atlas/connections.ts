@@ -10,7 +10,6 @@ import type { AtlasBackend } from "./backend.ts";
 
 export interface AtlasSqlResult {
   rows: Array<Record<string, unknown>>;
-  rowsAffected: number;
 }
 
 export interface AtlasExecutor {
@@ -28,6 +27,7 @@ export interface AtlasConnections {
   close(): Promise<void>;
 }
 
+/** libsql rows are array-like column holders; copy them to plain objects. */
 function libsqlRows(rows: Iterable<Record<string, unknown>>) {
   return Array.from(rows, (row) => ({ ...row }));
 }
@@ -43,16 +43,9 @@ function libsqlExecutor(client: Pick<Client, "execute">): AtlasExecutor {
         rows: libsqlRows(
           result.rows as unknown as Iterable<Record<string, unknown>>,
         ),
-        rowsAffected: result.rowsAffected,
       };
     },
   };
-}
-
-function postgresRows(rows: unknown) {
-  return Array.from(rows as Iterable<Record<string, unknown>>, (row) => ({
-    ...row,
-  }));
 }
 
 function postgresPlaceholders(statement: string): string {
@@ -66,10 +59,7 @@ function postgresExecutor(client: Sql | TransactionSql): AtlasExecutor {
       const result = await client.unsafe(postgresPlaceholders(statement), [
         ...params,
       ] as never[]);
-      return {
-        rows: postgresRows(result),
-        rowsAffected: result.count,
-      };
+      return { rows: [...(result as Iterable<Record<string, unknown>>)] };
     },
   };
 }
@@ -149,7 +139,7 @@ async function openPostgresConnections(
     write: postgresExecutor(writeClient),
     async read(statement) {
       const rows = await readDb.execute(drizzleSql.raw(statement));
-      return postgresRows(rows);
+      return [...(rows as Iterable<Record<string, unknown>>)];
     },
     transaction: (callback) =>
       writeClient.begin((transaction) =>

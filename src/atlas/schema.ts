@@ -23,8 +23,6 @@ const CONTROL_SCHEMA = [
     loaded_at TEXT NOT NULL,
     PRIMARY KEY (state, county, data_group)
   )`,
-  `CREATE INDEX IF NOT EXISTS atlas_state_county_idx
-    ON atlas_state (state, county)`,
 ] as const;
 
 export async function initializeAtlasSchema(
