@@ -82,7 +82,44 @@ describe("Atlas geo tools", () => {
       expect(parse(await sumPropertyValueInAreaHandler(scope))).toMatchObject({
         count: 1,
         totalValue: 100,
+        truncated: false,
       });
+
+      // More rows than the cap: aggregates stay exact, row lists report it.
+      for (let batch = 0; batch < 3; batch += 1) {
+        await connections.write.execute(
+          `INSERT INTO property VALUES ${Array.from(
+            { length: 500 },
+            (_, offset) => {
+              const n = batch * 500 + offset;
+              return `('FL', 'lee', 'county', 'bulk-${n}', 'bp-${n}', 'bulk-${n}', 26.2, -81.2, 2)`;
+            },
+          ).join(", ")}`,
+        );
+      }
+      expect(parse(await sumPropertyValueInAreaHandler(scope))).toMatchObject({
+        count: 1501,
+        totalValue: 3100,
+        truncated: false,
+      });
+      const found = parse(await findPropertiesInAreaHandler(scope));
+      expect(found).toMatchObject({ count: 1501, truncated: true });
+      expect(found.parcels).toHaveLength(1000);
+      const polygon = {
+        ...scope,
+        bbox: undefined,
+        polygon: [
+          { lat: 26, lng: -82 },
+          { lat: 27, lng: -82 },
+          { lat: 27, lng: -81 },
+          { lat: 26, lng: -81 },
+        ],
+      };
+      expect(parse(await sumPropertyValueInAreaHandler(polygon))).toMatchObject(
+        {
+          truncated: true,
+        },
+      );
       expect(
         parse(
           await findPropertiesInAreaHandler({

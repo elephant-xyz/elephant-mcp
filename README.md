@@ -149,7 +149,9 @@ schema CIDs.
 `property`) and the `latitudeColumn`, `longitudeColumn`, `parcelColumn`, and
 `valueColumn` names (defaults `latitude`, `longitude`, `parcel_identifier`,
 `avm_value`). A column that does not exist in the scoped table fails with the
-table's column list.
+table's column list. Bounding-box counts and sums run in SQL; row lists and
+polygon filters are bounded to 1000 candidates and report `truncated: true`
+with the `rowCap` when the area holds more.
 
 ## Configuration
 

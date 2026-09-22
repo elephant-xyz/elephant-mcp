@@ -88,8 +88,16 @@ function insidePolygon(lat: number, lng: number, polygon: Point[]): boolean {
   return inside;
 }
 
-async function areaRows(args: AreaArgs) {
-  const area = bounds(args);
+/** Rows returned per call; runAtlasQuery enforces the same ceiling. */
+const ROW_CAP = 1000;
+
+/**
+ * Count and sum inside the bounding box in SQL. A polygon is applied in JS
+ * to at most ROW_CAP bounding-box candidates, so its count and sum are
+ * exact only when `truncated` is false.
+ */
+async function area(args: AreaArgs, withRows: boolean) {
+  const shape = bounds(args);
   const schema = await getAtlasQuerySchema({
     county: args.county,
     dataGroup: args.dataGroup,
@@ -101,29 +109,58 @@ async function areaRows(args: AreaArgs) {
   const longitude = identifier(args.longitudeColumn, available);
   const parcel = identifier(args.parcelColumn, available);
   const value = identifier(args.valueColumn, available);
-  const result = await runAtlasQuery({
-    county: args.county,
-    dataGroup: args.dataGroup,
-    state: args.state,
-    limit: 1000,
-    sql: `SELECT
+  const where = `FROM "${schema.table}"
+     WHERE ${latitude} BETWEEN ${shape.minLat} AND ${shape.maxLat}
+       AND ${longitude} BETWEEN ${shape.minLng} AND ${shape.maxLng}`;
+  const query = (sql: string) =>
+    runAtlasQuery({
+      county: args.county,
+      dataGroup: args.dataGroup,
+      state: args.state,
+      limit: ROW_CAP,
+      sql,
+    });
+
+  const totals = await query(
+    `SELECT count(*) AS count, sum(${value}) AS total ${where}`,
+  );
+  const inBox = Number(totals.rows[0]?.count ?? 0);
+  const truncated = inBox > ROW_CAP;
+  if (!withRows && shape.polygon === undefined) {
+    return {
+      count: inBox,
+      rows: [],
+      source: totals.source,
+      totalValue: Number(totals.rows[0]?.total ?? 0),
+      truncated: false,
+    };
+  }
+
+  const candidates = await query(
+    `SELECT
       ${parcel} AS parcel_identifier,
       ${latitude} AS latitude,
       ${longitude} AS longitude,
       ${value} AS value
-     FROM "${schema.table}"
-     WHERE ${latitude} BETWEEN ${area.minLat} AND ${area.maxLat}
-       AND ${longitude} BETWEEN ${area.minLng} AND ${area.maxLng}`,
-  });
-  const rows = result.rows.filter((row) => {
-    if (area.polygon === undefined) return true;
-    return insidePolygon(
-      Number(row.latitude),
-      Number(row.longitude),
-      area.polygon,
-    );
-  });
-  return { result, rows };
+     ${where}`,
+  );
+  const rows =
+    shape.polygon === undefined
+      ? candidates.rows
+      : candidates.rows.filter((row) =>
+          insidePolygon(
+            Number(row.latitude),
+            Number(row.longitude),
+            shape.polygon,
+          ),
+        );
+  return {
+    count: shape.polygon === undefined ? inBox : rows.length,
+    rows,
+    source: totals.source,
+    totalValue: rows.reduce((sum, row) => sum + Number(row.value ?? 0), 0),
+    truncated,
+  };
 }
 
 function errorResult(message: string, error: unknown) {
@@ -142,11 +179,13 @@ function errorResult(message: string, error: unknown) {
 
 export async function findPropertiesInAreaHandler(args: AreaArgs) {
   try {
-    const { result, rows } = await areaRows(args);
+    const { count, rows, source, truncated } = await area(args, true);
     return createTextResult({
-      count: rows.length,
+      count,
       parcels: rows,
-      source: result.source,
+      rowCap: ROW_CAP,
+      source,
+      truncated,
     });
   } catch (error) {
     return errorResult("Failed to find Atlas properties in area", error);
@@ -155,12 +194,13 @@ export async function findPropertiesInAreaHandler(args: AreaArgs) {
 
 export async function sumPropertyValueInAreaHandler(args: AreaArgs) {
   try {
-    const { result, rows } = await areaRows(args);
+    const { count, source, totalValue, truncated } = await area(args, false);
     return createTextResult({
-      count: rows.length,
-      parcels: rows.map((row) => String(row.parcel_identifier ?? "")),
-      totalValue: rows.reduce((sum, row) => sum + Number(row.value ?? 0), 0),
-      source: result.source,
+      count,
+      rowCap: ROW_CAP,
+      source,
+      totalValue,
+      truncated,
     });
   } catch (error) {
     return errorResult("Failed to sum Atlas property values in area", error);
