@@ -19,6 +19,7 @@ import {
 } from "./gateways.ts";
 import {
   calculateAtlasIndexCid,
+  verifyAtlasIndexRoot,
   verifyRawBlockCid,
   verifyUnixFsCid,
 } from "./integrity.ts";
@@ -61,11 +62,21 @@ export async function resolveAtlasIndex(
 ): Promise<ResolvedAtlasIndex> {
   const fetched = await fetchAtlasIndex(ipns, options);
   const bytes = new Uint8Array(await fetched.response.arrayBuffer());
+  const indexCid = await calculateAtlasIndexCid(bytes);
+  const root = fetched.response.headers
+    .get("x-ipfs-roots")
+    ?.split(",")
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .at(-1);
+  if (root !== undefined) {
+    verifyAtlasIndexRoot(root, indexCid);
+  }
   return {
     bytes,
     gateway: fetched.gateway,
     index: AtlasIndexV1Schema.parse(parseJson(bytes, "Atlas index")),
-    indexCid: await calculateAtlasIndexCid(bytes),
+    indexCid,
   };
 }
 

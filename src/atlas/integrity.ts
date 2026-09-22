@@ -91,6 +91,31 @@ export async function calculateAtlasIndexCid(
   return CID.createV1(raw.code, await sha256.digest(bytes)).toString();
 }
 
+/**
+ * Compare the CID computed from the index bytes with the root a gateway
+ * reports in `X-Ipfs-Roots`. Only a single raw leaf can be verified from its
+ * bytes; a dag-pb root means the index outgrew one chunk.
+ */
+export function verifyAtlasIndexRoot(root: string, indexCid: string): void {
+  let cid: CID;
+  try {
+    cid = CID.parse(root);
+  } catch {
+    throw new Error(`Atlas gateway reported an unparsable index root ${root}`);
+  }
+  if (cid.code === 0x70) {
+    throw new Error(
+      `Atlas index root ${root} is a dag-pb node: the index outgrew one raw UnixFS chunk and its bytes can no longer be verified as one leaf`,
+    );
+  }
+  if (cid.code !== raw.code) {
+    throw new Error(`Atlas index root ${root} is not a raw leaf`);
+  }
+  if (cid.toString() !== indexCid) {
+    throw new CidVerificationError(cid.toString(), indexCid);
+  }
+}
+
 export type ByteSource = AsyncIterable<Uint8Array>;
 
 /**

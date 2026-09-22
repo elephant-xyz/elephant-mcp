@@ -169,7 +169,7 @@ export const CountyTablesV1Schema = z
     label: z.literal("CountyTables"),
     version: z.literal(1),
     county_root: CidV1Schema,
-    part_size_bytes: z.literal(1_073_741_824),
+    part_size_bytes: safeByteCountSchema,
     codec: z.literal("zstd"),
     tables: countyTablesRecordV1Schema,
   })

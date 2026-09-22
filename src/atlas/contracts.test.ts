@@ -239,4 +239,21 @@ describe("Atlas v1 contracts", () => {
       }).success,
     ).toBe(false);
   });
+
+  it("accepts any positive part size and bounds every part by it", async () => {
+    const input = await countyTables();
+    const archive = await cid("archive");
+
+    expect(
+      parseCountyTablesV1({ ...input, part_size_bytes: 256 }, archive)
+        .part_size_bytes,
+    ).toBe(256);
+    expect(
+      CountyTablesV1Schema.safeParse({ ...input, part_size_bytes: 255 }).error
+        ?.issues[0]?.message,
+    ).toBe("part exceeds the 255-byte limit");
+    expect(
+      CountyTablesV1Schema.safeParse({ ...input, part_size_bytes: 0 }).success,
+    ).toBe(false);
+  });
 });
