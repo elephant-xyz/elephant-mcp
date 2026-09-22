@@ -37,36 +37,6 @@ async function removeGroup(
   }
 }
 
-async function verifyImmutableContent(
-  executor: AtlasExecutor,
-  physicalTable: string,
-  stageTable: string,
-  primaryKey: string,
-  columns: readonly AtlasParquetColumn[],
-): Promise<void> {
-  const comparisons = columns
-    .filter((column) => column.name !== primaryKey)
-    .map(
-      (column) =>
-        `content.${quoteAtlasIdentifier(
-          column.name,
-        )} IS DISTINCT FROM staged.${quoteAtlasIdentifier(column.name)}`,
-    );
-  if (comparisons.length === 0) return;
-  const result = await executor.execute(
-    `SELECT count(*) AS conflicts
-     FROM ${quoteAtlasIdentifier(stageTable)} AS staged
-     JOIN ${quoteAtlasIdentifier(physicalTable)} AS content
-       ON content.${quoteAtlasIdentifier(
-         primaryKey,
-       )} = staged.${quoteAtlasIdentifier(primaryKey)}
-     WHERE ${comparisons.join(" OR ")}`,
-  );
-  if (Number(result.rows[0]?.conflicts ?? 0) > 0) {
-    throw new Error(`Atlas immutable content conflict in ${physicalTable}`);
-  }
-}
-
 async function applyContentTable(
   executor: AtlasExecutor,
   backend: AtlasBackend["kind"],
@@ -113,21 +83,22 @@ async function applyContentTable(
   }
 
   await ensureAtlasContentTable(executor, backend, content, indexCid);
-  await verifyImmutableContent(
-    executor,
-    content.physicalName,
-    staged.stageTable,
-    content.primaryKey,
-    content.columns,
+  const contentColumns = content.columns.map((column) =>
+    quoteAtlasIdentifier(column.name),
   );
-  const contentColumns = content.columns.map((column) => column.name);
-  const selected = contentColumns.map(quoteAtlasIdentifier).join(", ");
+  const updates = contentColumns
+    .filter((column) => column !== quoteAtlasIdentifier(content.primaryKey))
+    .map((column) => `${column} = excluded.${column}`);
   await executor.execute(
-    `INSERT INTO ${quoteAtlasIdentifier(content.physicalName)} (${selected})
-     SELECT DISTINCT ${selected}
+    `INSERT INTO ${quoteAtlasIdentifier(content.physicalName)} (${contentColumns.join(", ")})
+     SELECT DISTINCT ${contentColumns.join(", ")}
      FROM ${quoteAtlasIdentifier(staged.stageTable)}
      WHERE true
-     ON CONFLICT (${quoteAtlasIdentifier(content.primaryKey)}) DO NOTHING`,
+     ON CONFLICT (${quoteAtlasIdentifier(content.primaryKey)}) ${
+       updates.length === 0
+         ? "DO NOTHING"
+         : `DO UPDATE SET ${updates.join(", ")}`
+     }`,
   );
 
   const membershipConflict = [

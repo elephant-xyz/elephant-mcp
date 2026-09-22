@@ -135,33 +135,31 @@ describe("Atlas index transaction", () => {
         `INSERT INTO stage_conflict
          VALUES ('shared-cid', 'property-c', 'hoa-schema', 'Changed')`,
       );
-      await expect(
-        connections.transaction((executor) =>
-          applyAtlasIndexTransaction({
-            backend: "sqlite",
-            executor,
-            generatedFrom: "generated-conflict",
-            groups: [
-              {
-                group: group("hoa"),
-                tables: [
-                  {
-                    columns: [...columns],
-                    logicalName: "company",
-                    rows: 1,
-                    stageTable: "stage_conflict",
-                  },
-                ],
-              },
-            ],
-            indexCid: `${INDEX.slice(0, -1)}c`,
-            withdrawals: [],
-          }),
-        ),
-      ).rejects.toThrow("immutable content conflict");
+      await connections.transaction((executor) =>
+        applyAtlasIndexTransaction({
+          backend: "sqlite",
+          executor,
+          generatedFrom: "generated-conflict",
+          groups: [
+            {
+              group: group("hoa"),
+              tables: [
+                {
+                  columns: [...columns],
+                  logicalName: "company",
+                  rows: 1,
+                  stageTable: "stage_conflict",
+                },
+              ],
+            },
+          ],
+          indexCid: `${INDEX.slice(0, -1)}c`,
+          withdrawals: [],
+        }),
+      );
       expect(
         await connections.read(`SELECT name FROM atlas_content__company`),
-      ).toEqual([{ name: "Shared" }]);
+      ).toEqual([{ name: "Changed" }]);
       expect(
         await connections.read(
           "SELECT count(*) AS count FROM atlas_membership",
