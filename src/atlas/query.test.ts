@@ -114,10 +114,17 @@ describe("Atlas query repository", () => {
       // A row from another scope must never be visible.
       await connections.write.execute(
         `INSERT INTO property VALUES
-         ('lee', 'hoa', 'other-cid', 'other-property', 'hoa-schema', 'parcel-9', 1)`,
+         ('FL', 'lee', 'hoa', 'other-cid', 'other-property', 'hoa-schema', 'parcel-9', 1),
+         ('CA', 'lee', 'county', 'ca-cid', 'ca-property', 'schema-cid', 'parcel-8', 1)`,
       );
       const query = (sql: string) =>
-        runAtlasQuery({ county: "lee", dataGroup: "county", sql, limit: 10 });
+        runAtlasQuery({
+          county: "lee",
+          dataGroup: "county",
+          state: "FL",
+          sql,
+          limit: 10,
+        });
 
       const result = await query(
         `SELECT parcel_identifier, market_value
@@ -130,6 +137,7 @@ describe("Atlas query repository", () => {
         source: {
           county: "lee",
           dataGroup: "county",
+          state: "FL",
           archiveCid: "archive-cid",
           indexCid: INDEX,
         },
@@ -184,13 +192,18 @@ describe("Atlas query repository", () => {
         await runAtlasQuery({
           county: "lee",
           dataGroup: "hoa",
+          state: "FL",
           sql: "SELECT * FROM property",
           limit: 10,
         }).catch((error: Error) => error.message),
       ).toContain("not published");
 
       expect(
-        await getAtlasQuerySchema({ county: "lee", dataGroup: "county" }),
+        await getAtlasQuerySchema({
+          county: "lee",
+          dataGroup: "county",
+          state: "FL",
+        }),
       ).toMatchObject({
         tables: [
           {
@@ -205,6 +218,7 @@ describe("Atlas query repository", () => {
         await getAtlasQuerySchema({
           county: "lee",
           dataGroup: "county",
+          state: "FL",
           table: "property",
         }),
       ).toMatchObject({
@@ -222,6 +236,7 @@ describe("Atlas query repository", () => {
         await listAtlasProperties({
           county: "lee",
           dataGroup: "county",
+          state: "FL",
           limit: 10,
           offset: 0,
         }),
@@ -235,6 +250,7 @@ describe("Atlas query repository", () => {
         await getAtlasProperty({
           county: "lee",
           dataGroup: "county",
+          state: "FL",
           propertyCid: "property-cid",
         }),
       ).toMatchObject({
@@ -248,6 +264,7 @@ describe("Atlas query repository", () => {
         getAtlasProperty({
           county: "lee",
           dataGroup: "county",
+          state: "FL",
           propertyCid: "missing",
         }),
       ).rejects.toThrow("CID_NOT_PUBLISHED");
@@ -335,6 +352,7 @@ describe("Atlas query repository", () => {
       const second = await getAtlasProperty({
         county: "lee",
         dataGroup: "county",
+        state: "FL",
         propertyCid: "p2",
       });
       expect(second.records).toMatchObject({
@@ -349,6 +367,7 @@ describe("Atlas query repository", () => {
       const first = await getAtlasProperty({
         county: "lee",
         dataGroup: "county",
+        state: "FL",
         propertyCid: "p1",
       });
       expect(first.records.property).toEqual([

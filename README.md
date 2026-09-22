@@ -75,22 +75,22 @@ published: one per lexicon class (`property`, `address`, `company`, ...), one
 per relationship type (`property_has_address`, ...), and `properties` for the
 per-property data-group roots. Columns come from the Parquet parts
 (`DESCRIBE read_parquet` with `union_by_name`; new columns are added with
-`ALTER TABLE ... ADD COLUMN`) plus `county` and `data_group`.
+`ALTER TABLE ... ADD COLUMN`) plus `state`, `county`, and `data_group`.
 
 Primary keys:
 
-| Table         | Key                                      |
-| ------------- | ---------------------------------------- |
-| lexicon class | `(county, data_group, cid)`              |
-| relationship  | `(county, data_group, relationship_cid)` |
-| `properties`  | `(county, data_group, property_cid)`     |
+| Table         | Key                                             |
+| ------------- | ----------------------------------------------- |
+| lexicon class | `(state, county, data_group, cid)`              |
+| relationship  | `(state, county, data_group, relationship_cid)` |
+| `properties`  | `(state, county, data_group, property_cid)`     |
 
 `export-tables` writes each entity and relationship once per archive, with
 `property_cid` set to the first property that referenced it. `getOracleProperty`
 therefore seeds with the property's own rows and follows relationship rows
 `from_cid` to `to_cid` inside the scope (to a fixpoint or depth 8) to gather
 people, companies, and addresses shared with earlier properties. Loading a group deletes its
-`county`/`data_group` scope and reinserts it with `ON CONFLICT DO UPDATE`;
+`state`/`county`/`data_group` scope and reinserts it with `ON CONFLICT DO UPDATE`;
 withdrawing a group is the delete alone. Both happen in one transaction.
 
 Control tables: `atlas_state` (one row per loaded county/data group with its
@@ -135,10 +135,11 @@ Lexicon and verified scripts:
 - `getPropertySchema`
 - `getVerifiedScriptExamples`
 
-Atlas data tools require explicit county and data-group scope. `queryProperties`
+Atlas data tools require explicit `state`, `county`, and `dataGroup` scope
+(county keys repeat across states). `queryProperties`
 accepts one read-only SELECT that names the synchronized tables directly
 (`property`, `address`, `property_has_address`, `properties`, ...); each one is
-shadowed by a CTE filtered to the requested county and data group, and any
+shadowed by a CTE filtered to the requested state, county, and data group, and any
 identifier that is not one of those tables, their columns, an alias, a function,
 or a SQL keyword is rejected, so `atlas_state`, catalogs, and schema-qualified
 names fail closed. Responses include the Atlas index, archive, tables, and

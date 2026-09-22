@@ -18,6 +18,7 @@ interface AreaArgs {
   polygon?: Point[];
   county: string;
   dataGroup: string;
+  state: string;
   table: string;
   latitudeColumn: string;
   longitudeColumn: string;
@@ -92,6 +93,7 @@ async function areaRows(args: AreaArgs) {
   const schema = await getAtlasQuerySchema({
     county: args.county,
     dataGroup: args.dataGroup,
+    state: args.state,
     table: args.table,
   });
   const available = schema.columns.map((column) => column.name);
@@ -102,6 +104,7 @@ async function areaRows(args: AreaArgs) {
   const result = await runAtlasQuery({
     county: args.county,
     dataGroup: args.dataGroup,
+    state: args.state,
     limit: 1000,
     sql: `SELECT
       ${parcel} AS parcel_identifier,

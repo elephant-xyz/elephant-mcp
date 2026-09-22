@@ -28,6 +28,10 @@ import { transformExamplesHandler } from "./transformExamples.ts";
 
 const atlasIdentifier = AtlasIdentifierSchema;
 const atlasScope = {
+  state: z
+    .string()
+    .regex(/^[A-Z]{2}$/u)
+    .describe("Two-letter state code, e.g. 'FL'."),
   county: z.string().min(1).describe("Atlas county key, e.g. 'lee'."),
   dataGroup: atlasIdentifier.describe("Atlas data-group key, e.g. 'county'."),
 };
@@ -140,6 +144,7 @@ export function registerAllTools(
     async (args: {
       county: string;
       dataGroup: string;
+      state: string;
       limit?: number;
       offset?: number;
     }) => listOraclePropertiesHandler(args),
@@ -160,6 +165,7 @@ export function registerAllTools(
     async (args: {
       county: string;
       dataGroup: string;
+      state: string;
       propertyCid?: string;
       cid?: string;
     }) => getOraclePropertyHandler(args),
@@ -173,7 +179,7 @@ export function registerAllTools(
         "Return synchronized table counts and publication provenance.",
       inputSchema: atlasScope,
     },
-    async (args: { county: string; dataGroup: string }) =>
+    async (args: { county: string; dataGroup: string; state: string }) =>
       getOracleDatasetInfoHandler(args),
   );
 
@@ -198,6 +204,7 @@ export function registerAllTools(
     async (args: {
       county: string;
       dataGroup: string;
+      state: string;
       sql: string;
       limit?: number;
     }) => queryPropertiesHandler(args),
@@ -214,8 +221,12 @@ export function registerAllTools(
         table: atlasIdentifier.optional(),
       },
     },
-    async (args: { county: string; dataGroup: string; table?: string }) =>
-      getPropertyQuerySchemaHandler(args),
+    async (args: {
+      county: string;
+      dataGroup: string;
+      state: string;
+      table?: string;
+    }) => getPropertyQuerySchemaHandler(args),
   );
 
   server.registerTool(

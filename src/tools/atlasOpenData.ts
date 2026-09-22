@@ -21,6 +21,7 @@ function toolError(message: string, error: unknown) {
 export async function listOraclePropertiesHandler(args: {
   county: string;
   dataGroup: string;
+  state: string;
   limit?: number;
   offset?: number;
 }) {
@@ -29,6 +30,7 @@ export async function listOraclePropertiesHandler(args: {
       await listAtlasProperties({
         county: args.county,
         dataGroup: args.dataGroup,
+        state: args.state,
         limit: args.limit ?? 50,
         offset: args.offset ?? 0,
       }),
@@ -45,6 +47,7 @@ export async function listOraclePropertiesHandler(args: {
 export async function getOraclePropertyHandler(args: {
   county: string;
   dataGroup: string;
+  state: string;
   propertyCid?: string;
   cid?: string;
 }) {
@@ -66,6 +69,7 @@ export async function getOraclePropertyHandler(args: {
       await getAtlasProperty({
         county: args.county,
         dataGroup: args.dataGroup,
+        state: args.state,
         propertyCid,
       }),
     );
@@ -81,10 +85,11 @@ export async function getOraclePropertyHandler(args: {
 export async function getOracleDatasetInfoHandler(args: {
   county: string;
   dataGroup: string;
+  state: string;
 }) {
   try {
     const [source, schema, published] = await Promise.all([
-      resolveAtlasSource(args.county, args.dataGroup),
+      resolveAtlasSource(args.state, args.county, args.dataGroup),
       getAtlasQuerySchema(args),
       listAtlasCounties(),
     ]);

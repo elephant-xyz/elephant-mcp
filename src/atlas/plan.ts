@@ -24,6 +24,7 @@ export interface AtlasGroupWithdrawal {
   action: "withdraw";
   county: string;
   dataGroup: string;
+  state: string;
 }
 
 export interface AtlasSyncPlan {
@@ -34,8 +35,8 @@ export interface AtlasSyncPlan {
   withdrawals: AtlasGroupWithdrawal[];
 }
 
-function groupKey(county: string, dataGroup: string): string {
-  return `${county}\u0000${dataGroup}`;
+function groupKey(state: string, county: string, dataGroup: string): string {
+  return `${state}\u0000${county}\u0000${dataGroup}`;
 }
 
 export function planAtlasSync(
@@ -55,14 +56,17 @@ export function planAtlasSync(
   }
 
   const current = new Map(
-    currentRows.map((row) => [groupKey(row.county, row.dataGroup), row]),
+    currentRows.map((row) => [
+      groupKey(row.state, row.county, row.dataGroup),
+      row,
+    ]),
   );
   const desired = new Set<string>();
   const groups: AtlasGroupTarget[] = [];
 
   for (const county of index.counties) {
     for (const [dataGroup, group] of Object.entries(county.groups)) {
-      const key = groupKey(county.county, dataGroup);
+      const key = groupKey(county.state, county.county, dataGroup);
       desired.add(key);
       const previous = current.get(key);
       groups.push({
@@ -85,12 +89,15 @@ export function planAtlasSync(
   }
 
   const withdrawals = currentRows
-    .filter((row) => !desired.has(groupKey(row.county, row.dataGroup)))
+    .filter(
+      (row) => !desired.has(groupKey(row.state, row.county, row.dataGroup)),
+    )
     .map(
       (row): AtlasGroupWithdrawal => ({
         action: "withdraw",
         county: row.county,
         dataGroup: row.dataGroup,
+        state: row.state,
       }),
     );
 
@@ -102,6 +109,7 @@ export function planAtlasSync(
   );
   withdrawals.sort(
     (left, right) =>
+      left.state.localeCompare(right.state) ||
       left.county.localeCompare(right.county) ||
       left.dataGroup.localeCompare(right.dataGroup),
   );

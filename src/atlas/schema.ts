@@ -21,7 +21,7 @@ const CONTROL_SCHEMA = [
     schema_cid TEXT NOT NULL,
     published_at TEXT NOT NULL,
     loaded_at TEXT NOT NULL,
-    PRIMARY KEY (county, data_group)
+    PRIMARY KEY (state, county, data_group)
   )`,
   `CREATE INDEX IF NOT EXISTS atlas_state_county_idx
     ON atlas_state (state, county)`,

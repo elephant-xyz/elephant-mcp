@@ -157,7 +157,7 @@ export function describeAtlasTable(
  * first property that referenced it.
  */
 export function atlasKeyColumns(table: AtlasTable): string[] {
-  return ["county", "data_group", table.primaryKey];
+  return ["state", "county", "data_group", table.primaryKey];
 }
 
 /**
@@ -208,6 +208,7 @@ export async function ensureAtlasTable(
   const existing = catalog.get(table.name);
   if (existing === undefined) {
     const definitions = [
+      '"state" TEXT NOT NULL',
       '"county" TEXT NOT NULL',
       '"data_group" TEXT NOT NULL',
       ...table.columns.map(

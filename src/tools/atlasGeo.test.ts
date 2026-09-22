@@ -33,6 +33,7 @@ function parse(result: { content: Array<{ type: string; text: string }> }) {
 const scope = {
   county: "lee",
   dataGroup: "county",
+  state: "FL",
   table: "property",
   latitudeColumn: "latitude",
   longitudeColumn: "longitude",
@@ -60,17 +61,17 @@ describe("Atlas geo tools", () => {
       );
       await connections.write.execute(
         `CREATE TABLE property (
-          county TEXT, data_group TEXT, cid TEXT, property_cid TEXT,
-          parcel_identifier TEXT, latitude REAL, longitude REAL,
-          avm_value BIGINT,
-          PRIMARY KEY (county, data_group, cid, property_cid)
+          state TEXT, county TEXT, data_group TEXT, cid TEXT,
+          property_cid TEXT, parcel_identifier TEXT, latitude REAL,
+          longitude REAL, avm_value BIGINT,
+          PRIMARY KEY (state, county, data_group, cid)
         )`,
       );
       await connections.write.execute(
         `INSERT INTO property VALUES
-         ('lee', 'county', 'c1', 'p1', 'parcel-1', 26.5, -81.5, 100),
-         ('lee', 'county', 'c2', 'p2', 'parcel-2', 28.0, -81.5, 200),
-         ('lee', 'hoa', 'c3', 'p3', 'parcel-3', 26.5, -81.5, 400)`,
+         ('FL', 'lee', 'county', 'c1', 'p1', 'parcel-1', 26.5, -81.5, 100),
+         ('FL', 'lee', 'county', 'c2', 'p2', 'parcel-2', 28.0, -81.5, 200),
+         ('FL', 'lee', 'hoa', 'c3', 'p3', 'parcel-3', 26.5, -81.5, 400)`,
       );
       setAtlasRuntimeForTests({ backend, connections, status: "ready" });
 
@@ -90,7 +91,7 @@ describe("Atlas geo tools", () => {
           }),
         ).details,
       ).toBe(
-        "Column 'market_value' does not exist; available columns: county, data_group, cid, property_cid, parcel_identifier, latitude, longitude, avm_value",
+        "Column 'market_value' does not exist; available columns: state, county, data_group, cid, property_cid, parcel_identifier, latitude, longitude, avm_value",
       );
       expect(
         parse(await findPropertiesInAreaHandler({ ...scope, table: "address" }))

@@ -23,6 +23,7 @@ const PARAMETER_BUDGET = 32_000;
 async function removeGroup(
   executor: AtlasExecutor,
   backend: AtlasBackend["kind"],
+  state: string,
   county: string,
   dataGroup: string,
 ): Promise<void> {
@@ -33,8 +34,8 @@ async function removeGroup(
   for (const table of [...catalog.keys(), "atlas_state"]) {
     await executor.execute(
       `DELETE FROM ${quoteAtlasIdentifier(table)}
-       WHERE county = ? AND data_group = ?`,
-      [county, dataGroup],
+       WHERE state = ? AND county = ? AND data_group = ?`,
+      [state, county, dataGroup],
     );
   }
 }
@@ -49,7 +50,9 @@ async function loadTable(
   await ensureAtlasTable(executor, backend, table);
   const keys = atlasKeyColumns(table);
   const columns = table.columns.map((column) => column.name);
-  const quoted = ["county", "data_group", ...columns].map(quoteAtlasIdentifier);
+  const quoted = ["state", "county", "data_group", ...columns].map(
+    quoteAtlasIdentifier,
+  );
   const updates = columns
     .filter((column) => !keys.includes(column))
     .map(
@@ -68,6 +71,7 @@ async function loadTable(
            : `DO UPDATE SET ${updates.join(", ")}`
        }`,
       batch.flatMap((row) => [
+        group.state,
         group.county,
         group.dataGroup,
         ...columns.map((column) => row[column] ?? null),
@@ -110,6 +114,7 @@ export async function applyAtlasIndexTransaction(args: {
     await removeGroup(
       args.executor,
       args.backend,
+      withdrawal.state,
       withdrawal.county,
       withdrawal.dataGroup,
     );
@@ -120,6 +125,7 @@ export async function applyAtlasIndexTransaction(args: {
     await removeGroup(
       args.executor,
       args.backend,
+      group.state,
       group.county,
       group.dataGroup,
     );

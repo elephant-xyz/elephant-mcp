@@ -165,11 +165,12 @@ describe("Atlas SQLite synchronization", () => {
       });
       expect(
         await connections.read(
-          `SELECT county, data_group, cid, parcel_identifier, market_value
+          `SELECT state, county, data_group, cid, parcel_identifier, market_value
              FROM property`,
         ),
       ).toEqual([
         {
+          state: "FL",
           county: "lee",
           data_group: "county",
           cid: "entity-cid",

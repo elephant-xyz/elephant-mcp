@@ -17,10 +17,7 @@ const configSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("production"),
   LOG_LEVEL: z.enum(["error", "warn", "info", "debug"]).default("info"),
   ATLAS_IPNS: z.string().min(1).default(DEFAULT_ATLAS_IPNS),
-  ATLAS_GATEWAYS: z
-    .string()
-    .min(1)
-    .default(DEFAULT_ATLAS_GATEWAYS.join(",")),
+  ATLAS_GATEWAYS: z.string().min(1).default(DEFAULT_ATLAS_GATEWAYS.join(",")),
   DATABASE_URL: z.string().min(1).optional(),
   OPENAI_API_KEY: z.string().min(1).optional(),
   AI_GATEWAY_API_KEY: z.string().min(1).optional(),
@@ -234,10 +231,7 @@ export async function verifyEmbeddingProvider(): Promise<{
   };
 }
 
-export type EmbeddingProvider =
-  | "openai"
-  | "vercel-ai-gateway"
-  | "bedrock";
+export type EmbeddingProvider = "openai" | "vercel-ai-gateway" | "bedrock";
 
 export function getEmbeddingProvider(): EmbeddingProvider {
   const cfg = getConfig();

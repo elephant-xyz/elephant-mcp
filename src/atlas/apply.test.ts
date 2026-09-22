@@ -20,11 +20,11 @@ afterEach(async () => {
   );
 });
 
-function group(dataGroup: string): AtlasGroupTarget {
+function group(dataGroup: string, state = "FL"): AtlasGroupTarget {
   return {
     action: "load",
     county: "lee",
-    state: "FL",
+    state,
     fips: "12071",
     dataGroup,
     archiveCid: `${dataGroup}-archive`,
@@ -81,6 +81,7 @@ function apply(
         action: "withdraw",
         county: "lee",
         dataGroup,
+        state: "FL",
       })),
     }),
   );
@@ -174,6 +175,74 @@ describe("Atlas index transaction", () => {
           }),
         ),
       ).rejects.toThrow("loaded 1 rows, expected 2");
+    } finally {
+      await connections.close();
+    }
+  });
+
+  it("keeps same-named counties in different states apart", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "atlas-apply-"));
+    directories.push(directory);
+    const connections = await openAtlasConnections(
+      parseAtlasDatabaseUrl(`file://${path.join(directory, "atlas.sqlite")}`),
+    );
+    const load = (state: string, name: string) => ({
+      group: group("county", state),
+      tables: [
+        {
+          columns: [...columns],
+          name: "company",
+          rows: 1,
+          async *read() {
+            yield* rows(["shared-cid", "property", "schema", name]);
+          },
+        },
+      ],
+    });
+    try {
+      await initializeAtlasSchema(connections.write);
+      await connections.transaction((executor) =>
+        applyAtlasIndexTransaction({
+          backend: "sqlite",
+          executor,
+          generatedFrom: "generated",
+          groups: [load("FL", "Florida"), load("CA", "California")],
+          indexCid: INDEX,
+          withdrawals: [],
+        }),
+      );
+      expect(
+        await connections.read(
+          "SELECT state, name FROM company ORDER BY state",
+        ),
+      ).toEqual([
+        { state: "CA", name: "California" },
+        { state: "FL", name: "Florida" },
+      ]);
+
+      await connections.transaction((executor) =>
+        applyAtlasIndexTransaction({
+          backend: "sqlite",
+          executor,
+          generatedFrom: "generated-b",
+          groups: [],
+          indexCid: `${INDEX.slice(0, -1)}a`,
+          withdrawals: [
+            {
+              action: "withdraw",
+              county: "lee",
+              dataGroup: "county",
+              state: "CA",
+            },
+          ],
+        }),
+      );
+      expect(await connections.read("SELECT state FROM company")).toEqual([
+        { state: "FL" },
+      ]);
+      expect(await connections.read("SELECT state FROM atlas_state")).toEqual([
+        { state: "FL" },
+      ]);
     } finally {
       await connections.close();
     }

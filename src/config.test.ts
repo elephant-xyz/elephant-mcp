@@ -44,11 +44,8 @@ describe("config", () => {
 
   describe("Atlas configuration", () => {
     it("uses the canonical Atlas defaults", async () => {
-      const {
-        DEFAULT_ATLAS_GATEWAYS,
-        DEFAULT_ATLAS_IPNS,
-        getConfig,
-      } = await resetConfigModule();
+      const { DEFAULT_ATLAS_GATEWAYS, DEFAULT_ATLAS_IPNS, getConfig } =
+        await resetConfigModule();
 
       expect(getConfig()).toMatchObject({
         ATLAS_IPNS: DEFAULT_ATLAS_IPNS,

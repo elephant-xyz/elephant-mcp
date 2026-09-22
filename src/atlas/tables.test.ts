@@ -43,7 +43,12 @@ describe("Atlas content tables", () => {
   it("classifies producer table shapes and their keys", () => {
     const property = describeAtlasTable("property", baseColumns);
     expect(property.primaryKey).toBe("cid");
-    expect(atlasKeyColumns(property)).toEqual(["county", "data_group", "cid"]);
+    expect(atlasKeyColumns(property)).toEqual([
+      "state",
+      "county",
+      "data_group",
+      "cid",
+    ]);
     expect(
       describeAtlasTable("property_has_address", [
         column("relationship_cid"),
@@ -58,6 +63,7 @@ describe("Atlas content tables", () => {
       column("bafkreischema"),
     ]);
     expect(atlasKeyColumns(properties)).toEqual([
+      "state",
       "county",
       "data_group",
       "property_cid",
@@ -103,6 +109,7 @@ describe("Atlas content tables", () => {
       const catalog = await readAtlasCatalog(connections.read, "sqlite");
       expect([...catalog.keys()]).toEqual(["property"]);
       expect(catalog.get("property")).toEqual([
+        { name: "state", type: "text" },
         { name: "county", type: "text" },
         { name: "data_group", type: "text" },
         { name: "cid", type: "text" },

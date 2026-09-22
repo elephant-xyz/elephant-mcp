@@ -13,8 +13,12 @@ export interface AtlasSource {
   archiveCid: string;
   county: string;
   dataGroup: string;
+  state: string;
+  fips: string;
   indexCid: string;
   schemaCid: string;
+  state: string;
+  syncedAt: string;
   tablesCid: string;
 }
 
@@ -39,7 +43,8 @@ function normalizedRows(
 }
 
 function scope(source: AtlasSource): string {
-  return `county = ${escapeAtlasLiteral(source.county)}
+  return `state = ${escapeAtlasLiteral(source.state)}
+    AND county = ${escapeAtlasLiteral(source.county)}
     AND data_group = ${escapeAtlasLiteral(source.dataGroup)}`;
 }
 
@@ -54,6 +59,7 @@ function primaryKeyColumn(columns: AtlasCatalogColumn[]): string {
 }
 
 export async function resolveAtlasSource(
+  state: string,
   county: string,
   dataGroup: string,
 ): Promise<AtlasSource> {
@@ -61,30 +67,37 @@ export async function resolveAtlasSource(
   const runtime = await awaitAtlasReady();
   const rows = await runtime.connections.read(
     `SELECT
+      state.state,
       state.county,
+      state.fips,
       state.data_group,
       state.archive_cid,
       state.tables_cid,
       state.schema_cid,
-      sync.index_cid
+      sync.index_cid,
+      sync.synced_at
      FROM atlas_state AS state
      CROSS JOIN atlas_sync_state AS sync
-     WHERE state.county = ${escapeAtlasLiteral(county)}
+     WHERE state.state = ${escapeAtlasLiteral(state)}
+       AND state.county = ${escapeAtlasLiteral(county)}
        AND state.data_group = ${escapeAtlasLiteral(normalizedGroup)}
        AND sync.singleton_key = 1`,
   );
   const row = rows[0];
   if (row === undefined) {
     throw new Error(
-      `Atlas county/group '${county}/${normalizedGroup}' is not published`,
+      `Atlas county/group '${state}/${county}/${normalizedGroup}' is not published`,
     );
   }
   return {
     archiveCid: String(row.archive_cid),
     county: String(row.county),
     dataGroup: String(row.data_group),
+    fips: String(row.fips),
     indexCid: String(row.index_cid),
     schemaCid: String(row.schema_cid),
+    state: String(row.state),
+    syncedAt: String(row.synced_at),
     tablesCid: String(row.tables_cid),
   };
 }
@@ -97,10 +110,15 @@ export async function resolveAtlasSource(
 export async function runAtlasQuery(args: {
   county: string;
   dataGroup: string;
+  state: string;
   limit: number;
   sql: string;
 }): Promise<AtlasQueryResult> {
-  const source = await resolveAtlasSource(args.county, args.dataGroup);
+  const source = await resolveAtlasSource(
+    args.state,
+    args.county,
+    args.dataGroup,
+  );
   const runtime = await awaitAtlasReady();
   const tables = await catalog(runtime);
   const validation = validateScopedSelect(
@@ -137,9 +155,14 @@ export async function runAtlasQuery(args: {
 export async function getAtlasQuerySchema(args: {
   county: string;
   dataGroup: string;
+  state: string;
   table?: string;
 }) {
-  const source = await resolveAtlasSource(args.county, args.dataGroup);
+  const source = await resolveAtlasSource(
+    args.state,
+    args.county,
+    args.dataGroup,
+  );
   const runtime = await awaitAtlasReady();
   const tables = await catalog(runtime);
   if (args.table === undefined) {
@@ -235,10 +258,15 @@ export async function listAtlasCounties() {
 export async function listAtlasProperties(args: {
   county: string;
   dataGroup: string;
+  state: string;
   limit: number;
   offset: number;
 }) {
-  const source = await resolveAtlasSource(args.county, args.dataGroup);
+  const source = await resolveAtlasSource(
+    args.state,
+    args.county,
+    args.dataGroup,
+  );
   const runtime = await awaitAtlasReady();
   const limit = Math.max(1, Math.min(args.limit, 500));
   const offset = Math.max(0, args.offset);
@@ -273,9 +301,14 @@ export async function listAtlasProperties(args: {
 export async function getAtlasProperty(args: {
   county: string;
   dataGroup: string;
+  state: string;
   propertyCid: string;
 }) {
-  const source = await resolveAtlasSource(args.county, args.dataGroup);
+  const source = await resolveAtlasSource(
+    args.state,
+    args.county,
+    args.dataGroup,
+  );
   const runtime = await awaitAtlasReady();
   const tables = await catalog(runtime);
   const names = (table: string) =>

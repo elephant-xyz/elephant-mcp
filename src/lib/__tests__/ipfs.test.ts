@@ -11,20 +11,16 @@ describe("verifyFetchedContent", () => {
     const KNOWN_CONTENT = Buffer.from('{"test":true}');
     const KNOWN_CID = "QmV6vzWB6kU1mQzmsQijkA688iNwyLhFaKHtjKXeKoFVyg";
 
-    it(
-      "returns valid=true when content matches its dag-pb CID",
-      async () => {
-        const result = await verifyFetchedContent(
-          KNOWN_CID,
-          new Uint8Array(KNOWN_CONTENT),
-        );
+    it("returns valid=true when content matches its dag-pb CID", async () => {
+      const result = await verifyFetchedContent(
+        KNOWN_CID,
+        new Uint8Array(KNOWN_CONTENT),
+      );
 
-        expect(result.valid).toBe(true);
-        expect(result.expectedHash).toBe(KNOWN_CID);
-        expect(result.actualHash).toBe(KNOWN_CID);
-      },
-      15_000,
-    );
+      expect(result.valid).toBe(true);
+      expect(result.expectedHash).toBe(KNOWN_CID);
+      expect(result.actualHash).toBe(KNOWN_CID);
+    }, 15_000);
 
     it("returns valid=false when content is tampered", async () => {
       const tampered = new Uint8Array(

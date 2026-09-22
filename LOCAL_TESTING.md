@@ -26,7 +26,7 @@ npm run sync
 Run the sync command again and verify it reports `unchanged: true`.
 
 Inspect the result: every `CountyTables` table is a same-named SQL table with
-`county` and `data_group` columns, and `atlas_state` lists the loaded groups.
+`state`, `county`, and `data_group` columns, and `atlas_state` lists the loaded groups.
 
 ```bash
 sqlite3 /tmp/elephant-atlas.sqlite ".tables" "SELECT county, data_group FROM atlas_state"
@@ -44,7 +44,7 @@ node dist/index.js
 Initialize MCP, list tools, then call:
 
 1. `listPublishedCounties`
-2. `getPropertyQuerySchema` with a county and data group
+2. `getPropertyQuerySchema` with a state, county, and data group
 3. `queryProperties` with read-only SQL naming a synchronized table
 4. `getOracleProperty` with a published property CID
 

@@ -85,7 +85,12 @@ describe("Atlas sync planning", () => {
       dataGroup: "county",
     });
     expect(plan.withdrawals).toEqual([
-      { action: "withdraw", county: "orange", dataGroup: "county" },
+      {
+        action: "withdraw",
+        county: "orange",
+        dataGroup: "county",
+        state: "FL",
+      },
     ]);
   });
 
@@ -97,7 +102,7 @@ describe("Atlas sync planning", () => {
     });
 
     expect(planAtlasSync(empty, INDEX, null, [state()]).withdrawals).toEqual([
-      { action: "withdraw", county: "lee", dataGroup: "county" },
+      { action: "withdraw", county: "lee", dataGroup: "county", state: "FL" },
     ]);
   });
 });
