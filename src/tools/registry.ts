@@ -1,6 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
+import { AtlasIdentifierSchema } from "../atlas/contracts.ts";
+
 import {
   getOracleDatasetInfoHandler,
   getOraclePropertyHandler,
@@ -24,7 +26,7 @@ import {
 import { listPublishedCountiesHandler } from "./publishedCounties.ts";
 import { transformExamplesHandler } from "./transformExamples.ts";
 
-const atlasIdentifier = z.string().regex(/^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/u);
+const atlasIdentifier = AtlasIdentifierSchema;
 const atlasScope = {
   county: z.string().min(1).describe("Atlas county key, e.g. 'lee'."),
   dataGroup: atlasIdentifier.describe("Atlas data-group key, e.g. 'county'."),

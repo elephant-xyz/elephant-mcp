@@ -1,4 +1,4 @@
-import { GroupIdentifierSchema, TableIdentifierSchema } from "./contracts.ts";
+import { AtlasIdentifierSchema } from "./contracts.ts";
 import { awaitAtlasReady, type AtlasRuntime } from "./runtime.ts";
 import {
   escapeAtlasLiteral,
@@ -57,7 +57,7 @@ export async function resolveAtlasSource(
   county: string,
   dataGroup: string,
 ): Promise<AtlasSource> {
-  const normalizedGroup = GroupIdentifierSchema.parse(dataGroup);
+  const normalizedGroup = AtlasIdentifierSchema.parse(dataGroup);
   const runtime = await awaitAtlasReady();
   const rows = await runtime.connections.read(
     `SELECT
@@ -168,7 +168,7 @@ export async function getAtlasQuerySchema(args: {
     };
   }
 
-  const table = TableIdentifierSchema.parse(args.table);
+  const table = AtlasIdentifierSchema.parse(args.table);
   const columns = tables.get(table);
   if (columns === undefined) {
     throw new Error(`Atlas table '${table}' is not synchronized`);

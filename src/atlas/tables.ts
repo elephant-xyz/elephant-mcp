@@ -1,6 +1,6 @@
 import type { DuckDBConnection } from "@duckdb/node-api";
 
-import { TABLE_IDENTIFIER_PATTERN } from "./contracts.ts";
+import { ATLAS_IDENTIFIER_PATTERN } from "./contracts.ts";
 import type { AtlasBackend } from "./backend.ts";
 import type { AtlasExecutor } from "./connections.ts";
 
@@ -26,8 +26,6 @@ export interface AtlasCatalogColumn {
 export type AtlasRead = (
   statement: string,
 ) => Promise<Array<Record<string, unknown>>>;
-
-const COLUMN_IDENTIFIER_PATTERN = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/u;
 
 export function quoteAtlasIdentifier(identifier: string): string {
   return `"${identifier.replace(/"/gu, '""')}"`;
@@ -102,7 +100,7 @@ export async function inspectAtlasParquet(
   return reader.getRowObjectsJson().map((row) => {
     const name = String(row.column_name ?? "");
     const sourceType = String(row.column_type ?? "");
-    if (!COLUMN_IDENTIFIER_PATTERN.test(name)) {
+    if (!ATLAS_IDENTIFIER_PATTERN.test(name)) {
       throw new Error(`Invalid Atlas Parquet column identifier ${name}`);
     }
     return {
@@ -121,7 +119,7 @@ export function describeAtlasTable(
   name: string,
   columns: readonly AtlasParquetColumn[],
 ): AtlasTable {
-  if (!TABLE_IDENTIFIER_PATTERN.test(name) || name.startsWith("atlas_")) {
+  if (!ATLAS_IDENTIFIER_PATTERN.test(name) || name.startsWith("atlas_")) {
     throw new Error(`Invalid Atlas table identifier ${name}`);
   }
   const names = new Set(columns.map((column) => column.name));

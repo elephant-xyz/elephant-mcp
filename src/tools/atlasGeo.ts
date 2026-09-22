@@ -1,3 +1,4 @@
+import { ATLAS_IDENTIFIER_PATTERN } from "../atlas/contracts.ts";
 import { getAtlasQuerySchema, runAtlasQuery } from "../atlas/query.ts";
 import { createTextResult } from "../lib/utils.ts";
 import { logger } from "../logger.ts";
@@ -24,11 +25,9 @@ interface AreaArgs {
   valueColumn: string;
 }
 
-const IDENTIFIER = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/u;
-
 /** Quote a table or column name once it is known to exist in the scope. */
 function identifier(value: string, available: readonly string[]): string {
-  if (!IDENTIFIER.test(value)) {
+  if (!ATLAS_IDENTIFIER_PATTERN.test(value)) {
     throw new Error(`Invalid Atlas identifier '${value}'`);
   }
   if (!available.includes(value)) {

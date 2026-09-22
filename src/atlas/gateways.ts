@@ -1,11 +1,5 @@
+import { DEFAULT_ATLAS_GATEWAYS } from "../config.ts";
 import { CidV1Schema } from "./contracts.ts";
-
-export const DEFAULT_ATLAS_GATEWAYS = [
-  "https://ipfs.filebase.io",
-  "https://ipfs.io",
-  "https://dweb.link",
-  "https://w3s.link",
-] as const;
 
 export interface AtlasGatewayAttempt {
   url: string;

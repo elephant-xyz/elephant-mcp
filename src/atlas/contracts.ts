@@ -1,21 +1,18 @@
 import { CID } from "multiformats/cid";
 import { z } from "zod";
 
-export const COUNTY_IDENTIFIER_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
-export const GROUP_IDENTIFIER_PATTERN = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/u;
-export const TABLE_IDENTIFIER_PATTERN = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/u;
+const COUNTY_IDENTIFIER_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 
-export const CountyIdentifierSchema = z
+/** Data-group, table, and column names: snake_case starting with a letter. */
+export const ATLAS_IDENTIFIER_PATTERN = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/u;
+
+const CountyIdentifierSchema = z
   .string()
   .regex(COUNTY_IDENTIFIER_PATTERN, "invalid county identifier");
 
-export const GroupIdentifierSchema = z
+export const AtlasIdentifierSchema = z
   .string()
-  .regex(GROUP_IDENTIFIER_PATTERN, "invalid data-group identifier");
-
-export const TableIdentifierSchema = z
-  .string()
-  .regex(TABLE_IDENTIFIER_PATTERN, "invalid table identifier");
+  .regex(ATLAS_IDENTIFIER_PATTERN, "invalid identifier");
 
 const canonicalCidV1StringSchema = z.string().refine(
   (value) => {
@@ -55,7 +52,7 @@ export const AtlasGroupV1Schema = z
   .strict();
 
 const atlasGroupsV1Schema = z
-  .record(GroupIdentifierSchema, AtlasGroupV1Schema)
+  .record(AtlasIdentifierSchema, AtlasGroupV1Schema)
   .refine((groups) => Object.keys(groups).length > 0, {
     message: "an indexed county must contain at least one data group",
   });
@@ -159,7 +156,7 @@ export const CountyTableV1Schema = z
   .strict();
 
 const countyTablesRecordV1Schema = z
-  .record(TableIdentifierSchema, CountyTableV1Schema)
+  .record(AtlasIdentifierSchema, CountyTableV1Schema)
   .refine((tables) => Object.keys(tables).length > 0, {
     message: "CountyTables must contain at least one table",
   });
