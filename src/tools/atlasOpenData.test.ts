@@ -20,7 +20,7 @@ afterEach(async () => {
   );
 });
 
-describe("getOracleDatasetInfo", () => {
+describe("getAtlasDatasetInfo", () => {
   it("reports state, fips, sync time, and table counts from the scoped rows", async () => {
     const directory = await mkdtemp(path.join(os.tmpdir(), "atlas-info-"));
     directories.push(directory);

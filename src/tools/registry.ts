@@ -95,22 +95,22 @@ export function registerAllTools(
   );
 
   server.registerTool(
-    "listPublishedCounties",
+    "listAtlasCounties",
     {
-      title: "List published Atlas counties",
+      title: "List Atlas counties",
       description:
-        "List counties and data groups from the synchronized Atlas index.",
+        "List the synchronized counties, their data groups, and publication CIDs.",
       inputSchema: {},
     },
     async () => listPublishedCountiesHandler(),
   );
 
   server.registerTool(
-    "listOracleProperties",
+    "listAtlasProperties",
     {
       title: "List Atlas properties",
       description:
-        "List property CIDs and roots for one synchronized county/data group.",
+        "List the property CIDs and data-group roots of one state/county/data group.",
       inputSchema: {
         ...atlasScope,
         limit: z.number().int().positive().max(500).optional().default(50),
@@ -127,11 +127,11 @@ export function registerAllTools(
   );
 
   server.registerTool(
-    "getOracleProperty",
+    "getAtlasProperty",
     {
       title: "Get Atlas property",
       description:
-        "Reconstruct one property's Atlas roots, class rows, and relationship rows.",
+        "Assemble one property: its roots, class rows, relationship rows, and the entities they reach.",
       inputSchema: {
         ...atlasScope,
         propertyCid: z.string().min(1),
@@ -146,11 +146,11 @@ export function registerAllTools(
   );
 
   server.registerTool(
-    "getOracleDatasetInfo",
+    "getAtlasDatasetInfo",
     {
       title: "Get Atlas dataset info",
       description:
-        "Return synchronized table counts and publication provenance.",
+        "Return the row count of every table in one state/county/data group and its publication CIDs.",
       inputSchema: atlasScope,
     },
     async (args: { county: string; dataGroup: string; state: string }) =>
@@ -158,11 +158,11 @@ export function registerAllTools(
   );
 
   server.registerTool(
-    "queryProperties",
+    "queryAtlas",
     {
-      title: "Query Atlas tables",
+      title: "Query Atlas",
       description:
-        "Run a read-only SELECT over the synchronized tables of one county/data group. Table names are those from getPropertyQuerySchema (property, address, properties, ...).",
+        "Run one read-only SELECT over the synchronized tables of one state/county/data group. Table names are those from getAtlasSchema (property, address, properties, ...).",
       inputSchema: {
         ...atlasScope,
         sql: z.string().min(1),
@@ -185,11 +185,11 @@ export function registerAllTools(
   );
 
   server.registerTool(
-    "getPropertyQuerySchema",
+    "getAtlasSchema",
     {
-      title: "Get normalized Atlas query schema",
+      title: "Get Atlas schema",
       description:
-        "List available tables or describe one table for queryProperties.",
+        "List the tables of one state/county/data group, or the columns of one table, for queryAtlas.",
       inputSchema: {
         ...atlasScope,
         table: atlasIdentifier.optional(),

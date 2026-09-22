@@ -18,12 +18,12 @@ function makeRecordingServer() {
 }
 
 describe("registerAllTools — property query tools", () => {
-  it("registers queryProperties and getPropertyQuerySchema", () => {
+  it("registers queryAtlas and getAtlasSchema", () => {
     const { server, names } = makeRecordingServer();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     registerAllTools(server as any);
     expect(names).toEqual(
-      expect.arrayContaining(["queryProperties", "getPropertyQuerySchema"]),
+      expect.arrayContaining(["queryAtlas", "getAtlasSchema"]),
     );
   });
 });

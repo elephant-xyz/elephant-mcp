@@ -54,7 +54,7 @@ function authenticatedInput(method = "POST") {
       jsonrpc: "2.0",
       id: 1,
       method: "tools/call",
-      params: { name: "queryProperties", arguments: {} },
+      params: { name: "queryAtlas", arguments: {} },
     },
   };
 }

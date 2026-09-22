@@ -13,16 +13,16 @@ describe("MCP 2.0 tool registry", () => {
 
     expect(names.sort()).toEqual(
       [
-        "getOracleDatasetInfo",
-        "getOracleProperty",
-        "getPropertyQuerySchema",
+        "getAtlasDatasetInfo",
+        "getAtlasProperty",
+        "getAtlasSchema",
         "getPropertySchema",
         "getVerifiedScriptExamples",
         "listClassesByDataGroup",
-        "listOracleProperties",
+        "listAtlasProperties",
         "listPropertiesByClassName",
-        "listPublishedCounties",
-        "queryProperties",
+        "listAtlasCounties",
+        "queryAtlas",
       ].sort(),
     );
   });

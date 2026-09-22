@@ -58,10 +58,10 @@ node dist/index.js
 
 Initialize MCP, list tools, then call:
 
-1. `listPublishedCounties`
-2. `getPropertyQuerySchema` with a state, county, and data group
-3. `queryProperties` with read-only SQL naming a synchronized table
-4. `getOracleProperty` with a published property CID
+1. `listAtlasCounties`
+2. `getAtlasSchema` with a state, county, and data group
+3. `queryAtlas` with read-only SQL naming a synchronized table
+4. `getAtlasProperty` with a published property CID
 
 Confirm every data response contains Atlas source CIDs.
 

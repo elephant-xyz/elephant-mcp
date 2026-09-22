@@ -86,7 +86,7 @@ Primary keys:
 | `properties`  | `(state, county, data_group, property_cid)`     |
 
 `export-tables` writes each entity and relationship once per archive, with
-`property_cid` set to the first property that referenced it. `getOracleProperty`
+`property_cid` set to the first property that referenced it. `getAtlasProperty`
 therefore seeds with the property's own rows and follows relationship rows
 `from_cid` to `to_cid` inside the scope (to a fixpoint or depth 8) to gather
 people, companies, and addresses shared with earlier properties. Loading a group deletes its
@@ -119,12 +119,12 @@ The MCP endpoint is `POST /mcp`; `GET /health` is public. Set
 
 Atlas SQL:
 
-- `listPublishedCounties`
-- `listOracleProperties`
-- `getOracleProperty`
-- `getOracleDatasetInfo`
-- `getPropertyQuerySchema`
-- `queryProperties`
+- `listAtlasCounties`
+- `listAtlasProperties`
+- `getAtlasProperty`
+- `getAtlasDatasetInfo`
+- `getAtlasSchema`
+- `queryAtlas`
 
 Lexicon and verified scripts:
 
@@ -134,7 +134,7 @@ Lexicon and verified scripts:
 - `getVerifiedScriptExamples`
 
 Atlas data tools require explicit `state`, `county`, and `dataGroup` scope
-(county keys repeat across states). `queryProperties`
+(county keys repeat across states). `queryAtlas`
 accepts one read-only SELECT that names the synchronized tables directly
 (`property`, `address`, `property_has_address`, `properties`, ...); each one is
 shadowed by a CTE filtered to the requested state, county, and data group, and any
