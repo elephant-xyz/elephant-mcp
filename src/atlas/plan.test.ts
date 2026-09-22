@@ -53,24 +53,13 @@ describe("Atlas sync planning", () => {
         { indexCid: INDEX, generatedFrom: "previous" },
         [state()],
       ),
-    ).toMatchObject({
-      unchanged: true,
-      groups: [],
-      withdrawals: [],
-    });
+    ).toMatchObject({ unchanged: true, load: [], skipped: 0, withdraw: [] });
   });
 
   it("skips an unchanged tables publication", () => {
     const plan = planAtlasSync(index(), INDEX, null, [state()]);
 
-    expect(plan.groups).toEqual([
-      expect.objectContaining({
-        action: "skip",
-        county: "lee",
-        dataGroup: "county",
-      }),
-    ]);
-    expect(plan.withdrawals).toEqual([]);
+    expect(plan).toMatchObject({ load: [], skipped: 1, withdraw: [] });
   });
 
   it("loads a changed group and withdraws a missing group", () => {
@@ -79,18 +68,16 @@ describe("Atlas sync planning", () => {
       state({ county: "orange", dataGroup: "county" }),
     ]);
 
-    expect(plan.groups[0]).toMatchObject({
-      action: "load",
-      county: "lee",
-      dataGroup: "county",
-    });
-    expect(plan.withdrawals).toEqual([
-      {
-        action: "withdraw",
+    expect(plan.load).toEqual([
+      expect.objectContaining({ county: "lee", dataGroup: "county" }),
+    ]);
+    expect(plan.skipped).toBe(0);
+    expect(plan.withdraw).toEqual([
+      expect.objectContaining({
         county: "orange",
         dataGroup: "county",
         state: "FL",
-      },
+      }),
     ]);
   });
 
@@ -101,8 +88,8 @@ describe("Atlas sync planning", () => {
       counties: [],
     });
 
-    expect(planAtlasSync(empty, INDEX, null, [state()]).withdrawals).toEqual([
-      { action: "withdraw", county: "lee", dataGroup: "county", state: "FL" },
+    expect(planAtlasSync(empty, INDEX, null, [state()]).withdraw).toEqual([
+      expect.objectContaining({ county: "lee", dataGroup: "county" }),
     ]);
   });
 });

@@ -52,7 +52,6 @@ describe("Atlas query repository", () => {
           groups: [
             {
               group: {
-                action: "load",
                 county: "lee",
                 state: "FL",
                 fips: "12071",
@@ -314,7 +313,6 @@ describe("Atlas query repository", () => {
           groups: [
             {
               group: {
-                action: "load",
                 county: "lee",
                 state: "FL",
                 fips: "12071",

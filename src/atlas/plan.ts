@@ -16,27 +16,25 @@ export interface AtlasStateRow {
   tablesCid: string;
 }
 
-export interface AtlasGroupTarget extends AtlasStateRow {
-  action: "load" | "skip";
-}
-
-export interface AtlasGroupWithdrawal {
-  action: "withdraw";
-  county: string;
-  dataGroup: string;
-  state: string;
-}
-
 export interface AtlasSyncPlan {
   generatedFrom: string;
   indexCid: string;
   unchanged: boolean;
-  groups: AtlasGroupTarget[];
-  withdrawals: AtlasGroupWithdrawal[];
+  load: AtlasStateRow[];
+  skipped: number;
+  withdraw: AtlasStateRow[];
 }
 
 function groupKey(state: string, county: string, dataGroup: string): string {
   return `${state}\u0000${county}\u0000${dataGroup}`;
+}
+
+function byScope(left: AtlasStateRow, right: AtlasStateRow): number {
+  return (
+    left.state.localeCompare(right.state) ||
+    left.county.localeCompare(right.county) ||
+    left.dataGroup.localeCompare(right.dataGroup)
+  );
 }
 
 export function planAtlasSync(
@@ -45,15 +43,15 @@ export function planAtlasSync(
   syncState: AtlasSyncStateRow | null,
   currentRows: readonly AtlasStateRow[],
 ): AtlasSyncPlan {
-  if (syncState?.indexCid === indexCid) {
-    return {
-      generatedFrom: index.generated_from,
-      indexCid,
-      unchanged: true,
-      groups: [],
-      withdrawals: [],
-    };
-  }
+  const plan: AtlasSyncPlan = {
+    generatedFrom: index.generated_from,
+    indexCid,
+    unchanged: syncState?.indexCid === indexCid,
+    load: [],
+    skipped: 0,
+    withdraw: [],
+  };
+  if (plan.unchanged) return plan;
 
   const current = new Map(
     currentRows.map((row) => [
@@ -62,20 +60,20 @@ export function planAtlasSync(
     ]),
   );
   const desired = new Set<string>();
-  const groups: AtlasGroupTarget[] = [];
-
   for (const county of index.counties) {
     for (const [dataGroup, group] of Object.entries(county.groups)) {
       const key = groupKey(county.state, county.county, dataGroup);
       desired.add(key);
       const previous = current.get(key);
-      groups.push({
-        action:
-          previous?.tablesCid === group.tables &&
-          previous.archiveCid === group.cid &&
-          previous.schemaCid === group.schema
-            ? "skip"
-            : "load",
+      if (
+        previous?.tablesCid === group.tables &&
+        previous.archiveCid === group.cid &&
+        previous.schemaCid === group.schema
+      ) {
+        plan.skipped += 1;
+        continue;
+      }
+      plan.load.push({
         county: county.county,
         state: county.state,
         fips: county.fips,
@@ -87,38 +85,11 @@ export function planAtlasSync(
       });
     }
   }
-
-  const withdrawals = currentRows
+  plan.withdraw = currentRows
     .filter(
       (row) => !desired.has(groupKey(row.state, row.county, row.dataGroup)),
     )
-    .map(
-      (row): AtlasGroupWithdrawal => ({
-        action: "withdraw",
-        county: row.county,
-        dataGroup: row.dataGroup,
-        state: row.state,
-      }),
-    );
-
-  groups.sort(
-    (left, right) =>
-      left.state.localeCompare(right.state) ||
-      left.county.localeCompare(right.county) ||
-      left.dataGroup.localeCompare(right.dataGroup),
-  );
-  withdrawals.sort(
-    (left, right) =>
-      left.state.localeCompare(right.state) ||
-      left.county.localeCompare(right.county) ||
-      left.dataGroup.localeCompare(right.dataGroup),
-  );
-
-  return {
-    generatedFrom: index.generated_from,
-    indexCid,
-    unchanged: false,
-    groups,
-    withdrawals,
-  };
+    .sort(byScope);
+  plan.load.sort(byScope);
+  return plan;
 }

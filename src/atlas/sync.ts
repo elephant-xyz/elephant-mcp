@@ -23,7 +23,6 @@ import type { AtlasGatewayFetchOptions } from "./gateways.ts";
 import { acquireAtlasSyncLock, type AtlasSyncLock } from "./locks.ts";
 import {
   planAtlasSync,
-  type AtlasGroupTarget,
   type AtlasStateRow,
   type AtlasSyncStateRow,
 } from "./plan.ts";
@@ -58,20 +57,9 @@ export interface AtlasSyncOptions {
 }
 
 interface StagedGroup {
-  group: AtlasGroupTarget;
+  group: AtlasStateRow;
   summary: AtlasGroupSyncSummary;
   tables: AtlasStagedTable[];
-}
-
-function configuredGateways(value: string): string[] {
-  const gateways = value
-    .split(",")
-    .map((gateway) => gateway.trim())
-    .filter(Boolean);
-  if (gateways.length === 0) {
-    throw new Error("ATLAS_GATEWAYS must contain at least one gateway");
-  }
-  return gateways;
 }
 
 function toStateRow(row: Record<string, unknown>): AtlasStateRow {
@@ -126,7 +114,7 @@ async function readCurrentState(connections: AtlasConnections): Promise<{
 async function stageGroup(args: {
   duckdb: AtlasDuckDb;
   fetchOptions: AtlasGatewayFetchOptions;
-  group: AtlasGroupTarget;
+  group: AtlasStateRow;
   runDirectory: string;
 }): Promise<StagedGroup> {
   await fetchCountyIndex(args.group.archiveCid, args.fetchOptions);
@@ -198,11 +186,13 @@ export async function syncAtlas(
       path.join(getDefaultDataDir(), "atlas", "staging"),
     randomUUID(),
   );
-  const gateways =
-    options.gateways ?? configuredGateways(config.ATLAS_GATEWAYS);
   const fetchOptions: AtlasGatewayFetchOptions = {
     ...options.fetch,
-    gateways,
+    gateways:
+      options.gateways ??
+      config.ATLAS_GATEWAYS.split(",")
+        .map((gateway) => gateway.trim())
+        .filter(Boolean),
   };
   let duckdb: AtlasDuckDb | undefined;
   let lock: AtlasSyncLock | undefined;
@@ -226,22 +216,13 @@ export async function syncAtlas(
         { indexCid: resolved.indexCid },
         "Atlas index already synchronized",
       );
-      return {
-        groupsLoaded: 0,
-        groupsSkipped: 0,
-        groupsWithdrawn: 0,
-        indexCid: resolved.indexCid,
-        unchanged: true,
-        loaded: [],
-      };
     }
 
-    const loadGroups = plan.groups.filter((group) => group.action === "load");
     const staged: StagedGroup[] = [];
-    if (loadGroups.length > 0) {
+    if (plan.load.length > 0) {
       await mkdir(runDirectory, { recursive: true });
       duckdb = await openAtlasDuckDb();
-      for (const group of loadGroups) {
+      for (const group of plan.load) {
         const stagedGroup = await stageGroup({
           duckdb,
           fetchOptions,
@@ -253,23 +234,26 @@ export async function syncAtlas(
       }
     }
 
-    await connections.transaction((executor) =>
-      applyAtlasIndexTransaction({
-        backend: backend.kind,
-        executor,
-        generatedFrom: plan.generatedFrom,
-        groups: staged,
-        indexCid: plan.indexCid,
-        withdrawals: plan.withdrawals,
-      }),
-    );
+    // An unchanged index performs no database writes.
+    if (!plan.unchanged) {
+      await connections.transaction((executor) =>
+        applyAtlasIndexTransaction({
+          backend: backend.kind,
+          executor,
+          generatedFrom: plan.generatedFrom,
+          groups: staged,
+          indexCid: plan.indexCid,
+          withdrawals: plan.withdraw,
+        }),
+      );
+    }
 
     const summary: AtlasSyncSummary = {
       groupsLoaded: staged.length,
-      groupsSkipped: plan.groups.length - loadGroups.length,
-      groupsWithdrawn: plan.withdrawals.length,
+      groupsSkipped: plan.skipped,
+      groupsWithdrawn: plan.withdraw.length,
       indexCid: plan.indexCid,
-      unchanged: false,
+      unchanged: plan.unchanged,
       loaded: staged.map((group) => group.summary),
     };
     logger.info(summary, "Atlas synchronization completed");

@@ -1,6 +1,6 @@
 import type { AtlasBackend } from "./backend.ts";
 import type { AtlasExecutor } from "./connections.ts";
-import type { AtlasGroupTarget, AtlasGroupWithdrawal } from "./plan.ts";
+import type { AtlasStateRow } from "./plan.ts";
 import {
   atlasKeyColumns,
   describeAtlasTable,
@@ -43,7 +43,7 @@ async function removeGroup(
 async function loadTable(
   executor: AtlasExecutor,
   backend: AtlasBackend["kind"],
-  group: AtlasGroupTarget,
+  group: AtlasStateRow,
   staged: AtlasStagedTable,
 ): Promise<void> {
   const table = describeAtlasTable(staged.name, staged.columns);
@@ -104,11 +104,11 @@ export async function applyAtlasIndexTransaction(args: {
   executor: AtlasExecutor;
   generatedFrom: string;
   groups: Array<{
-    group: AtlasGroupTarget;
+    group: AtlasStateRow;
     tables: AtlasStagedTable[];
   }>;
   indexCid: string;
-  withdrawals: AtlasGroupWithdrawal[];
+  withdrawals: Array<Pick<AtlasStateRow, "state" | "county" | "dataGroup">>;
 }): Promise<void> {
   for (const withdrawal of args.withdrawals) {
     await removeGroup(

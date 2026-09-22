@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { applyAtlasIndexTransaction } from "./apply.ts";
 import { parseAtlasDatabaseUrl } from "./backend.ts";
 import { openAtlasConnections, type AtlasConnections } from "./connections.ts";
-import type { AtlasGroupTarget } from "./plan.ts";
+import type { AtlasStateRow } from "./plan.ts";
 import { initializeAtlasSchema } from "./schema.ts";
 
 const directories: string[] = [];
@@ -20,9 +20,8 @@ afterEach(async () => {
   );
 });
 
-function group(dataGroup: string, state = "FL"): AtlasGroupTarget {
+function group(dataGroup: string, state = "FL"): AtlasStateRow {
   return {
-    action: "load",
     county: "lee",
     state,
     fips: "12071",
@@ -78,7 +77,6 @@ function apply(
       })),
       indexCid,
       withdrawals: withdrawals.map((dataGroup) => ({
-        action: "withdraw",
         county: "lee",
         dataGroup,
         state: "FL",
@@ -229,7 +227,6 @@ describe("Atlas index transaction", () => {
           indexCid: `${INDEX.slice(0, -1)}a`,
           withdrawals: [
             {
-              action: "withdraw",
               county: "lee",
               dataGroup: "county",
               state: "CA",
