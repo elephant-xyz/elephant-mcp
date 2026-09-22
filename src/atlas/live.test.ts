@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { getAtlasProperty } from "./query.ts";
-import { resetAtlasRuntimeForTests } from "./runtime.ts";
+import { setAtlasRuntimeForTests } from "./runtime.ts";
 import { syncAtlas } from "./sync.ts";
 
 const enabled = process.env.ATLAS_LIVE_TEST === "1";
@@ -21,7 +21,7 @@ describe.runIf(enabled)("live Atlas synchronization", () => {
       dataGroup !== undefined &&
       propertyCid !== undefined
     ) {
-      resetAtlasRuntimeForTests();
+      setAtlasRuntimeForTests();
       await expect(
         getAtlasProperty({ county, dataGroup, propertyCid, state }),
       ).resolves.toMatchObject({

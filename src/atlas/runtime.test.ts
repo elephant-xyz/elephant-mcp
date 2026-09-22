@@ -7,7 +7,6 @@ import { parseAtlasDatabaseUrl } from "./backend.ts";
 import { openAtlasConnections, type AtlasConnections } from "./connections.ts";
 import {
   awaitAtlasReady,
-  resetAtlasRuntimeForTests,
   setAtlasRuntimeForTests,
   type AtlasRuntime,
 } from "./runtime.ts";
@@ -17,7 +16,7 @@ import type { AtlasSyncSummary } from "./sync.ts";
 const directories: string[] = [];
 
 afterEach(async () => {
-  resetAtlasRuntimeForTests();
+  setAtlasRuntimeForTests();
   await Promise.all(
     directories
       .splice(0)

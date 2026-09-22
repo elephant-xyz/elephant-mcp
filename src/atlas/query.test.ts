@@ -14,17 +14,14 @@ import {
   normalizedRows,
   runAtlasQuery,
 } from "./query.ts";
-import {
-  resetAtlasRuntimeForTests,
-  setAtlasRuntimeForTests,
-} from "./runtime.ts";
+import { setAtlasRuntimeForTests } from "./runtime.ts";
 import { initializeAtlasSchema } from "./schema.ts";
 
 const directories: string[] = [];
 const INDEX = "bafkreici4fnvhn42zqyxb4ltlrocldghfagnbxhzgjkbck546t6cm6mtky";
 
 afterEach(async () => {
-  resetAtlasRuntimeForTests();
+  setAtlasRuntimeForTests();
   await Promise.all(
     directories
       .splice(0)

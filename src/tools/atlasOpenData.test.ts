@@ -5,17 +5,14 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { parseAtlasDatabaseUrl } from "../atlas/backend.ts";
 import { openAtlasConnections } from "../atlas/connections.ts";
-import {
-  resetAtlasRuntimeForTests,
-  setAtlasRuntimeForTests,
-} from "../atlas/runtime.ts";
+import { setAtlasRuntimeForTests } from "../atlas/runtime.ts";
 import { initializeAtlasSchema } from "../atlas/schema.ts";
 import { getOracleDatasetInfoHandler } from "./atlasOpenData.ts";
 
 const directories: string[] = [];
 
 afterEach(async () => {
-  resetAtlasRuntimeForTests();
+  setAtlasRuntimeForTests();
   await Promise.all(
     directories
       .splice(0)

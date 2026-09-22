@@ -121,10 +121,7 @@ export async function awaitAtlasReady(): Promise<AtlasRuntime> {
   return runtime;
 }
 
-export function resetAtlasRuntimeForTests(): void {
-  runtimePromise = undefined;
-}
-
-export function setAtlasRuntimeForTests(runtime: AtlasRuntime): void {
-  runtimePromise = Promise.resolve(runtime);
+/** Tests inject a runtime (or clear it with no argument). */
+export function setAtlasRuntimeForTests(runtime?: AtlasRuntime): void {
+  runtimePromise = runtime && Promise.resolve(runtime);
 }

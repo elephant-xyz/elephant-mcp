@@ -14,17 +14,12 @@ export type AtlasBackend =
       databaseUrl: string;
     };
 
-export function getDefaultAtlasDatabaseUrl(
-  dataDir = getDefaultDataDir(),
-): string {
-  return pathToFileURL(path.join(dataDir, "atlas", "atlas.sqlite")).href;
-}
-
 export function parseAtlasDatabaseUrl(
   value: string | undefined,
   dataDir = getDefaultDataDir(),
 ): AtlasBackend {
-  const databaseUrl = value ?? getDefaultAtlasDatabaseUrl(dataDir);
+  const databaseUrl =
+    value ?? pathToFileURL(path.join(dataDir, "atlas", "atlas.sqlite")).href;
   let url: URL;
 
   try {

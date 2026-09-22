@@ -1,18 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  getDefaultAtlasDatabaseUrl,
-  parseAtlasDatabaseUrl,
-} from "./backend.ts";
+import { parseAtlasDatabaseUrl } from "./backend.ts";
 
 describe("Atlas database URL", () => {
   it("defaults to a separate SQLite database", () => {
-    const url = getDefaultAtlasDatabaseUrl("/tmp/elephant");
-
-    expect(url).toBe("file:///tmp/elephant/atlas/atlas.sqlite");
     expect(parseAtlasDatabaseUrl(undefined, "/tmp/elephant")).toEqual({
       kind: "sqlite",
-      databaseUrl: url,
+      databaseUrl: "file:///tmp/elephant/atlas/atlas.sqlite",
       filePath: "/tmp/elephant/atlas/atlas.sqlite",
     });
   });
