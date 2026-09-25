@@ -5,6 +5,7 @@ import { sha256, sha512 } from "multiformats/hashes/sha2";
 import { identity } from "multiformats/hashes/identity";
 import { base32 } from "multiformats/bases/base32";
 import { equals as u8eq } from "uint8arrays/equals";
+import { getConfig } from "../config.ts";
 import { logger } from "../logger.ts";
 import Hash from "ipfs-only-hash";
 
@@ -70,12 +71,10 @@ export async function getJsonByCid<T>(cidString: string): Promise<T> {
 
 export async function fetchFromIpfs(cid: string): Promise<string> {
   logger.info(`Fetching ${cid}`);
-  const ipfsGateways: string[] = [
-    "https://ipfs.io",
-    "https://gateway.ipfs.io",
-    "https://dweb.link",
-    "https://w3s.link",
-  ];
+  const ipfsGateways = getConfig()
+    .ATLAS_GATEWAYS.split(",")
+    .map((gateway) => gateway.trim())
+    .filter(Boolean);
   for (const gateway of ipfsGateways) {
     try {
       const response = await fetch(`${gateway}/ipfs/${cid}`);

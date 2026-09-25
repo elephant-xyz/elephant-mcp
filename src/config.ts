@@ -6,11 +6,15 @@ import { fromNodeProviderChain } from "@aws-sdk/credential-providers";
 
 export const DEFAULT_ATLAS_IPNS =
   "k51qzi5uqu5dhzmj1jtn06idud425ozwdjjjn4eu7q01g2t814h7rw4du0nd04";
+/**
+ * Public gateways that serve trustless requests. ipfs.io, dweb.link and
+ * w3s.link are left out: they refuse plain requests and only redirect
+ * trustless ones to trustless-gateway.link. Put your own gateway first
+ * through ATLAS_GATEWAYS.
+ */
 export const DEFAULT_ATLAS_GATEWAYS = [
   "https://ipfs.filebase.io",
-  "https://ipfs.io",
-  "https://dweb.link",
-  "https://w3s.link",
+  "https://trustless-gateway.link",
 ] as const;
 
 const configSchema = z.object({

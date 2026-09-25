@@ -168,7 +168,7 @@ to aggregate over the area.
 | Variable                                   | Purpose                                        | Default                                                          |
 | ------------------------------------------ | ---------------------------------------------- | ---------------------------------------------------------------- |
 | `ATLAS_IPNS`                               | Canonical Atlas IPNS name                      | `k51qzi5uqu5dhzmj1jtn06idud425ozwdjjjn4eu7q01g2t814h7rw4du0nd04` |
-| `ATLAS_GATEWAYS`                           | Comma-separated gateway origins in retry order | Filebase, IPFS.io, dweb.link, w3s.link                           |
+| `ATLAS_GATEWAYS`                           | Comma-separated gateway origins in retry order | Filebase, trustless-gateway.link; put your own gateway first     |
 | `DATABASE_URL`                             | Atlas SQLite or Postgres target                | Separate SQLite file under the application-data directory        |
 | `MCP_HTTP_AUTH_TOKEN`                      | Bearer token for HTTP MCP routes               | Unset                                                            |
 | `LOG_LEVEL`                                | `error`, `warn`, `info`, or `debug`            | `info`                                                           |
