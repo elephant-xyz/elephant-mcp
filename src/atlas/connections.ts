@@ -1,5 +1,4 @@
-import { createClient, type Client, type InValue } from "@libsql/client";
-import { drizzle as createLibsqlDrizzle } from "drizzle-orm/libsql";
+import type { Client, InValue } from "@libsql/client";
 import { drizzle as createPostgresDrizzle } from "drizzle-orm/postgres-js";
 import { sql as drizzleSql } from "drizzle-orm";
 import postgres, { type Sql, type TransactionSql } from "postgres";
@@ -80,6 +79,10 @@ function postgresReadUrl(databaseUrl: string): string {
 async function openSqliteConnections(
   backend: Extract<AtlasBackend, { kind: "sqlite" }>,
 ): Promise<AtlasConnections> {
+  // Load libsql lazily so hosted Postgres deployments (e.g. Vercel serverless)
+  // never import native SQLite binaries at module startup.
+  const [{ createClient }, { drizzle: createLibsqlDrizzle }] =
+    await Promise.all([import("@libsql/client"), import("drizzle-orm/libsql")]);
   await mkdir(path.dirname(backend.filePath), { recursive: true });
   const writeClient = createClient({ url: backend.databaseUrl });
   const readClient = createClient({ url: backend.databaseUrl });

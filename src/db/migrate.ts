@@ -1,6 +1,4 @@
-import { createClient, type Client } from "@libsql/client";
-import { drizzle } from "drizzle-orm/libsql";
-import { migrate } from "drizzle-orm/libsql/migrator";
+import type { Client } from "@libsql/client";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { mkdir, readFile, unlink } from "node:fs/promises";
@@ -72,6 +70,11 @@ async function checkDimensionCompatibility(
 }
 
 export async function initializeDatabase(dbPath: string) {
+  const [{ createClient }, { drizzle }, { migrate }] = await Promise.all([
+    import("@libsql/client"),
+    import("drizzle-orm/libsql"),
+    import("drizzle-orm/libsql/migrator"),
+  ]);
   let isNewDatabase = !existsSync(dbPath);
   let dimensionMismatchRebuild = false;
 
