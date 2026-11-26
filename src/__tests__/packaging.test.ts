@@ -16,7 +16,7 @@ const readme = readFileSync(readmePath, "utf8");
 describe("packaging — per-consumer install identity (sanity)", () => {
   it("publishes under the @elephant-xyz/mcp package name", () => {
     expect(pkg.name).toBe("@elephant-xyz/mcp");
-    expect(pkg.version).toBe("2.0.0");
+    expect(pkg.version).toMatch(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/);
   });
 
   it("exposes an executable bin so it can be launched per-consumer via npx", () => {

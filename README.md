@@ -115,8 +115,9 @@ npm run start:http
 The MCP endpoint is `POST /mcp`; `GET /health` is public. Set
 `MCP_HTTP_AUTH_TOKEN` (single opaque bearer token) and/or `MCP_HTTP_AUTH_TOKENS`
 (comma-separated additional bearer tokens, whitespace trimmed) to protect MCP
-routes. On Vercel, adding or updating `MCP_HTTP_AUTH_TOKENS` requires a redeploy
-for the new token to take effect.
+routes. Only leaving both variables unset or empty disables auth; whitespace- or
+comma-only values fail closed with `401`. On Vercel, adding or updating
+`MCP_HTTP_AUTH_TOKENS` requires a redeploy for the new token to take effect.
 
 ## Tools
 
