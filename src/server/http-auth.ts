@@ -29,16 +29,49 @@ export function resolveHttpAuthorization(
   return Array.isArray(authorization) ? authorization[0] : authorization;
 }
 
+export function parseHttpAuthTokens(rawTokens: string | undefined): string[] {
+  if (rawTokens === undefined) {
+    return [];
+  }
+
+  return rawTokens
+    .split(",")
+    .map((token) => token.trim())
+    .filter((token) => token.length > 0);
+}
+
+export function resolveConfiguredHttpAuthTokens(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): string[] {
+  const tokens = [
+    ...parseHttpAuthTokens(env.MCP_HTTP_AUTH_TOKEN),
+    ...parseHttpAuthTokens(env.MCP_HTTP_AUTH_TOKENS),
+  ];
+  return [...new Set(tokens)];
+}
+
 export function isAuthorizedHttpRequest(
   authorization: string | undefined,
-  expectedToken: string | undefined,
+  expectedTokens: string | readonly string[] | undefined,
 ): boolean {
-  if (expectedToken === undefined || expectedToken === "") {
+  const configuredTokens =
+    typeof expectedTokens === "string"
+      ? parseHttpAuthTokens(expectedTokens)
+      : (expectedTokens ?? []).flatMap((token) => parseHttpAuthTokens(token));
+
+  if (configuredTokens.length === 0) {
     return true;
   }
 
-  return (
-    authorization !== undefined &&
-    secureEqual(authorization, `Bearer ${expectedToken}`)
-  );
+  if (authorization === undefined) {
+    return false;
+  }
+
+  let matched = false;
+  for (const token of configuredTokens) {
+    if (secureEqual(authorization, `Bearer ${token}`)) {
+      matched = true;
+    }
+  }
+  return matched;
 }

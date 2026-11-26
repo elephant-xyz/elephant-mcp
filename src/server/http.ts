@@ -25,6 +25,7 @@ import { logger } from "../logger.ts";
 import { registerAllTools } from "../tools/registry.ts";
 import {
   isAuthorizedHttpRequest,
+  resolveConfiguredHttpAuthTokens,
   resolveHttpAuthorization,
 } from "./http-auth.ts";
 
@@ -96,7 +97,7 @@ async function routeRequest(
     if (
       !isAuthorizedHttpRequest(
         resolveHttpAuthorization(req.headers),
-        process.env.MCP_HTTP_AUTH_TOKEN,
+        resolveConfiguredHttpAuthTokens(),
       )
     ) {
       res.writeHead(401, {

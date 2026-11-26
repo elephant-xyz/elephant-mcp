@@ -70,6 +70,7 @@ describe("web MCP request budget", () => {
   afterEach(() => {
     vi.useRealTimers();
     delete process.env.MCP_HTTP_AUTH_TOKEN;
+    delete process.env.MCP_HTTP_AUTH_TOKENS;
   });
 
   it("allows a valid response to complete after the old 30-second boundary", async () => {
@@ -157,6 +158,47 @@ describe("web MCP request budget", () => {
     expect(response.status).toBe(405);
     expect(response.headers.get("allow")).toBe("POST, DELETE");
     expect(mocks.handleRequest).not.toHaveBeenCalled();
+  });
+
+  it("accepts additional bearer tokens from MCP_HTTP_AUTH_TOKENS while keeping MCP_HTTP_AUTH_TOKEN working", async () => {
+    const enactToken = "enact-production-secret";
+    process.env.MCP_HTTP_AUTH_TOKENS = `${enactToken}, secondary-secret`;
+    mocks.handleRequest.mockImplementation(
+      async (
+        _request,
+        response: {
+          writeHead: (
+            status: number,
+            headers: Record<string, string>,
+          ) => unknown;
+          end: (body: string) => void;
+        },
+      ) => {
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end('{"jsonrpc":"2.0","id":1,"result":{"ok":true}}');
+      },
+    );
+
+    const existingCallerResponse = await handleWebMcpRequest({
+      ...authenticatedInput(),
+      headers: { authorization: `Bearer ${AUTH_TOKEN}` },
+    });
+    expect(existingCallerResponse.status).toBe(200);
+
+    const enactCallerResponse = await handleWebMcpRequest({
+      ...authenticatedInput(),
+      headers: { authorization: `Bearer ${enactToken}` },
+    });
+    expect(enactCallerResponse.status).toBe(200);
+
+    const invalidCallerResponse = await handleWebMcpRequest({
+      ...authenticatedInput(),
+      headers: { authorization: "Bearer invalid-secret" },
+    });
+    expect(invalidCallerResponse.status).toBe(401);
+    const serializedLogs = JSON.stringify(mocks.loggerWarn.mock.calls);
+    expect(serializedLogs).not.toContain(AUTH_TOKEN);
+    expect(serializedLogs).not.toContain(enactToken);
   });
 
   it("never includes credentials in structured timeout logs", async () => {
