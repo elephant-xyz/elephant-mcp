@@ -52,13 +52,15 @@ export default defineNitroConfig({
     },
   ],
 
-  // Externalize heavy Node-only packages so preset bundlers don't try to bundle them
+  // Externalize heavy Node-only packages so preset bundlers don't try to bundle them.
+  // Keep `multiformats` inlined: Nitro's dependency tracer drops subpath exports
+  // such as `multiformats/hashes/sha2`, causing ERR_MODULE_NOT_FOUND on Vercel.
   externals: {
+    inline: ["multiformats"],
     external: [
       "@modelcontextprotocol/sdk",
       "helia",
       "@helia/json",
-      "multiformats",
       "ipfs-only-hash",
       "pino",
       "pino-pretty",
