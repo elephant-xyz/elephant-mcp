@@ -25,7 +25,7 @@ import { logger } from "../logger.ts";
 import { registerAllTools } from "../tools/registry.ts";
 import {
   isAuthorizedHttpRequest,
-  resolveConfiguredHttpAuthTokens,
+  resolveConfiguredHttpAuth,
   resolveHttpAuthorization,
 } from "./http-auth.ts";
 
@@ -94,12 +94,18 @@ async function routeRequest(
   }
 
   if (url === "/mcp" || url === "/") {
+    const authConfig = resolveConfiguredHttpAuth();
     if (
       !isAuthorizedHttpRequest(
         resolveHttpAuthorization(req.headers),
-        resolveConfiguredHttpAuthTokens(),
+        authConfig,
       )
     ) {
+      if (authConfig.malformed) {
+        logger.error(
+          "Rejected HTTP MCP request because auth configuration yielded no valid tokens",
+        );
+      }
       res.writeHead(401, {
         "Content-Type": "application/json",
         "WWW-Authenticate": "Bearer",

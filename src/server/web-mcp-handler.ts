@@ -27,7 +27,7 @@ import { logger } from "../logger.ts";
 import { registerAllTools } from "../tools/registry.ts";
 import {
   isAuthorizedHttpRequest,
-  resolveConfiguredHttpAuthTokens,
+  resolveConfiguredHttpAuth,
   resolveHttpAuthorization,
 } from "./http-auth.ts";
 
@@ -233,15 +233,21 @@ export async function handleWebMcpRequest(
 ): Promise<Response> {
   const method = input.method.toUpperCase();
   const authorization = resolveHttpAuthorization(input.headers);
-  const configuredTokens = resolveConfiguredHttpAuthTokens();
-  if (!isAuthorizedHttpRequest(authorization, configuredTokens)) {
+  const authConfig = resolveConfiguredHttpAuth();
+  if (!isAuthorizedHttpRequest(authorization, authConfig)) {
     const headerNames = Object.keys(input.headers).map((key) =>
       key.toLowerCase(),
     );
+    if (authConfig.malformed) {
+      logger.error(
+        "Rejected web MCP request because auth configuration yielded no valid tokens",
+      );
+    }
     logger.warn(
       {
-        authConfigured: configuredTokens.length > 0,
-        configuredTokenCount: configuredTokens.length,
+        authConfigured: authConfig.enabled,
+        authMalformed: authConfig.malformed,
+        configuredTokenCount: authConfig.tokens.length,
         authorizationLength: authorization?.length ?? 0,
         authorizationProvided: headerNames.includes("authorization"),
         customTokenProvided: headerNames.includes("x-mcp-auth-token"),

@@ -1,14 +1,20 @@
-import { timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 
 type HeaderValue = string | string[] | undefined;
 
+export interface HttpAuthConfig {
+  readonly enabled: boolean;
+  readonly tokens: readonly string[];
+  readonly malformed: boolean;
+}
+
+function sha256(value: string): Buffer {
+  return createHash("sha256").update(value).digest();
+}
+
 function secureEqual(actual: string, expected: string): boolean {
-  const actualBuffer = Buffer.from(actual);
-  const expectedBuffer = Buffer.from(expected);
-  return (
-    actualBuffer.length === expectedBuffer.length &&
-    timingSafeEqual(actualBuffer, expectedBuffer)
-  );
+  // Compare fixed-length SHA-256 digests so timing does not leak token lengths.
+  return timingSafeEqual(sha256(actual), sha256(expected));
 }
 
 export function resolveHttpAuthorization(
@@ -40,35 +46,55 @@ export function parseHttpAuthTokens(rawTokens: string | undefined): string[] {
     .filter((token) => token.length > 0);
 }
 
-export function resolveConfiguredHttpAuthTokens(
+export function resolveConfiguredHttpAuth(
   env: Readonly<Record<string, string | undefined>> = process.env,
-): string[] {
-  const tokens = [
-    ...parseHttpAuthTokens(env.MCP_HTTP_AUTH_TOKEN),
-    ...parseHttpAuthTokens(env.MCP_HTTP_AUTH_TOKENS),
-  ];
-  return [...new Set(tokens)];
+): HttpAuthConfig {
+  const legacyRaw = env.MCP_HTTP_AUTH_TOKEN;
+  const additionalRaw = env.MCP_HTTP_AUTH_TOKENS;
+  const legacyConfigured = legacyRaw !== undefined && legacyRaw !== "";
+  const additionalConfigured =
+    additionalRaw !== undefined && additionalRaw !== "";
+  const enabled = legacyConfigured || additionalConfigured;
+
+  const tokens: string[] = [];
+  if (legacyConfigured && legacyRaw.trim().length > 0) {
+    // Keep MCP_HTTP_AUTH_TOKEN opaque (verbatim, never split on commas)
+    // so an existing write-only production token cannot change behavior.
+    tokens.push(legacyRaw);
+  }
+  if (additionalConfigured) {
+    tokens.push(...parseHttpAuthTokens(additionalRaw));
+  }
+
+  const dedupedTokens = [...new Set(tokens)];
+  return {
+    enabled,
+    tokens: dedupedTokens,
+    malformed: enabled && dedupedTokens.length === 0,
+  };
 }
 
 export function isAuthorizedHttpRequest(
   authorization: string | undefined,
-  expectedTokens: string | readonly string[] | undefined,
+  expected: HttpAuthConfig | string | undefined,
 ): boolean {
-  const configuredTokens =
-    typeof expectedTokens === "string"
-      ? parseHttpAuthTokens(expectedTokens)
-      : (expectedTokens ?? []).flatMap((token) => parseHttpAuthTokens(token));
+  const config: HttpAuthConfig =
+    typeof expected === "string" || expected === undefined
+      ? resolveConfiguredHttpAuth({ MCP_HTTP_AUTH_TOKEN: expected })
+      : expected;
 
-  if (configuredTokens.length === 0) {
+  if (!config.enabled) {
     return true;
   }
 
-  if (authorization === undefined) {
+  if (config.tokens.length === 0 || authorization === undefined) {
     return false;
   }
 
+  // Evaluate every configured token without short-circuiting (`||=`) to keep
+  // timing independent of which token slot matched.
   let matched = false;
-  for (const token of configuredTokens) {
+  for (const token of config.tokens) {
     if (secureEqual(authorization, `Bearer ${token}`)) {
       matched = true;
     }

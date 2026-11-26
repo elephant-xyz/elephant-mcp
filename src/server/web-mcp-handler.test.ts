@@ -160,7 +160,7 @@ describe("web MCP request budget", () => {
     expect(mocks.handleRequest).not.toHaveBeenCalled();
   });
 
-  it("accepts additional bearer tokens from MCP_HTTP_AUTH_TOKENS while keeping MCP_HTTP_AUTH_TOKEN working", async () => {
+  it("accepts additional bearer tokens from MCP_HTTP_AUTH_TOKENS via Authorization and x-mcp-auth-token while keeping MCP_HTTP_AUTH_TOKEN working", async () => {
     const enactToken = "enact-production-secret";
     process.env.MCP_HTTP_AUTH_TOKENS = `${enactToken}, secondary-secret`;
     mocks.handleRequest.mockImplementation(
@@ -191,6 +191,12 @@ describe("web MCP request budget", () => {
     });
     expect(enactCallerResponse.status).toBe(200);
 
+    const customHeaderResponse = await handleWebMcpRequest({
+      ...authenticatedInput(),
+      headers: { "x-mcp-auth-token": enactToken },
+    });
+    expect(customHeaderResponse.status).toBe(200);
+
     const invalidCallerResponse = await handleWebMcpRequest({
       ...authenticatedInput(),
       headers: { authorization: "Bearer invalid-secret" },
@@ -199,6 +205,43 @@ describe("web MCP request budget", () => {
     const serializedLogs = JSON.stringify(mocks.loggerWarn.mock.calls);
     expect(serializedLogs).not.toContain(AUTH_TOKEN);
     expect(serializedLogs).not.toContain(enactToken);
+  });
+
+  it("supports MCP_HTTP_AUTH_TOKENS without MCP_HTTP_AUTH_TOKEN and fails closed on malformed values", async () => {
+    delete process.env.MCP_HTTP_AUTH_TOKEN;
+    process.env.MCP_HTTP_AUTH_TOKENS = " , ";
+
+    const malformedResponse = await handleWebMcpRequest({
+      ...authenticatedInput(),
+      headers: {},
+    });
+    expect(malformedResponse.status).toBe(401);
+    expect(mocks.loggerError).toHaveBeenCalledWith(
+      "Rejected web MCP request because auth configuration yielded no valid tokens",
+    );
+
+    process.env.MCP_HTTP_AUTH_TOKENS = "enact-only-secret";
+    mocks.handleRequest.mockImplementation(
+      async (
+        _request,
+        response: {
+          writeHead: (
+            status: number,
+            headers: Record<string, string>,
+          ) => unknown;
+          end: (body: string) => void;
+        },
+      ) => {
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end('{"jsonrpc":"2.0","id":1,"result":{"ok":true}}');
+      },
+    );
+
+    const allowedResponse = await handleWebMcpRequest({
+      ...authenticatedInput(),
+      headers: { authorization: "Bearer enact-only-secret" },
+    });
+    expect(allowedResponse.status).toBe(200);
   });
 
   it("never includes credentials in structured timeout logs", async () => {
