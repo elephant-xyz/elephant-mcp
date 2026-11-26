@@ -57,8 +57,8 @@ function invokeHttpRoute(
         responseHeaders = Object.fromEntries(
           Object.entries(hdrs).map(([k, v]) => [k.toLowerCase(), v]),
         );
-        this.headersSent = true;
-        return this;
+        res.headersSent = true;
+        return res;
       },
       end(chunk?: string) {
         if (chunk !== undefined) {
@@ -66,9 +66,9 @@ function invokeHttpRoute(
         }
         resolve({ status, headers: responseHeaders, body });
       },
-    } as unknown as ServerResponse;
+    };
 
-    void handleHttpRequest(req, res);
+    void handleHttpRequest(req, res as unknown as ServerResponse);
   });
 }
 
