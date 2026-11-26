@@ -5,7 +5,12 @@ import { randomUUID } from "node:crypto";
 import { getConfig } from "../config.ts";
 import { getDefaultDataDir } from "../lib/paths.ts";
 import { logger } from "../logger.ts";
-import { applyAtlasIndexTransaction, type AtlasStagedTable } from "./apply.ts";
+import {
+  applyAtlasGroupTransaction,
+  applyAtlasIndexTransaction,
+  finalizeAtlasIndexTransaction,
+  type AtlasStagedTable,
+} from "./apply.ts";
 import { parseAtlasDatabaseUrl } from "./backend.ts";
 import {
   downloadAtlasPart,
@@ -144,6 +149,7 @@ async function stageGroup(args: {
         part.bytes,
         path.join(
           args.runDirectory,
+          args.group.state,
           args.group.county,
           args.group.dataGroup,
           name,
@@ -178,6 +184,16 @@ async function stageGroup(args: {
   };
 }
 
+async function acquirePostgresSyncLock(executor: AtlasExecutor): Promise<void> {
+  const locked = await executor.execute(
+    "SELECT pg_try_advisory_xact_lock(?) AS acquired",
+    [ATLAS_SYNC_LOCK_ID],
+  );
+  if (locked.rows[0]?.acquired !== true) {
+    throw new Error("Atlas synchronization is already running");
+  }
+}
+
 export async function syncAtlas(
   options: AtlasSyncOptions = {},
 ): Promise<AtlasSyncSummary> {
@@ -206,20 +222,118 @@ export async function syncAtlas(
 
   try {
     await initializeAtlasSchema(connections.write);
-    // The write transaction is the sync lock: BEGIN IMMEDIATE on SQLite, a
-    // transaction-scoped advisory lock on Postgres. A concurrent sync fails
-    // fast (SQLITE_BUSY after busy_timeout, or "already running"), while
-    // readers keep serving the accepted snapshot under WAL.
-    return await connections.transaction(async (executor) => {
-      if (backend.kind === "postgres") {
-        const locked = await executor.execute(
-          "SELECT pg_try_advisory_xact_lock(?) AS acquired",
-          [ATLAS_SYNC_LOCK_ID],
+
+    if (backend.kind === "postgres") {
+      // Stage each county group outside any Postgres transaction so long IPFS
+      // downloads never sit idle-in-transaction, and commit per group so a
+      // large multi-county backfill is resumable via atlas_state.
+      const resolved = await resolveAtlasIndex(
+        options.ipns ?? config.ATLAS_IPNS,
+        fetchOptions,
+      );
+      const current = await readCurrentState(connections.write);
+      const plan = planAtlasSync(
+        resolved.index,
+        resolved.indexCid,
+        current.syncState,
+        current.state,
+      );
+      if (plan.unchanged) {
+        logger.info(
+          { indexCid: resolved.indexCid },
+          "Atlas index already synchronized",
         );
-        if (locked.rows[0]?.acquired !== true) {
-          throw new Error("Atlas synchronization is already running");
+        const summary: AtlasSyncSummary = {
+          groupsLoaded: 0,
+          groupsSkipped: plan.skipped,
+          groupsWithdrawn: 0,
+          indexCid: plan.indexCid,
+          unchanged: true,
+          loaded: [],
+        };
+        logger.info(summary, "Atlas synchronization completed");
+        return summary;
+      }
+
+      const loadedSummaries: AtlasGroupSyncSummary[] = [];
+      if (plan.load.length > 0) {
+        await mkdir(runDirectory, { recursive: true });
+        duckdb = await openAtlasDuckDb();
+        for (const [index, group] of plan.load.entries()) {
+          const groupDir = path.join(
+            runDirectory,
+            group.state,
+            group.county,
+            group.dataGroup,
+          );
+          try {
+            const stagedGroup = await stageGroup({
+              duckdb,
+              fetchOptions,
+              group,
+              runDirectory,
+            });
+            logger.info(
+              {
+                ...stagedGroup.summary,
+                state: group.state,
+                progress: `${index + 1}/${plan.load.length}`,
+              },
+              "Staged Atlas county group",
+            );
+            await connections.transaction(async (executor) => {
+              await acquirePostgresSyncLock(executor);
+              await applyAtlasGroupTransaction({
+                backend: "postgres",
+                executor,
+                group,
+                tables: stagedGroup.tables,
+              });
+            });
+            loadedSummaries.push(stagedGroup.summary);
+            logger.info(
+              {
+                ...stagedGroup.summary,
+                state: group.state,
+                progress: `${index + 1}/${plan.load.length}`,
+              },
+              "Loaded Atlas county group",
+            );
+          } finally {
+            await rm(groupDir, { recursive: true, force: true }).catch(
+              () => undefined,
+            );
+          }
         }
       }
+
+      await connections.transaction(async (executor) => {
+        await acquirePostgresSyncLock(executor);
+        await finalizeAtlasIndexTransaction({
+          backend: "postgres",
+          executor,
+          generatedFrom: plan.generatedFrom,
+          indexCid: plan.indexCid,
+          withdrawals: plan.withdraw,
+        });
+      });
+
+      const summary: AtlasSyncSummary = {
+        groupsLoaded: loadedSummaries.length,
+        groupsSkipped: plan.skipped,
+        groupsWithdrawn: plan.withdraw.length,
+        indexCid: plan.indexCid,
+        unchanged: false,
+        loaded: loadedSummaries,
+      };
+      logger.info(summary, "Atlas synchronization completed");
+      return summary;
+    }
+
+    // SQLite: the write transaction is the sync lock (BEGIN IMMEDIATE).
+    // Concurrent syncs fail fast (SQLITE_BUSY after busy_timeout), while
+    // readers keep serving the accepted snapshot under WAL.
+    return await connections.transaction(async (executor) => {
       const resolved = await resolveAtlasIndex(
         options.ipns ?? config.ATLAS_IPNS,
         fetchOptions,

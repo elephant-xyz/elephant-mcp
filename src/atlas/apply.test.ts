@@ -3,9 +3,17 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { applyAtlasIndexTransaction } from "./apply.ts";
+import {
+  applyAtlasGroupTransaction,
+  applyAtlasIndexTransaction,
+  formatPostgresCopyValue,
+} from "./apply.ts";
 import { parseAtlasDatabaseUrl } from "./backend.ts";
-import { openAtlasConnections, type AtlasConnections } from "./connections.ts";
+import {
+  openAtlasConnections,
+  type AtlasConnections,
+  type AtlasExecutor,
+} from "./connections.ts";
 import type { AtlasStateRow } from "./plan.ts";
 import { initializeAtlasSchema } from "./schema.ts";
 
@@ -243,5 +251,75 @@ describe("Atlas index transaction", () => {
     } finally {
       await connections.close();
     }
+  });
+
+  it("formats values for Postgres COPY text and streams Postgres groups via copyFrom", async () => {
+    expect(formatPostgresCopyValue(null)).toBe("\\N");
+    expect(formatPostgresCopyValue(undefined)).toBe("\\N");
+    expect(formatPostgresCopyValue(true)).toBe("t");
+    expect(formatPostgresCopyValue(false)).toBe("f");
+    expect(formatPostgresCopyValue(42n)).toBe("42");
+    expect(formatPostgresCopyValue("a\\b\tc\nd\re\0f")).toBe(
+      "a\\\\b\\tc\\nd\\ref",
+    );
+
+    const statements: string[] = [];
+    const copied: Array<{ statement: string; payload: string }> = [];
+    const executor: AtlasExecutor = {
+      async execute(statement) {
+        statements.push(statement);
+        return { rows: [] };
+      },
+      async copyFrom(statement, chunks) {
+        let payload = "";
+        for await (const chunk of chunks) {
+          payload += typeof chunk === "string" ? chunk : chunk.toString("utf8");
+        }
+        copied.push({ statement, payload });
+      },
+    };
+
+    await applyAtlasGroupTransaction({
+      backend: "postgres",
+      executor,
+      group: group("county"),
+      tables: [
+        {
+          columns: [...columns],
+          name: "company",
+          rows: 2,
+          async *read() {
+            yield {
+              cid: "cid-1",
+              property_cid: "prop-1",
+              data_group_cid: "dg-1",
+              name: "Acme\tLLC\nLine2",
+            };
+            yield {
+              cid: "cid-2",
+              property_cid: "prop-2",
+              data_group_cid: "dg-1",
+              name: null,
+            };
+          },
+        },
+      ],
+    });
+
+    expect(copied).toHaveLength(1);
+    expect(copied[0]?.statement).toContain(
+      'COPY pg_temp."_atlas_copy_stage" ("state", "county", "data_group", "cid", "property_cid", "data_group_cid", "name") FROM STDIN WITH (FORMAT text)',
+    );
+    expect(copied[0]?.payload).toBe(
+      "FL\tlee\tcounty\tcid-1\tprop-1\tdg-1\tAcme\\tLLC\\nLine2\nFL\tlee\tcounty\tcid-2\tprop-2\tdg-1\t\\N\n",
+    );
+    expect(
+      statements.some((s) =>
+        s.includes('INSERT INTO "company" ("state", "county", "data_group"'),
+      ),
+    ).toBe(true);
+    expect(statements.some((s) => s.includes("INSERT INTO atlas_state"))).toBe(
+      true,
+    );
   });
 });

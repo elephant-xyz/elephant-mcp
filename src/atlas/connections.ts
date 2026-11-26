@@ -4,6 +4,8 @@ import { sql as drizzleSql } from "drizzle-orm";
 import postgres, { type Sql, type TransactionSql } from "postgres";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 
 import type { AtlasBackend } from "./backend.ts";
 
@@ -16,6 +18,10 @@ export interface AtlasExecutor {
     statement: string,
     params?: readonly unknown[],
   ): Promise<AtlasSqlResult>;
+  copyFrom?(
+    statement: string,
+    chunks: AsyncIterable<string | Buffer>,
+  ): Promise<void>;
 }
 
 export interface AtlasConnections {
@@ -59,6 +65,10 @@ function postgresExecutor(client: Sql | TransactionSql): AtlasExecutor {
         ...params,
       ] as never[]);
       return { rows: [...(result as Iterable<Record<string, unknown>>)] };
+    },
+    async copyFrom(statement, chunks) {
+      const writable = await client.unsafe(statement).writable();
+      await pipeline(Readable.from(chunks), writable);
     },
   };
 }
@@ -128,11 +138,15 @@ async function openPostgresConnections(
   const writeClient = postgres(backend.databaseUrl, {
     max: 1,
     prepare: false,
+    keep_alive: 30,
+    connect_timeout: 30,
     types,
   });
   const readClient = postgres(postgresReadUrl(backend.databaseUrl), {
     max: 5,
     prepare: false,
+    keep_alive: 30,
+    connect_timeout: 30,
     types,
   });
   const readDb = createPostgresDrizzle(readClient);
