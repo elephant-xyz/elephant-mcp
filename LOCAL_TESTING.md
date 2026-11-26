@@ -81,11 +81,13 @@ Use a direct/unpooled URL for synchronization:
 DATABASE_URL="$NEON_DIRECT_URL" node dist/index.js sync
 ```
 
-Run the HTTP server with a read-only database credential:
+Run the HTTP server with a read-only database credential (add
+`MCP_HTTP_AUTH_TOKENS` for comma-separated additional bearer tokens):
 
 ```bash
 DATABASE_URL="$NEON_READ_ONLY_URL" \
 MCP_HTTP_AUTH_TOKEN="$TOKEN" \
+MCP_HTTP_AUTH_TOKENS="$EXTRA_TOKEN_1,$EXTRA_TOKEN_2" \
 npm run start:http
 ```
 

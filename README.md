@@ -113,7 +113,11 @@ npm run start:http
 ```
 
 The MCP endpoint is `POST /mcp`; `GET /health` is public. Set
-`MCP_HTTP_AUTH_TOKEN` to protect MCP routes.
+`MCP_HTTP_AUTH_TOKEN` (single opaque bearer token) and/or `MCP_HTTP_AUTH_TOKENS`
+(comma-separated additional bearer tokens, whitespace trimmed) to protect MCP
+routes. Only leaving both variables unset or empty disables auth; whitespace- or
+comma-only values fail closed with `401`. On Vercel, adding or updating
+`MCP_HTTP_AUTH_TOKENS` requires a redeploy for the new token to take effect.
 
 ## Tools
 
@@ -165,16 +169,17 @@ to aggregate over the area.
 
 ## Configuration
 
-| Variable                                   | Purpose                                        | Default                                                          |
-| ------------------------------------------ | ---------------------------------------------- | ---------------------------------------------------------------- |
-| `ATLAS_IPNS`                               | Canonical Atlas IPNS name                      | `k51qzi5uqu5dhzmj1jtn06idud425ozwdjjjn4eu7q01g2t814h7rw4du0nd04` |
-| `ATLAS_GATEWAYS`                           | Comma-separated gateway origins in retry order | Filebase, IPFS.io, dweb.link, w3s.link                           |
-| `DATABASE_URL`                             | Atlas SQLite or Postgres target                | Separate SQLite file under the application-data directory        |
-| `MCP_HTTP_AUTH_TOKEN`                      | Bearer token for HTTP MCP routes               | Unset                                                            |
-| `LOG_LEVEL`                                | `error`, `warn`, `info`, or `debug`            | `info`                                                           |
-| `OPENAI_API_KEY`                           | OpenAI embeddings for verified scripts         | Optional                                                         |
-| `AI_GATEWAY_API_KEY` / `VERCEL_OIDC_TOKEN` | Vercel AI Gateway embeddings                   | Optional                                                         |
-| AWS credential chain                       | Bedrock embeddings                             | Optional                                                         |
+| Variable                                   | Purpose                                                      | Default                                                          |
+| ------------------------------------------ | ------------------------------------------------------------ | ---------------------------------------------------------------- |
+| `ATLAS_IPNS`                               | Canonical Atlas IPNS name                                    | `k51qzi5uqu5dhzmj1jtn06idud425ozwdjjjn4eu7q01g2t814h7rw4du0nd04` |
+| `ATLAS_GATEWAYS`                           | Comma-separated gateway origins in retry order               | Filebase, IPFS.io, dweb.link, w3s.link                           |
+| `DATABASE_URL`                             | Atlas SQLite or Postgres target                              | Separate SQLite file under the application-data directory        |
+| `MCP_HTTP_AUTH_TOKEN`                      | Primary opaque bearer token for HTTP MCP routes              | Unset                                                            |
+| `MCP_HTTP_AUTH_TOKENS`                     | Additional comma-separated bearer tokens for HTTP MCP routes | Unset                                                            |
+| `LOG_LEVEL`                                | `error`, `warn`, `info`, or `debug`                          | `info`                                                           |
+| `OPENAI_API_KEY`                           | OpenAI embeddings for verified scripts                       | Optional                                                         |
+| `AI_GATEWAY_API_KEY` / `VERCEL_OIDC_TOKEN` | Vercel AI Gateway embeddings                                 | Optional                                                         |
+| AWS credential chain                       | Bedrock embeddings                                           | Optional                                                         |
 
 `DATABASE_URL` accepts `file:`, `postgres://`, and `postgresql://`. Database
 credentials are never logged.
