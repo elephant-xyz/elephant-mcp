@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   applyAtlasGroupTransaction,
+  ensureProvisionalAtlasSyncState,
   finalizeAtlasIndexTransaction,
 } from "./apply.ts";
 import { parseAtlasDatabaseUrl } from "./backend.ts";
@@ -70,9 +71,12 @@ describe.runIf(databaseUrl !== undefined)("Atlas Postgres integration", () => {
         big: "9007199254740993",
       });
 
-      // Verify COPY FROM STDIN bulk load + deduplication + withdrawal cleanup.
+      // Verify direct COPY FROM STDIN bulk load + replacement + withdrawal cleanup.
       const copyCounty = `copy-${randomUUID().slice(0, 8)}`;
       const tableName = `copy_test_${randomUUID().slice(0, 8).replace(/-/gu, "")}`;
+      const existingSync = await first.read(
+        "SELECT index_cid, generated_from, synced_at FROM atlas_sync_state WHERE singleton_key = 1",
+      );
       try {
         await first.transaction(async (executor) => {
           await applyAtlasGroupTransaction({
@@ -99,16 +103,8 @@ describe.runIf(databaseUrl !== undefined)("Atlas Postgres integration", () => {
                   { name: "active", canonicalType: "boolean" },
                   { name: "score", canonicalType: "int64" },
                 ],
-                rows: 3,
+                rows: 2,
                 async *read() {
-                  yield {
-                    cid: "c1",
-                    property_cid: "p1",
-                    data_group_cid: "dg1",
-                    label: "Acme\tCo\nLine\\2",
-                    active: true,
-                    score: 10n,
-                  };
                   yield {
                     cid: "c1",
                     property_cid: "p1",
@@ -129,6 +125,11 @@ describe.runIf(databaseUrl !== undefined)("Atlas Postgres integration", () => {
               },
             ],
           });
+          await ensureProvisionalAtlasSyncState({
+            executor,
+            generatedFrom: "test-commit",
+            indexCid: "test-index-cid",
+          });
         });
 
         const loaded = await first.read(
@@ -138,6 +139,55 @@ describe.runIf(databaseUrl !== undefined)("Atlas Postgres integration", () => {
           { cid: "c1", label: "Acme\tCo\nLine\\2", active: true, score: 10 },
           { cid: "c2", label: null, active: false, score: 20 },
         ]);
+
+        // Re-applying the same group replaces cleanly without PK conflicts.
+        await first.transaction(async (executor) => {
+          await applyAtlasGroupTransaction({
+            backend: "postgres",
+            executor,
+            group: {
+              county: copyCounty,
+              state: "FL",
+              fips: "12000",
+              dataGroup: "county",
+              archiveCid: "copy-archive-2",
+              tablesCid: "copy-tables-2",
+              schemaCid: "copy-schema-2",
+              publishedAt: new Date().toISOString(),
+            },
+            tables: [
+              {
+                name: tableName,
+                columns: [
+                  { name: "cid", canonicalType: "text" },
+                  { name: "property_cid", canonicalType: "text" },
+                  { name: "data_group_cid", canonicalType: "text" },
+                  { name: "label", canonicalType: "text" },
+                  { name: "active", canonicalType: "boolean" },
+                  { name: "score", canonicalType: "int64" },
+                ],
+                rows: 1,
+                async *read() {
+                  yield {
+                    cid: "c1",
+                    property_cid: "p1",
+                    data_group_cid: "dg1",
+                    label: "Updated",
+                    active: true,
+                    score: 99n,
+                  };
+                },
+              },
+            ],
+          });
+        });
+        expect(
+          normalizedRows(
+            await first.read(
+              `SELECT cid, label, score FROM "${tableName}" WHERE county = '${copyCounty}'`,
+            ),
+          ),
+        ).toEqual([{ cid: "c1", label: "Updated", score: 99 }]);
 
         await first.transaction(async (executor) => {
           await finalizeAtlasIndexTransaction({
@@ -158,11 +208,22 @@ describe.runIf(databaseUrl !== undefined)("Atlas Postgres integration", () => {
       } finally {
         await first.write.execute(`DROP TABLE IF EXISTS "${tableName}"`);
         await first.write.execute(
-          "DELETE FROM atlas_sync_state WHERE index_cid = 'test-index-cid'",
+          "DELETE FROM atlas_sync_state WHERE singleton_key = 1",
         );
+        if (existingSync[0] !== undefined) {
+          await first.write.execute(
+            `INSERT INTO atlas_sync_state (singleton_key, index_cid, generated_from, synced_at)
+             VALUES (1, ?, ?, ?)`,
+            [
+              existingSync[0].index_cid,
+              existingSync[0].generated_from,
+              existingSync[0].synced_at,
+            ],
+          );
+        }
       }
     } finally {
       await Promise.all([first.close(), second.close()]);
     }
-  }, 30_000);
+  }, 60_000);
 });

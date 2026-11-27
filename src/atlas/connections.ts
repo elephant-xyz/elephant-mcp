@@ -140,6 +140,7 @@ async function openPostgresConnections(
     prepare: false,
     keep_alive: 30,
     connect_timeout: 30,
+    max_lifetime: null,
     types,
   });
   const readClient = postgres(postgresReadUrl(backend.databaseUrl), {
