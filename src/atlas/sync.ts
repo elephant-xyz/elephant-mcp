@@ -8,6 +8,7 @@ import { logger } from "../logger.ts";
 import {
   applyAtlasGroupTransaction,
   applyAtlasIndexTransaction,
+  ensureProvisionalAtlasSyncState,
   finalizeAtlasIndexTransaction,
   type AtlasStagedTable,
 } from "./apply.ts";
@@ -256,6 +257,16 @@ export async function syncAtlas(
       }
 
       const loadedSummaries: AtlasGroupSyncSummary[] = [];
+      if (current.syncState === null && current.state.length > 0) {
+        await connections.transaction(async (executor) => {
+          await acquirePostgresSyncLock(executor);
+          await ensureProvisionalAtlasSyncState({
+            executor,
+            generatedFrom: plan.generatedFrom,
+            indexCid: plan.indexCid,
+          });
+        });
+      }
       if (plan.load.length > 0) {
         await mkdir(runDirectory, { recursive: true });
         duckdb = await openAtlasDuckDb();
@@ -288,6 +299,11 @@ export async function syncAtlas(
                 executor,
                 group,
                 tables: stagedGroup.tables,
+              });
+              await ensureProvisionalAtlasSyncState({
+                executor,
+                generatedFrom: plan.generatedFrom,
+                indexCid: plan.indexCid,
               });
             });
             loadedSummaries.push(stagedGroup.summary);

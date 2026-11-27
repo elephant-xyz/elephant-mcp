@@ -307,17 +307,13 @@ describe("Atlas index transaction", () => {
     });
 
     expect(copied).toHaveLength(1);
-    expect(copied[0]?.statement).toContain(
-      'COPY pg_temp."_atlas_copy_stage" ("state", "county", "data_group", "cid", "property_cid", "data_group_cid", "name") FROM STDIN WITH (FORMAT text)',
+    expect(copied[0]?.statement).toBe(
+      'COPY "company" ("state", "county", "data_group", "cid", "property_cid", "data_group_cid", "name") FROM STDIN WITH (FORMAT text)',
     );
     expect(copied[0]?.payload).toBe(
       "FL\tlee\tcounty\tcid-1\tprop-1\tdg-1\tAcme\\tLLC\\nLine2\nFL\tlee\tcounty\tcid-2\tprop-2\tdg-1\t\\N\n",
     );
-    expect(
-      statements.some((s) =>
-        s.includes('INSERT INTO "company" ("state", "county", "data_group"'),
-      ),
-    ).toBe(true);
+    expect(statements.some((s) => s.includes("_atlas_copy_stage"))).toBe(false);
     expect(statements.some((s) => s.includes("INSERT INTO atlas_state"))).toBe(
       true,
     );

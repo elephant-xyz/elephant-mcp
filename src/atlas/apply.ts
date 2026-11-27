@@ -21,7 +21,6 @@ export interface AtlasStagedTable {
 const PARAMETER_BUDGET = 32_000;
 /** Target UTF-8 buffer size per COPY FROM STDIN write chunk. */
 const COPY_CHUNK_BYTES = 256 * 1024;
-const COPY_STAGE_TABLE = "_atlas_copy_stage";
 
 /**
  * Encode one column value for Postgres `COPY ... FROM STDIN WITH (FORMAT text)`.
@@ -52,6 +51,18 @@ async function removeGroup(
   county: string,
   dataGroup: string,
 ): Promise<void> {
+  // atlas_state is updated atomically with content tables, so a scope absent
+  // from atlas_state has no content rows to delete.
+  const present = await executor.execute(
+    `SELECT 1 AS present
+     FROM atlas_state
+     WHERE state = ? AND county = ? AND data_group = ?
+     LIMIT 1`,
+    [state, county, dataGroup],
+  );
+  if (present.rows.length === 0) {
+    return;
+  }
   const catalog = await readAtlasCatalog(
     (statement) => executor.execute(statement).then((result) => result.rows),
     backend,
@@ -70,28 +81,23 @@ async function loadTableWithPostgresCopy(
   group: AtlasStateRow,
   staged: AtlasStagedTable,
   tableName: string,
-  keys: readonly string[],
   columns: readonly string[],
   quoted: readonly string[],
-  updates: readonly string[],
 ): Promise<void> {
   if (executor.copyFrom === undefined) {
     throw new Error("Postgres executor does not support COPY FROM STDIN");
   }
+  // removeGroup has already deleted every row for (state, county, data_group)
+  // in this transaction, and export-tables writes unique keys per archive.
+  // Streaming COPY directly into the target table avoids pg_temp sort spills
+  // (base/pgsql_tmp disk quota) on multi-million-row counties like LA.
   const quotedTable = quoteAtlasIdentifier(tableName);
-  const quotedStage = quoteAtlasIdentifier(COPY_STAGE_TABLE);
   const columnList = quoted.join(", ");
-  const keyList = keys.map(quoteAtlasIdentifier).join(", ");
   const scopePrefix = [
     formatPostgresCopyValue(group.state),
     formatPostgresCopyValue(group.county),
     formatPostgresCopyValue(group.dataGroup),
   ].join("\t");
-
-  await executor.execute(`DROP TABLE IF EXISTS pg_temp.${quotedStage}`);
-  await executor.execute(
-    `CREATE TEMP TABLE ${quotedStage} (LIKE ${quotedTable}) ON COMMIT DROP`,
-  );
 
   let loaded = 0;
   async function* copyChunks(): AsyncIterable<Buffer> {
@@ -113,7 +119,7 @@ async function loadTableWithPostgresCopy(
   }
 
   await executor.copyFrom(
-    `COPY pg_temp.${quotedStage} (${columnList}) FROM STDIN WITH (FORMAT text)`,
+    `COPY ${quotedTable} (${columnList}) FROM STDIN WITH (FORMAT text)`,
     copyChunks(),
   );
 
@@ -122,21 +128,6 @@ async function loadTableWithPostgresCopy(
       `Atlas table ${staged.name} loaded ${loaded} rows, expected ${staged.rows}`,
     );
   }
-
-  if (loaded > 0) {
-    await executor.execute(
-      `INSERT INTO ${quotedTable} (${columnList})
-       SELECT DISTINCT ON (${keyList}) ${columnList}
-       FROM pg_temp.${quotedStage}
-       ON CONFLICT (${keyList}) ${
-         updates.length === 0
-           ? "DO NOTHING"
-           : `DO UPDATE SET ${updates.join(", ")}`
-       }`,
-    );
-  }
-
-  await executor.execute(`DROP TABLE pg_temp.${quotedStage}`);
 }
 
 async function loadTable(
@@ -152,12 +143,6 @@ async function loadTable(
   const quoted = ["state", "county", "data_group", ...columns].map(
     quoteAtlasIdentifier,
   );
-  const updates = columns
-    .filter((column) => !keys.includes(column))
-    .map(
-      (column) =>
-        `${quoteAtlasIdentifier(column)} = excluded.${quoteAtlasIdentifier(column)}`,
-    );
 
   if (backend === "postgres" && executor.copyFrom !== undefined) {
     await loadTableWithPostgresCopy(
@@ -165,13 +150,18 @@ async function loadTable(
       group,
       staged,
       table.name,
-      keys,
       columns,
       quoted,
-      updates,
     );
     return;
   }
+
+  const updates = columns
+    .filter((column) => !keys.includes(column))
+    .map(
+      (column) =>
+        `${quoteAtlasIdentifier(column)} = excluded.${quoteAtlasIdentifier(column)}`,
+    );
 
   const tuple = `(${quoted.map(() => "?").join(", ")})`;
   const batchSize = Math.max(1, Math.floor(PARAMETER_BUDGET / quoted.length));
@@ -253,6 +243,28 @@ export async function applyAtlasGroupTransaction(args: {
       args.group.publishedAt,
       loadedAt,
     ],
+  );
+}
+
+/**
+ * Seed a provisional `atlas_sync_state` row during an initial multi-group
+ * Postgres backfill so already-committed counties are queryable immediately,
+ * without marking `index_cid` as complete before every group finishes.
+ */
+export async function ensureProvisionalAtlasSyncState(args: {
+  executor: AtlasExecutor;
+  generatedFrom: string;
+  indexCid: string;
+}): Promise<void> {
+  await args.executor.execute(
+    `INSERT INTO atlas_sync_state (
+      singleton_key,
+      index_cid,
+      generated_from,
+      synced_at
+    ) VALUES (1, ?, ?, ?)
+    ON CONFLICT (singleton_key) DO NOTHING`,
+    [`syncing:${args.indexCid}`, args.generatedFrom, new Date().toISOString()],
   );
 }
 
